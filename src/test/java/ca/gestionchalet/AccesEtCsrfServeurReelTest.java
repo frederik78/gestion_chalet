@@ -105,12 +105,21 @@ class AccesEtCsrfServeurReelTest {
             Reponse sansJeton = client().appelSansJeton(route.methode(), chemin, "{}", null);
             Reponse avecJeton = client().appelAvecJeton(route.methode(), chemin, "{}");
             for (Reponse reponse : List.of(sansJeton, avecJeton)) {
-                if (reponse.statut() != 401 || !reponse.json().equals(NON_AUTHENTIFIE)) {
-                    ecarts.add(nom + " -> " + reponse.statut() + " " + reponse.corps());
+                if (reponse.statut() != 401 || !reponse.json().equals(NON_AUTHENTIFIE) || !reponse.setCookie("JSESSIONID").isEmpty()) {
+                    ecarts.add(nom + " -> " + reponse.statut() + " " + reponse.corps() + " " + reponse.setCookie("JSESSIONID"));
                 }
             }
         }
         assertThat(ecarts).isEmpty();
+    }
+
+    /** Le corps dépasse la borne de 64 Ko : sans session, il n'est même pas lu, et le refus reste celui de la sécurité. */
+    @Test
+    void cs01_unGrosCorpsSansSessionDonne401() {
+        Reponse reponse = client().appelAvecJeton("POST", "/api/essai/mutation/1", "x".repeat(70_000));
+
+        assertThat(reponse.statut()).isEqualTo(401);
+        assertThat(reponse.json()).isEqualTo(NON_AUTHENTIFIE);
     }
 
     @Test
