@@ -19,7 +19,7 @@ Vue d'ensemble des besoins. Détail dans `docs/prd/`, suivi de la livraison dans
 
 | ID | Besoin | Priorité | Statut | PRD | Décisions |
 |----|--------|----------|--------|-----|-----------|
-| F-01 | Photographier un reçu avec le téléphone pour que ses valeurs (date, fournisseur, TPS et TVQ s'il y en a, montant avant taxes, montant total) et sa photo soient reportées en BD et dans le Google Sheet | P1 | En clarification | | D-01 à D-13, D-16 à D-25 |
+| F-01 | Photographier un reçu avec le téléphone pour que ses valeurs (date, fournisseur, TPS et TVQ s'il y en a, montant avant taxes, montant total) et sa photo soient reportées en BD et dans le Google Sheet | P1 | Spécifié | `docs/prd/001-recus.md` | D-01 à D-13, D-16 à D-25 |
 
 ## Besoins non fonctionnels
 
