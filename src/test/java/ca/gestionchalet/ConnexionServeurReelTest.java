@@ -9,9 +9,15 @@ import ca.gestionchalet.support.HorlogeEssai;
 import ca.gestionchalet.support.ServeurReelTest;
 import java.net.http.HttpRequest;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -173,5 +179,39 @@ class ConnexionServeurReelTest {
         Reponse rejeu = ancien.get("/api/essai/session");
         assertThat(rejeu.statut()).isEqualTo(401);
         assertThat(rejeu.json()).isEqualTo(Map.of("erreur", "Authentification requise.", "code", "NON_AUTHENTIFIE"));
+    }
+
+    /** bcrypt dure plusieurs dizaines de millisecondes : c'est la fenêtre dans laquelle des requêtes simultanées échapperaient au compte. */
+    @Test
+    void cs05_desRequetesSimultaneesNeDepassentPasLaLimite() throws Exception {
+        int simultanees = 50;
+        ClientEssai client = client();
+        client.get("/actuator/health");
+        List<HttpRequest> requetes = new ArrayList<>();
+        for (int i = 0; i < simultanees; i++) {
+            requetes.add(client.requete("/api/connexion")
+                    .header("Content-Type", "application/json")
+                    .header("X-XSRF-TOKEN", client.cookie("XSRF-TOKEN"))
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"motDePasse\":\"faux\"}"))
+                    .build());
+        }
+
+        CountDownLatch depart = new CountDownLatch(1);
+        List<Future<Integer>> statuts = new ArrayList<>();
+        try (ExecutorService fils = Executors.newFixedThreadPool(simultanees)) {
+            for (HttpRequest requete : requetes) {
+                statuts.add(fils.submit(() -> {
+                    depart.await();
+                    return client.envoyer(requete).statut();
+                }));
+            }
+            depart.countDown();
+            Map<Integer, Integer> parStatut = new TreeMap<>();
+            for (Future<Integer> statut : statuts) {
+                parStatut.merge(statut.get(), 1, Integer::sum);
+            }
+
+            assertThat(parStatut).isEqualTo(Map.of(401, ECHECS_PAR_DEFAUT, 429, simultanees - ECHECS_PAR_DEFAUT));
+        }
     }
 }

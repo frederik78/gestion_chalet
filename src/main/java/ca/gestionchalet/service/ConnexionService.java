@@ -6,7 +6,7 @@ import ca.gestionchalet.security.LimiteurConnexion;
 import ca.gestionchalet.security.TropDeTentativesException;
 import org.springframework.stereotype.Service;
 
-/** Vérifie une tentative de connexion : une source bloquée n'est même pas comparée au mot de passe. */
+/** Vérifie une tentative de connexion : comptée avant bcrypt, et une source bloquée n'est même pas comparée au mot de passe. */
 @Service
 public class ConnexionService {
 
@@ -19,11 +19,10 @@ public class ConnexionService {
     }
 
     public void connecter(String motDePasse, String source) {
-        limiteur.blocageRestant(source).ifPresent(restant -> {
+        limiteur.reserver(source).ifPresent(restant -> {
             throw new TropDeTentativesException(restant);
         });
         if (!compte.verifier(motDePasse)) {
-            limiteur.enregistrerEchec(source);
             throw new IdentifiantsInvalidesException();
         }
         limiteur.reinitialiser(source);

@@ -8,17 +8,21 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-/** Compte les échecs de connexion par source et bloque une source au-delà du seuil. Mémoire bornée, perdue au redémarrage. */
+/**
+ * Compte les tentatives de connexion par source et bloque une source au-delà du seuil. Une tentative est comptée avant la
+ * vérification du mot de passe, en une seule opération : des requêtes simultanées ne peuvent donc pas dépasser le seuil.
+ * Mémoire bornée, perdue au redémarrage.
+ */
 public final class LimiteurConnexion {
 
-    private record Echecs(int nombre, Instant dernier) {
+    private record Tentatives(int nombre, Instant derniere) {
     }
 
     private final int seuil;
     private final Duration dureeBlocage;
     private final int sourcesMax;
     private final Clock horloge;
-    private final Map<String, Echecs> parSource = new HashMap<>();
+    private final Map<String, Tentatives> parSource = new HashMap<>();
 
     public LimiteurConnexion(int seuil, Duration dureeBlocage, int sourcesMax, Clock horloge) {
         this.seuil = seuil;
@@ -27,28 +31,22 @@ public final class LimiteurConnexion {
         this.horloge = horloge;
     }
 
-    /** Le temps de blocage restant pour cette source, vide si elle peut tenter sa chance. */
-    public synchronized Optional<Duration> blocageRestant(String source) {
-        Echecs echecs = parSource.get(source);
-        if (echecs == null || echecs.nombre() < seuil) {
-            return Optional.empty();
-        }
-        Duration restant = Duration.between(horloge.instant(), echecs.dernier().plus(dureeBlocage));
-        return restant.isPositive() ? Optional.of(restant) : Optional.empty();
-    }
-
-    public synchronized void enregistrerEchec(String source) {
+    /** Compte une tentative pour cette source. Si elle est bloquée, rien n'est compté et le temps restant est renvoyé. */
+    public synchronized Optional<Duration> reserver(String source) {
         Instant maintenant = horloge.instant();
-        parSource.values().removeIf(echecs -> estPerime(echecs, maintenant));
-        if (!parSource.containsKey(source) && parSource.size() >= sourcesMax) {
-            parSource.entrySet().stream()
-                    .min(Comparator.comparing(entree -> entree.getValue().dernier()))
-                    .ifPresent(plusAncienne -> parSource.remove(plusAncienne.getKey()));
+        parSource.values().removeIf(tentatives -> estPerimee(tentatives, maintenant));
+        Tentatives tentatives = parSource.get(source);
+        if (tentatives != null && tentatives.nombre() >= seuil) {
+            return Optional.of(Duration.between(maintenant, tentatives.derniere().plus(dureeBlocage)));
         }
-        int nombre = parSource.containsKey(source) ? parSource.get(source).nombre() + 1 : 1;
-        parSource.put(source, new Echecs(nombre, maintenant));
+        if (tentatives == null && parSource.size() >= sourcesMax) {
+            oublierLaPlusAncienne();
+        }
+        parSource.put(source, new Tentatives(tentatives == null ? 1 : tentatives.nombre() + 1, maintenant));
+        return Optional.empty();
     }
 
+    /** Une connexion réussie efface le compte de sa source. */
     public synchronized void reinitialiser(String source) {
         parSource.remove(source);
     }
@@ -57,7 +55,13 @@ public final class LimiteurConnexion {
         return parSource.size();
     }
 
-    private boolean estPerime(Echecs echecs, Instant maintenant) {
-        return !echecs.dernier().plus(dureeBlocage).isAfter(maintenant);
+    private void oublierLaPlusAncienne() {
+        parSource.entrySet().stream()
+                .min(Comparator.comparing(entree -> entree.getValue().derniere()))
+                .ifPresent(plusAncienne -> parSource.remove(plusAncienne.getKey()));
+    }
+
+    private boolean estPerimee(Tentatives tentatives, Instant maintenant) {
+        return !tentatives.derniere().plus(dureeBlocage).isAfter(maintenant);
     }
 }
