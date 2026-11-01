@@ -401,6 +401,7 @@ Sauf mention contraire, Anthropic, Google Sheets et Google Drive sont doublés :
 - **CA06** Given le modèle en configuration vaut `modele-essai` When la lecture est demandée Then le double reçoit `modele-essai`, sans `temperature`, `top_p` ni `top_k` (D-01).
 - **CA07** Given une photo portant des métadonnées GPS, une orientation à 90° et le nom `facture-perso.jpg` When la lecture est demandée Then l'image reçue par le double n'a plus de métadonnées, a son orientation appliquée, et la requête ne contient ni le nom de fichier, ni jeton, ni identifiant de session (D-12).
 - **CA08** Given une lecture réussie When la requête au double est examinée Then elle contient la consigne de R-05 et la liste complète des types de dépense, et aucune valeur d'un autre reçu.
+- **CA84** Given un modèle proposant l'objet `Ampoules` et le type de dépense `Fournitures`, élément de la liste configurée When la lecture est demandée Then `valeurs.objet` vaut `Ampoules`, `valeurs.typeDepense` vaut `Fournitures`, et aucun des deux ne figure dans `champsRejetes` (R-04, Q-03).
 
 ### Validation et exemples réels
 - **CA09** Given le reçu STM (2026-10-11, total 35,00, reste vide), avec type de dépense et photo When il est validé Then le reçu enregistré a `montantTotalCents` 3500, `montantAvantTaxesCents`, `tpsCents`, `tvqCents` à `null`, et aucune alerte (D-09).
@@ -586,7 +587,7 @@ Point transmis à NF-03 : derrière Cloudflare Tunnel, toutes les requêtes semb
 |---|---|---|
 | Règles métier, sans application | validation, alertes, conversions de montants, transitions, placement dans une section | CA09 à CA17, CA21 à CA29, CA33 à CA37, CS18 |
 | Cas d'usage, frontières doublées | copie, reprise, idempotence, correction, autorisation | CA18, CA19, CA30 à CA32, CA38 à CA68, CA71 à CA73 |
-| Contrat HTTP | routes, codes, JSON, multipart, sécurité | CA01 à CA08 (avec le double du modèle), CA20, CA69, CA70, CA74, CA75, CS01 à CS04, CS09 à CS17, CS19, CS22 à CS24, CS26, CS27 |
+| Contrat HTTP | routes, codes, JSON, multipart, sécurité | CA01 à CA08, CA84 (avec le double du modèle), CA20, CA69, CA70, CA74, CA75, CS01 à CS04, CS09 à CS17, CS19, CS22 à CS24, CS26, CS27 |
 | Serveur réel, port aléatoire | requêtes malformées, limites de taille, session, blocage | CA70, CS05 à CS08, CS20, CS21, CS25 |
 | Clients externes, serveur HTTP local doublant Google et Anthropic | format exact des requêtes et réponses, littéral d'écriture, droits demandés | CA06 à CA08, CA48, CA49, CA53, CA68, CS16, CS26 |
 | Navigateur sans tête (Q-10), API réelle, clients doublés | écrans | CA76 à CA83, CS14, CS28 |
@@ -626,7 +627,7 @@ L'utilisateur a validé le PRD et accepté toutes les recommandations.
 |---|---|---|
 | Q-01 Attente des photos avant la validation | Mémoire de la page, renvoi à la validation, rien sur le serveur | section 4.1, CA79 |
 | Q-02 Échec ou illisibilité de la lecture | Saisie manuelle ou relance, photo obligatoire | section 4.1, section 8, CA20 |
-| Q-03 Objet et type de dépense | Le modèle propose les deux, l'utilisateur confirme ; déjà tranché au cadrage | R-04 |
+| Q-03 Objet et type de dépense | Le modèle propose les deux, l'utilisateur confirme ; déjà tranché au cadrage | R-04, CA84 |
 | Q-04 Correction après validation | Correction dans l'application ; ligne réécrite sur place, déplacée si le mois ou l'année change ; photos inchangées, sans ajout de photo en première version | R-29 à R-34, CA55 à CA63 |
 | Q-05 Suppression ou annulation d'un reçu validé | Aucune en première version ; l'utilisateur supprime la ligne à la main, le reçu reste en base | section 5, CA72 |
 | Q-06 Plusieurs photos dans PHOTO | Plusieurs liens dans une cellule (« Photo 1 », « Photo 2 ») | R-27, CA44 |
