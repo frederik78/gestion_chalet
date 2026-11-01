@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Toute exclusion est ciblée (classe et motif) et justifiée par un commentaire. -->
+<FindBugsFilter>
+</FindBugsFilter>

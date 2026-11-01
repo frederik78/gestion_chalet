@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: gestion-chalet
+  # Liquibase seul gère le schéma (ADR 0001) ; Hibernate ne fait que valider. Sans effet tant que la persistance n'est pas ajoutée.
+  jpa:
+    hibernate:
+      ddl-auto: validate
