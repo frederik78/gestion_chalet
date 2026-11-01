@@ -91,10 +91,14 @@ class ErreursEtEnTetesServeurReelTest {
         assertEnTetesDeSecurite(reponse.enTetes(), "415");
     }
 
-    private Reponse envoyerMultipart(String typeDeContenu, String corps) {
-        ClientEssai client = client();
-        client.get("/actuator/health");
-        return client.envoyer(client.requete("/api/connexion")
+    /** Sur une route protégée, avec session : le multipart y est analysé. */
+    private Reponse envoyerMultipartAvecSession(String typeDeContenu, String corps) {
+        return envoyerMultipartAvecSession("/api/essai/mutation/1", typeDeContenu, corps);
+    }
+
+    private Reponse envoyerMultipartAvecSession(String chemin, String typeDeContenu, String corps) {
+        ClientEssai client = connecte();
+        return client.envoyer(client.requete(chemin)
                 .header("Content-Type", typeDeContenu)
                 .header("X-XSRF-TOKEN", client.cookie("XSRF-TOKEN"))
                 .POST(HttpRequest.BodyPublishers.ofString(corps))
@@ -103,7 +107,7 @@ class ErreursEtEnTetesServeurReelTest {
 
     @Test
     void cs08_multipartTronqueDonne400Generique() {
-        Reponse reponse = envoyerMultipart("multipart/form-data; boundary=x",
+        Reponse reponse = envoyerMultipartAvecSession("multipart/form-data; boundary=x",
                 "--x\r\nContent-Disposition: form-data; name=\"photos\"; filename=\"a.jpg\"\r\n\r\ndebut sans fin");
 
         assertThat(reponse.statut()).isEqualTo(400);
@@ -112,20 +116,21 @@ class ErreursEtEnTetesServeurReelTest {
     }
 
     @Test
-    void cs08_multipartSansFrontiereDonneUneErreurGenerique() {
-        Reponse reponse = envoyerMultipart("multipart/form-data", "sans frontiere");
+    void cs08_multipartSansFrontiereDonne400Generique() {
+        Reponse reponse = envoyerMultipartAvecSession("multipart/form-data", "sans frontiere");
 
-        assertThat(reponse.statut()).as(reponse.corps()).isIn(400, 415);
-        assertThat(reponse.json().keySet()).isEqualTo(Set.of("erreur", "code"));
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(REQUETE_INVALIDE);
         assertEnTetesDeSecurite(reponse.enTetes(), "multipart sans frontiere");
     }
 
+    /** Tomcat lit ce contenu comme un multipart vide : c'est la route, qui attend du JSON, qui le refuse. */
     @Test
-    void cs08_contenuQuiNEstPasDuMultipartDonneUneErreurGenerique() {
-        Reponse reponse = envoyerMultipart("multipart/form-data; boundary=x", "ceci n'est pas un multipart");
+    void cs08_contenuQuiNEstPasDuMultipartSurUneRouteJsonDonne415Generique() {
+        Reponse reponse = envoyerMultipartAvecSession("/api/connexion", "multipart/form-data; boundary=x", "ceci n'est pas un multipart");
 
-        assertThat(reponse.statut()).as(reponse.corps()).isIn(400, 415);
-        assertThat(reponse.json().keySet()).isEqualTo(Set.of("erreur", "code"));
+        assertThat(reponse.statut()).isEqualTo(415);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Format non accepté.", "code", "FORMAT_NON_ACCEPTE"));
         assertEnTetesDeSecurite(reponse.enTetes(), "pas un multipart");
     }
 
@@ -235,5 +240,30 @@ class ErreursEtEnTetesServeurReelTest {
         assertThat(session.get("/api/essai/session").enTete("Cache-Control")).isEqualTo("no-store");
         assertThat(session.get("/api/inconnue").enTete("Cache-Control")).isEqualTo("no-store");
         assertThat(session.get("/api/essai/panne").enTete("Cache-Control")).isEqualTo("no-store");
+    }
+
+    private static String debutMultipartSansSession(String chemin) {
+        String jeton = UUID.randomUUID().toString();
+        return "POST " + chemin + " HTTP/1.1\r\nHost: localhost\r\n"
+                + "Content-Type: multipart/form-data; boundary=x\r\nContent-Length: 56000000\r\n"
+                + "X-XSRF-TOKEN: " + jeton + "\r\nCookie: XSRF-TOKEN=" + jeton + "\r\n\r\n"
+                + "--x\r\nContent-Disposition: form-data; name=\"photos\"; filename=\"a.jpg\"\r\n\r\ndebut";
+    }
+
+    @Test
+    void cs08_unMultipartSansSessionEstRefuseSansEtreLu() {
+        ClientBrut.Reponse reponse = ClientBrut.envoyerSansLaFinDuCorps(port, debutMultipartSansSession("/api/connexion"), 5_000);
+
+        assertThat(reponse.statut()).isEqualTo(415);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Format non accepté.", "code", "FORMAT_NON_ACCEPTE"));
+        assertEnTetesDeSecurite(reponse.enTetes(), "multipart sans session");
+    }
+
+    @Test
+    void cs01_unMultipartSansSessionSurUneRouteProtegeeResteUn401() {
+        ClientBrut.Reponse reponse = ClientBrut.envoyerSansLaFinDuCorps(port, debutMultipartSansSession("/api/essai/mutation/1"), 5_000);
+
+        assertThat(reponse.statut()).isEqualTo(401);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Authentification requise.", "code", "NON_AUTHENTIFIE"));
     }
 }

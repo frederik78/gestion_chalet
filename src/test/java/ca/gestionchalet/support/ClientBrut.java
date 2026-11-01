@@ -9,6 +9,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import tools.jackson.databind.json.JsonMapper;
 
 /** Envoie des octets bruts sur une socket : seul moyen de produire une requête qu'un client HTTP correct refuserait d'émettre. */
@@ -16,6 +18,7 @@ public final class ClientBrut {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final int DELAI_MS = 10_000;
+    private static final Pattern CONTENT_LENGTH = Pattern.compile("content-length: (\\d+)");
 
     private ClientBrut() {
     }
@@ -39,6 +42,45 @@ public final class ClientBrut {
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    /**
+     * Envoie le début d'une requête dont le corps annoncé n'arrivera jamais, et lit la réponse sans attendre la fermeture. Si le
+     * serveur tentait de lire ce corps, il ne répondrait pas : le délai de lecture fait alors échouer l'appel.
+     */
+    public static Reponse envoyerSansLaFinDuCorps(int port, String debut, int delaiMs) {
+        try (Socket socket = new Socket("localhost", port)) {
+            socket.setSoTimeout(delaiMs);
+            OutputStream sortie = socket.getOutputStream();
+            sortie.write(debut.getBytes(StandardCharsets.ISO_8859_1));
+            sortie.flush();
+            StringBuilder recu = new StringBuilder();
+            byte[] tampon = new byte[1024];
+            while (!estComplete(recu.toString())) {
+                int lus = socket.getInputStream().read(tampon);
+                if (lus < 0) {
+                    break;
+                }
+                recu.append(new String(tampon, 0, lus, StandardCharsets.UTF_8));
+            }
+            return analyser(recu.toString());
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static boolean estComplete(String recu) {
+        int finEnTetes = recu.indexOf("\r\n\r\n");
+        if (finEnTetes < 0) {
+            return false;
+        }
+        String enTetes = recu.substring(0, finEnTetes).toLowerCase(Locale.ROOT);
+        String corps = recu.substring(finEnTetes + 4);
+        if (enTetes.contains("transfer-encoding: chunked")) {
+            return corps.endsWith("0\r\n\r\n");
+        }
+        Matcher longueur = CONTENT_LENGTH.matcher(enTetes);
+        return longueur.find() && corps.getBytes(StandardCharsets.UTF_8).length >= Integer.parseInt(longueur.group(1));
     }
 
     private static Reponse analyser(String brut) {

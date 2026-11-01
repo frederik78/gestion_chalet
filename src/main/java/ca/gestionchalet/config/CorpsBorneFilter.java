@@ -15,16 +15,21 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import org.springframework.security.authentication.AuthenticationTrustResolver;
+import org.springframework.security.authentication.AuthenticationTrustResolverImpl;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
  * Borne le corps des requêtes hors multipart, que sa longueur soit déclarée ou non (envoi fragmenté) : il est lu en mémoire
- * jusqu'à la limite, puis rejoué. Le multipart a ses propres limites ({@code spring.servlet.multipart.*}).
+ * jusqu'à la limite, puis rejoué. Le multipart a ses propres limites ({@code spring.servlet.multipart.*}), bien plus hautes :
+ * il n'est donc accepté qu'avec une session, et refusé sans être lu sur la seule route ouverte sans session.
  */
 final class CorpsBorneFilter extends OncePerRequestFilter {
 
     private static final String PREFIXE_MULTIPART = "multipart/";
 
+    private final AuthenticationTrustResolver authentifications = new AuthenticationTrustResolverImpl();
     private final int limite;
 
     CorpsBorneFilter(int limite) {
@@ -35,7 +40,11 @@ final class CorpsBorneFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest requete, HttpServletResponse reponse, FilterChain suite)
             throws IOException, ServletException {
         if (estMultipart(requete)) {
-            suite.doFilter(requete, reponse);
+            if (sessionOuverte()) {
+                suite.doFilter(requete, reponse);
+            } else {
+                ReponsesErreur.ecrire(reponse, CodeErreur.FORMAT_NON_ACCEPTE);
+            }
             return;
         }
         if (requete.getContentLengthLong() > limite) {
@@ -48,6 +57,10 @@ final class CorpsBorneFilter extends OncePerRequestFilter {
             return;
         }
         suite.doFilter(new CorpsRejoue(requete, corps), reponse);
+    }
+
+    private boolean sessionOuverte() {
+        return authentifications.isAuthenticated(SecurityContextHolder.getContext().getAuthentication());
     }
 
     private static boolean estMultipart(HttpServletRequest requete) {

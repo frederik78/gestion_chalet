@@ -16,7 +16,7 @@
     <Class name="ca.gestionchalet.config.JetonCsrfParEnTete"/>
     <Bug pattern="SERVLET_HEADER"/>
   </Match>
-  <!-- Le type de contenu choisit seulement la limite applicable ; un type mensonger mène au multipart, borné par ses propres limites (cs08). -->
+  <!-- Le type de contenu choisit seulement la limite applicable : un type mensonger sans session est refusé sans lecture, et avec session mène au multipart, borné par ses propres limites (cs08). -->
   <Match>
     <Class name="ca.gestionchalet.config.CorpsBorneFilter"/>
     <Bug pattern="SERVLET_CONTENT_TYPE"/>

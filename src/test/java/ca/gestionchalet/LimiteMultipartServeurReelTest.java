@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.gestionchalet.support.ClientEssai;
 import ca.gestionchalet.support.ClientEssai.Reponse;
+import ca.gestionchalet.support.ConfigurationEssai;
 import ca.gestionchalet.support.ServeurReelTest;
 import java.net.http.HttpRequest;
 import java.util.Map;
@@ -27,9 +28,9 @@ class LimiteMultipartServeurReelTest {
     @Test
     void cs08_multipartTropGrosDonne413Generique() {
         ClientEssai client = new ClientEssai(port, "source-multipart");
-        client.get("/actuator/health");
+        assertThat(client.connecter(ConfigurationEssai.MOT_DE_PASSE).statut()).isEqualTo(204);
 
-        Reponse reponse = client.envoyer(client.requete("/api/connexion")
+        Reponse reponse = client.envoyer(client.requete("/api/essai/mutation/1")
                 .header("Content-Type", "multipart/form-data; boundary=x")
                 .header("X-XSRF-TOKEN", client.cookie("XSRF-TOKEN"))
                 .POST(HttpRequest.BodyPublishers.ofString(multipart(2048)))

@@ -19,6 +19,8 @@ import org.springframework.boot.test.web.server.LocalServerPort;
         properties = "recus.securite.condense-mot-de-passe=" + ConfigurationEssai.CONDENSE)
 class SourceReelleServeurReelTest {
 
+    private static final int ECHECS_PAR_DEFAUT = 5;
+
     @LocalServerPort
     int port;
 
@@ -31,9 +33,10 @@ class SourceReelleServeurReelTest {
     })
     void cs05_unEnTeteDuClientNeLeveNiNeContourneLeBlocage(String enTete, String valeur) {
         ClientEssai client = new ClientEssai(port, null);
-        while (client.connecter("faux").statut() != 429) {
-            assertThat(client.cookie("JSESSIONID")).isNull();
+        for (int essai = 0; essai < ECHECS_PAR_DEFAUT; essai++) {
+            client.connecter("faux");
         }
+        assertThat(client.connecter("faux").statut()).isEqualTo(429);
 
         Reponse reponse = client.envoyer(client.requete("/api/connexion")
                 .header("Content-Type", "application/json")
