@@ -11,6 +11,8 @@ Le déploiement lui-même est reporté (backlog, NF-03). Ce fichier liste ce que
 
 Produire le condensé, sans laisser le mot de passe dans l'historique du shell : `htpasswd -nBC 12 "" | tr -d ':\n'`. Le condensé contient des `$` : le placer entre apostrophes.
 
+bcrypt ne prend en compte que les 72 premiers octets du mot de passe : ce qui suit est ignoré, même si l'API en accepte 1 000 caractères. Choisir un mot de passe fort dans cette limite.
+
 ## Réglages (`recus.securite.*`, surchargeables par l'environnement)
 Blocage : 5 échecs par source, 15 minutes. Inactivité de session : 8 heures. Corps de requête hors multipart : 64 Ko. Multipart (`spring.servlet.multipart.*`) : 15 Mo par fichier, 75 Mo par requête.
 
@@ -20,4 +22,11 @@ Blocage : 5 échecs par source, 15 minutes. Inactivité de session : 8 heures. C
 - Le blocage et les sessions sont en mémoire : ils sont perdus au redémarrage.
 
 ## Essai réel du modèle (hors suite de tests)
-`ANTHROPIC_API_KEY=... ./mvnw -q -Pessai-reel compile exec:java -Dphoto=/chemin/hors/depot/recu.jpg`. Options : `-Dcote.max=2400`, `-Dmodele=...`. Les photos réelles restent hors du dépôt.
+La clé ne s'écrit jamais en clair dans la ligne de commande, qui resterait dans l'historique du shell. Sous macOS, depuis le trousseau :
+
+```
+export ANTHROPIC_API_KEY="$(security find-generic-password -a "$USER" -s anthropic-api-key -w)"
+./mvnw -q -Pessai-reel compile exec:java -Dphoto=/chemin/hors/depot/recu.jpg
+```
+
+Options : `-Dcote.max=2400`, `-Dmodele=...`. Les photos réelles restent hors du dépôt.
