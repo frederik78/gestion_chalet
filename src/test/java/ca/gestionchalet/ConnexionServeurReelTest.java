@@ -214,4 +214,18 @@ class ConnexionServeurReelTest {
             assertThat(parStatut).isEqualTo(Map.of(401, ECHECS_PAR_DEFAUT, 429, simultanees - ECHECS_PAR_DEFAUT));
         }
     }
+
+    @Test
+    void cs05_uneConnexionReussieRemetLeCompteAZero() {
+        ClientEssai client = client();
+        for (int essai = 0; essai < ECHECS_PAR_DEFAUT - 1; essai++) {
+            assertThat(client.connecter("faux").statut()).isEqualTo(401);
+        }
+        assertThat(client.connecter(ConfigurationEssai.MOT_DE_PASSE).statut()).isEqualTo(204);
+
+        for (int essai = 0; essai < ECHECS_PAR_DEFAUT; essai++) {
+            assertThat(client.connecter("faux").statut()).as("échec n° %d après la réussite", essai + 1).isEqualTo(401);
+        }
+        assertThat(client.connecter("faux").statut()).isEqualTo(429);
+    }
 }
