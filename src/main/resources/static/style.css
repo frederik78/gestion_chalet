@@ -1,0 +1,33 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  color: #1f2a24;
+  background: #f4f6f3;
+}
+
+main {
+  max-width: 24rem;
+  margin: 3rem auto;
+  padding: 0 1rem;
+}
+
+form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+input, button {
+  font: inherit;
+  padding: 0.6rem;
+}
+
+button {
+  color: #fff;
+  background: #2f6b4f;
+  border: 0;
+  border-radius: 0.25rem;
+}
+
+#message {
+  color: #a32020;
+}

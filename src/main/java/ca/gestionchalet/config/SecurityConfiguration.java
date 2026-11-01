@@ -24,13 +24,19 @@ import org.springframework.security.web.csrf.CsrfTokenRepository;
 @EnableConfigurationProperties(SecuriteProperties.class)
 public class SecurityConfiguration {
 
+    /** La santé et les seules ressources nécessaires à la page de connexion, listées une à une. */
+    private static final String[] RESSOURCES_PUBLIQUES = {
+        "/actuator/health", "/", "/index.html", "/connexion.js", "/commun.js", "/style.css",
+        "/manifest.webmanifest", "/sw.js", "/icones/icone-192.png", "/icones/icone-512.png"
+    };
+
     @Bean
     SecurityFilterChain chaineDeSecurite(HttpSecurity http, CsrfTokenRepository jetons, SecurityContextRepository contextes) {
         ErreursSecurite erreurs = new ErreursSecurite();
         return http
                 .authorizeHttpRequests(acces -> acces
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+                        .requestMatchers(HttpMethod.GET, RESSOURCES_PUBLIQUES).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/connexion").permitAll()
                         .anyRequest().authenticated())
                 .csrf(csrf -> csrf.csrfTokenRepository(jetons).csrfTokenRequestHandler(new JetonCsrfParEnTete()))

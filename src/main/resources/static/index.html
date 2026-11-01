@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connexion - Gestion de chalet</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icones/icone-192.png">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/commun.js" defer></script>
+  <script src="/connexion.js" defer></script>
+</head>
+<body>
+  <main>
+    <h1>Gestion de chalet</h1>
+    <form id="connexion">
+      <label for="mot-de-passe">Mot de passe</label>
+      <input id="mot-de-passe" name="motDePasse" type="password" autocomplete="current-password" maxlength="1000" required autofocus>
+      <button type="submit">Se connecter</button>
+    </form>
+    <p id="message" role="alert"></p>
+  </main>
+</body>
+</html>

@@ -14,6 +14,8 @@ spring:
       ddl-auto: validate
 
 server:
+  mime-mappings:
+    webmanifest: application/manifest+json
   servlet:
     session:
       tracking-modes: cookie
