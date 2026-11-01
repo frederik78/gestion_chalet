@@ -12,3 +12,9 @@ Aucun détail d'implémentation ici (voir la skill `domain-modeling`).
 - **Numéro d'inscription** : numéro attribué au fournisseur pour la TPS ou pour la TVQ et imprimé sur ses reçus.
 - **Objet** : courte description de ce qui a été acheté, telle qu'elle figure dans le suivi des dépenses.
 - **Type de dépense** : catégorie à laquelle une dépense est rattachée dans le suivi des dépenses. À éviter : type, catégorie.
+- **Lecture** : extraction, par le modèle, des valeurs visibles sur les photos d'un reçu. Son résultat n'est qu'une proposition.
+- **Validation** : acte par lequel l'utilisateur accepte les valeurs d'un reçu, éventuellement corrigées, et l'enregistre.
+- **Alerte** : avertissement sur un reçu, jamais bloquant.
+- **Copie** : report d'un reçu validé vers Google Drive pour ses photos et vers le Sheet pour sa ligne.
+- **Section de mois** : dans un onglet du Sheet, la ligne de titre d'un mois et les lignes qui la suivent jusqu'au titre suivant.
+- **Relevé de carte** : document de paiement par carte, sans détail des taxes.
