@@ -8,6 +8,11 @@ spring:
     multipart:
       max-file-size: 15MB
       max-request-size: 75MB
+  # Modèle fixé par recus.modele ; aucun réglage temperature, top_p ni top_k (ADR 0001). La clé vient de ANTHROPIC_API_KEY, lue par le client.
+  ai:
+    anthropic:
+      chat:
+        model: ${recus.modele}
   # Liquibase seul gère le schéma (ADR 0001) ; Hibernate ne fait que valider. Sans effet tant que la persistance n'est pas ajoutée.
   jpa:
     hibernate:
@@ -39,6 +44,7 @@ management:
         enabled: false
 
 recus:
+  modele: claude-haiku-5-5
   securite:
     # Aucun condensé par défaut : à fournir par l'environnement (RECUS_SECURITE_CONDENSE_MOT_DE_PASSE), sinon l'application refuse de démarrer.
     echecs-avant-blocage: 5

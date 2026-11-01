@@ -143,5 +143,54 @@
         </plugins>
       </build>
     </profile>
+    <!--
+      Essai manuel d'un vrai appel au modèle, hors de test et de verify (src/essai n'est compilé que dans ce profil).
+      ANTHROPIC_API_KEY=... ./mvnw -q -Pessai-reel compile exec:java -Dphoto=/chemin/hors/depot/recu.jpg
+      Facultatif : -Dcote.max=2400 (long côté de la copie envoyée), -Dmodele=claude-haiku-5-5.
+    -->
+    <profile>
+      <id>essai-reel</id>
+      <properties>
+        <photo>${project.basedir}/photo-non-indiquee</photo>
+        <cote.max>1568</cote.max>
+        <modele>claude-haiku-5-5</modele>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <version>${build-helper-plugin.version}</version>
+            <executions>
+              <execution>
+                <id>sources-essai</id>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>add-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>src/essai/java</source>
+                  </sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <version>${exec-plugin.version}</version>
+            <configuration>
+              <mainClass>essaireel.EssaiLectureReelle</mainClass>
+              <arguments>
+                <argument>${photo}</argument>
+                <argument>${cote.max}</argument>
+                <argument>${modele}</argument>
+              </arguments>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
   </profiles>
 </project>
