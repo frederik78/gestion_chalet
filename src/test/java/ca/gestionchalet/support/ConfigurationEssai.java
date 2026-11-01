@@ -22,6 +22,11 @@ public class ConfigurationEssai {
     public static final String CONDENSE = "$2y$10$l1HeZTHlUnXFqBxpDxj2uO40y7JL2DuYKZmGzdDo2T3DyMkbKaIhC";
 
     @Bean
+    RouteEssaiResource routeEssaiResource() {
+        return new RouteEssaiResource();
+    }
+
+    @Bean
     @Primary
     HorlogeEssai horlogeEssai() {
         return new HorlogeEssai();

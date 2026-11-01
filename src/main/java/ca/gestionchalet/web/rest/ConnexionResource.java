@@ -27,7 +27,7 @@ public class ConnexionResource {
 
     @PostMapping("/connexion")
     ResponseEntity<Void> connecter(@Valid @RequestBody ConnexionDTO corps, HttpServletRequest requete, HttpServletResponse reponse) {
-        connexions.connecter(corps.motDePasse());
+        connexions.connecter(corps.motDePasse(), requete.getRemoteAddr());
         sessions.ouvrir(requete, reponse);
         return ResponseEntity.noContent().build();
     }

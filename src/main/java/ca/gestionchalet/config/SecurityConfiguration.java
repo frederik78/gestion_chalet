@@ -1,9 +1,11 @@
 package ca.gestionchalet.config;
 
 import ca.gestionchalet.security.CompteLocal;
+import ca.gestionchalet.security.LimiteurConnexion;
 import ca.gestionchalet.security.SessionUtilisateur;
 import ca.gestionchalet.web.rest.errors.ErreursSecurite;
 import jakarta.servlet.DispatcherType;
+import java.time.Clock;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -56,6 +58,16 @@ public class SecurityConfiguration {
         CsrfAuthenticationStrategy renouvellement = new CsrfAuthenticationStrategy(jetons);
         renouvellement.setRequestHandler(new JetonCsrfParEnTete());
         return new SessionUtilisateur(contextes, jetons, renouvellement, proprietes.inactiviteSession(), proprietes.cookieSecurise());
+    }
+
+    @Bean
+    Clock horloge() {
+        return Clock.systemUTC();
+    }
+
+    @Bean
+    LimiteurConnexion limiteurConnexion(SecuriteProperties proprietes, Clock horloge) {
+        return new LimiteurConnexion(proprietes.echecsAvantBlocage(), proprietes.dureeBlocage(), proprietes.sourcesSuiviesMax(), horloge);
     }
 
     @Bean
