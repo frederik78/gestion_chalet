@@ -58,6 +58,7 @@ class ConnexionServeurReelTest {
         List<String> cookieSession = reponse.setCookie("JSESSIONID");
         assertThat(cookieSession).hasSize(1);
         assertThat(cookieSession.getFirst()).contains("HttpOnly", "SameSite=Lax", "Secure");
+        assertThat(reponse.setCookie("XSRF-TOKEN").getLast()).contains("SameSite=Lax", "Secure").doesNotContain("HttpOnly");
     }
 
     @Test
