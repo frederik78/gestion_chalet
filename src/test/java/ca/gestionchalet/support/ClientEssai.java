@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import tools.jackson.databind.json.JsonMapper;
 
-/** Client HTTP réel pour les tests : garde ses cookies comme un navigateur, et se présente sous une source donnée. */
+/** Client HTTP réel pour les tests : garde ses cookies comme un navigateur, et se présente sous une source donnée ({@code null} : la vraie). */
 public final class ClientEssai {
 
     public static final String EN_TETE_SOURCE = "X-Source-Essai";
@@ -62,7 +62,10 @@ public final class ClientEssai {
     }
 
     public HttpRequest.Builder requete(String chemin) {
-        HttpRequest.Builder requete = HttpRequest.newBuilder(URI.create(base + chemin)).header(EN_TETE_SOURCE, source);
+        HttpRequest.Builder requete = HttpRequest.newBuilder(URI.create(base + chemin));
+        if (source != null) {
+            requete.header(EN_TETE_SOURCE, source);
+        }
         if (!cookies.isEmpty()) {
             requete.header("Cookie", cookies.entrySet().stream()
                     .map(cookie -> cookie.getKey() + "=" + cookie.getValue())

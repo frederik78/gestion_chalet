@@ -19,6 +19,7 @@ class ValeursParDefautTest {
         "recus.securite.duree-blocage, 15m",
         "recus.securite.inactivite-session, 8h",
         "recus.securite.cookie-securise, true",
+        "server.forward-headers-strategy, none",
         "spring.servlet.multipart.max-file-size, 15MB",
         "spring.servlet.multipart.max-request-size, 75MB",
     })
