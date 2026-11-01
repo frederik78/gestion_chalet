@@ -13,12 +13,16 @@ public final class ReponsesErreur {
     private ReponsesErreur() {
     }
 
+    public static String json(CodeErreur code) {
+        return JSON.writeValueAsString(ErreurDTO.de(code));
+    }
+
     public static void ecrire(HttpServletResponse reponse, CodeErreur code) throws IOException {
         reponse.resetBuffer();
         reponse.setStatus(code.statut());
         reponse.setContentType(MediaType.APPLICATION_JSON_VALUE);
         reponse.setCharacterEncoding("UTF-8");
-        reponse.getWriter().write(JSON.writeValueAsString(ErreurDTO.de(code)));
+        reponse.getWriter().write(json(code));
         reponse.flushBuffer();
     }
 }

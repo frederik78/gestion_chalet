@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.util.unit.DataSize;
 import org.springframework.validation.annotation.Validated;
 
 /**
@@ -15,6 +16,7 @@ import org.springframework.validation.annotation.Validated;
  * @param dureeBlocage durée du blocage d'une source
  * @param sourcesSuiviesMax nombre maximal de sources suivies en mémoire
  * @param inactiviteSession durée d'inactivité au-delà de laquelle une session expire
+ * @param corpsRequeteMax taille maximale d'un corps de requête hors multipart
  * @param cookieSecurise vrai hors poste local : les cookies portent {@code Secure}
  */
 @Validated
@@ -25,5 +27,6 @@ public record SecuriteProperties(
         @NotNull Duration dureeBlocage,
         @Min(1) int sourcesSuiviesMax,
         @NotNull Duration inactiviteSession,
+        @NotNull DataSize corpsRequeteMax,
         boolean cookieSecurise) {
 }

@@ -10,12 +10,14 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 
 /** Traduit toute exception en corps d'erreur générique ; le détail ne quitte jamais le serveur. */
 @RestControllerAdvice
@@ -45,9 +47,14 @@ public class GestionnaireErreurs {
         return corps(HttpStatus.BAD_REQUEST, ErreurDTO.validation(champs));
     }
 
-    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ExceptionHandler({HttpMessageNotReadableException.class, MultipartException.class})
     ResponseEntity<ErreurDTO> corpsIllisible() {
         return reponse(CodeErreur.REQUETE_INVALIDE);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    ResponseEntity<ErreurDTO> tailleExcessive() {
+        return reponse(CodeErreur.TAILLE_EXCESSIVE);
     }
 
     /** Les exceptions de Spring MVC portent leur statut ; tout le reste est une panne, journalisée sans son message. */

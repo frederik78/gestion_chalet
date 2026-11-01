@@ -4,6 +4,10 @@ spring:
   # Aucun compte généré : le seul compte est le compte local (CS07).
   autoconfigure:
     exclude: org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 75MB
   # Liquibase seul gère le schéma (ADR 0001) ; Hibernate ne fait que valider. Sans effet tant que la persistance n'est pas ajoutée.
   jpa:
     hibernate:
@@ -39,5 +43,6 @@ recus:
     duree-blocage: 15m
     sources-suivies-max: 10000
     inactivite-session: 8h
+    corps-requete-max: 64KB
     # Vrai partout, sauf sur le poste local en HTTP (RECUS_SECURITE_COOKIE_SECURISE=false).
     cookie-securise: true

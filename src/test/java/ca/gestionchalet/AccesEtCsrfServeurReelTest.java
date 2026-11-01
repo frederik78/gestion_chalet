@@ -8,6 +8,8 @@ import ca.gestionchalet.support.ConfigurationEssai;
 import ca.gestionchalet.support.RouteEssaiResource;
 import ca.gestionchalet.support.ServeurReelTest;
 import java.net.http.HttpRequest;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -121,7 +123,7 @@ class AccesEtCsrfServeurReelTest {
 
     @Test
     void cs01_authentificationBasicRefusee() {
-        String basic = java.util.Base64.getEncoder().encodeToString(("user:" + ConfigurationEssai.MOT_DE_PASSE).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String basic = Base64.getEncoder().encodeToString(("user:" + ConfigurationEssai.MOT_DE_PASSE).getBytes(StandardCharsets.UTF_8));
         ClientEssai client = client();
         HttpRequest requete = client.requete("/api/essai/session").header("Authorization", "Basic " + basic).GET().build();
 

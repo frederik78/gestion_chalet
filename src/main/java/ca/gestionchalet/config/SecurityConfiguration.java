@@ -36,6 +36,7 @@ public class SecurityConfiguration {
                 .csrf(csrf -> csrf.csrfTokenRepository(jetons).csrfTokenRequestHandler(new JetonCsrfParEnTete()))
                 .securityContext(contexte -> contexte.securityContextRepository(contextes))
                 .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(erreurs).accessDeniedHandler(erreurs))
+                .headers(AbstractHttpConfigurer::disable) // posés par EnTetesSecuriteFilter, avant le pare-feu HTTP
                 .requestCache(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
                 .build();
