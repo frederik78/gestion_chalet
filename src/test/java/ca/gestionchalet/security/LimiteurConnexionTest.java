@@ -6,7 +6,6 @@ import ca.gestionchalet.support.HorlogeEssai;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -96,25 +95,33 @@ class LimiteurConnexionTest {
         assertThat(limiteur.reserver("c")).isPresent();
     }
 
+    /** Beaucoup plus de réservations que le seuil : un compte non atomique en perdrait, et admettrait trop de tentatives. */
     @Test
     void cs05_desReservationsSimultaneesNeDepassentJamaisLeSeuil() throws Exception {
-        int simultanees = 64;
+        int seuil = 1_000;
+        int fils = 16;
+        int parFil = 500;
+        LimiteurConnexion charge = new LimiteurConnexion(seuil, Duration.ofMinutes(15), 2, horloge);
         CountDownLatch depart = new CountDownLatch(1);
-        List<Future<Optional<Duration>>> reponses = new ArrayList<>();
-        try (ExecutorService fils = Executors.newFixedThreadPool(simultanees)) {
-            for (int i = 0; i < simultanees; i++) {
-                reponses.add(fils.submit(() -> {
+        List<Future<Integer>> admisesParFil = new ArrayList<>();
+        try (ExecutorService execution = Executors.newFixedThreadPool(fils)) {
+            for (int i = 0; i < fils; i++) {
+                admisesParFil.add(execution.submit(() -> {
                     depart.await();
-                    return limiteur.reserver("a");
+                    int admises = 0;
+                    for (int essai = 0; essai < parFil; essai++) {
+                        admises += charge.reserver("a").isEmpty() ? 1 : 0;
+                    }
+                    return admises;
                 }));
             }
             depart.countDown();
             int admises = 0;
-            for (Future<Optional<Duration>> reponse : reponses) {
-                admises += reponse.get().isEmpty() ? 1 : 0;
+            for (Future<Integer> admisesDuFil : admisesParFil) {
+                admises += admisesDuFil.get();
             }
 
-            assertThat(admises).isEqualTo(3);
+            assertThat(admises).isEqualTo(seuil);
         }
     }
 }
