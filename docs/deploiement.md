@@ -5,7 +5,7 @@ Le déploiement lui-même est reporté (backlog, NF-03). Ce fichier liste ce que
 ## Environnement
 | Variable | Rôle | Défaut |
 |---|---|---|
-| `RECUS_SECURITE_CONDENSE_MOT_DE_PASSE` | Condensé bcrypt du mot de passe du compte local, de coût 10 au moins | aucun : l'application refuse de démarrer |
+| `RECUS_SECURITE_CONDENSE_MOT_DE_PASSE` | Condensé bcrypt du mot de passe du compte local, de coût 10 à 31 | aucun : l'application refuse de démarrer |
 | `RECUS_SECURITE_COOKIE_SECURISE` | `false` seulement sur le poste local en HTTP | `true` |
 | `ANTHROPIC_API_KEY` | Clé du modèle, lue par le client au moment de l'appel | aucune : le démarrage n'en dépend pas |
 

@@ -1,6 +1,7 @@
 package ca.gestionchalet.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
@@ -11,7 +12,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 class CompteLocalTest {
 
-    private static final String MESSAGE = "Condensé du mot de passe absent ou trop faible : bcrypt de coût 10 au moins requis (recus.securite.condense-mot-de-passe).";
+    private static final String MESSAGE = "Condensé du mot de passe absent ou trop faible : bcrypt de coût 10 à 31 requis (recus.securite.condense-mot-de-passe).";
 
     private static String bcrypt(int cout, String motDePasse) {
         return new BCryptPasswordEncoder(cout).encode(motDePasse);
@@ -30,6 +31,8 @@ class CompteLocalTest {
             "$2a$10$tropcourt",
             "$2a$04$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuvwxyz01234",
             "$2a$09$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuvwxyz01234",
+            "$2a$32$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuvwxyz01234",
+            "$2a$99$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuvwxyz01234",
     })
     void cs07_condenseAbsentOuFaibleRefuseLaCreationDuCompte(String condense) {
         assertThatThrownBy(() -> new CompteLocal(condense))
@@ -43,6 +46,12 @@ class CompteLocalTest {
 
         assertThat(compte.verifier("secret")).isTrue();
         assertThat(compte.verifier("autre")).isFalse();
+    }
+
+    /** Le coût maximal n'est pas calculé : à 31, une seule vérification durerait des jours. Seule la création du compte est testée. */
+    @Test
+    void cs07_coutTrenteEtUnAcceptePourLaLimiteHaute() {
+        assertThatCode(() -> new CompteLocal("$2a$31$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuvwxyz01234")).doesNotThrowAnyException();
     }
 
     @Test

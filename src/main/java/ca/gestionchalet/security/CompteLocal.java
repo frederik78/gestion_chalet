@@ -9,6 +9,7 @@ public final class CompteLocal {
 
     private static final Pattern BCRYPT = Pattern.compile("\\A\\$2[aby]\\$(\\d{2})\\$[./0-9A-Za-z]{53}\\z");
     private static final int COUT_MINIMAL = 10;
+    private static final int COUT_MAXIMAL = 31;
 
     private final BCryptPasswordEncoder encodeur = new BCryptPasswordEncoder();
     private final String condense;
@@ -16,14 +17,18 @@ public final class CompteLocal {
     public CompteLocal(String condense) {
         if (condense == null || !estFort(condense)) {
             throw new IllegalStateException("Condensé du mot de passe absent ou trop faible : bcrypt de coût "
-                    + COUT_MINIMAL + " au moins requis (recus.securite.condense-mot-de-passe).");
+                    + COUT_MINIMAL + " à " + COUT_MAXIMAL + " requis (recus.securite.condense-mot-de-passe).");
         }
         this.condense = condense;
     }
 
     private static boolean estFort(String condense) {
         Matcher format = BCRYPT.matcher(condense);
-        return format.matches() && Integer.parseInt(format.group(1)) >= COUT_MINIMAL;
+        if (!format.matches()) {
+            return false;
+        }
+        int cout = Integer.parseInt(format.group(1));
+        return cout >= COUT_MINIMAL && cout <= COUT_MAXIMAL;
     }
 
     public boolean verifier(String motDePasse) {

@@ -29,7 +29,7 @@ class DemarrageSansCondenseTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"5f4dcc3b5aa765d61d8327deb882cf99", "{noop}motdepasse"})
+    @ValueSource(strings = {"5f4dcc3b5aa765d61d8327deb882cf99", "{noop}motdepasse", "$2a$99$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuvwxyz01234"})
     void cs07_algorithmeFaibleEmpecheLeDemarrage(String condense) {
         assertThatThrownBy(() -> demarrer("recus.securite.condense-mot-de-passe=" + condense))
                 .hasRootCauseInstanceOf(IllegalStateException.class)
