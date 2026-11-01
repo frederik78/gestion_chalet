@@ -3,7 +3,7 @@ id: 001-01
 titre: Socle et connexion
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: À faire
+statut: En cours
 depend_de: []
 criteres: [CS01, CS02, CS04, CS05, CS06, CS07, CS08, CS09, CS28, CA83]
 branche: feat/001-01-socle-connexion
