@@ -135,6 +135,19 @@ class PwaServeurReelTest {
         assertThat(tiers).isEmpty();
     }
 
+    /** Si connexion.js ne se charge pas, Entrée soumet le formulaire : le mot de passe ne doit partir ni dans l'URL ni dans un corps. */
+    @Test
+    void cs28_sansScriptLeFormulaireNEnvoieJamaisLeMotDePasse() {
+        String page = client().get("/").corps();
+
+        Matcher formulaire = Pattern.compile("<form\\b[^>]*>").matcher(page);
+        Matcher champ = Pattern.compile("<input\\b[^>]*type=\"password\"[^>]*>").matcher(page);
+        assertThat(formulaire.find()).isTrue();
+        assertThat(champ.find()).isTrue();
+        assertThat(formulaire.group()).contains("method=\"post\"");
+        assertThat(champ.group()).doesNotContain(" name=");
+    }
+
     @Test
     void cs28_lesPagesNOntNiScriptNiStyleEnLigne() throws IOException {
         Pattern enLigne = Pattern.compile("(?is)<script(?![^>]*\\bsrc=)[^>]*>|<style\\b|\\son[a-z]+\\s*=|\\sstyle\\s*=|javascript:");
