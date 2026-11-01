@@ -1,7 +1,41 @@
 spring:
   application:
     name: gestion-chalet
+  # Aucun compte généré : le seul compte est le compte local (CS07).
+  autoconfigure:
+    exclude: org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
   # Liquibase seul gère le schéma (ADR 0001) ; Hibernate ne fait que valider. Sans effet tant que la persistance n'est pas ajoutée.
   jpa:
     hibernate:
       ddl-auto: validate
+
+server:
+  servlet:
+    session:
+      tracking-modes: cookie
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${recus.securite.cookie-securise}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+      discovery:
+        enabled: false
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+
+recus:
+  securite:
+    # Aucun condensé par défaut : à fournir par l'environnement (RECUS_SECURITE_CONDENSE_MOT_DE_PASSE), sinon l'application refuse de démarrer.
+    echecs-avant-blocage: 5
+    duree-blocage: 15m
+    sources-suivies-max: 10000
+    inactivite-session: 8h
+    # Vrai partout, sauf sur le poste local en HTTP (RECUS_SECURITE_COOKIE_SECURISE=false).
+    cookie-securise: true
