@@ -2,6 +2,7 @@ package ca.gestionchalet.web.rest.errors;
 
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import org.springframework.http.MediaType;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -22,7 +23,7 @@ public final class ReponsesErreur {
         reponse.setStatus(code.statut());
         reponse.setContentType(MediaType.APPLICATION_JSON_VALUE);
         reponse.setCharacterEncoding("UTF-8");
-        reponse.getWriter().write(json(code));
+        reponse.getOutputStream().write(json(code).getBytes(StandardCharsets.UTF_8));
         reponse.flushBuffer();
     }
 }

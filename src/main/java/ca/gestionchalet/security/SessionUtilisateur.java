@@ -14,6 +14,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfAuthenticationStrategy;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestHandler;
 
 /** Ouvre et ferme la session du compte local : nouvel identifiant à chaque ouverture, expiration par inactivité, jeton CSRF renouvelé. */
 public final class SessionUtilisateur {
@@ -28,10 +29,11 @@ public final class SessionUtilisateur {
     private final boolean cookieSecurise;
 
     public SessionUtilisateur(SecurityContextRepository contextes, CsrfTokenRepository jetons,
-            CsrfAuthenticationStrategy renouvellementJeton, Duration inactivite, boolean cookieSecurise) {
+            CsrfTokenRequestHandler lectureJeton, Duration inactivite, boolean cookieSecurise) {
         this.contextes = contextes;
         this.jetons = jetons;
-        this.renouvellementJeton = renouvellementJeton;
+        this.renouvellementJeton = new CsrfAuthenticationStrategy(jetons);
+        this.renouvellementJeton.setRequestHandler(lectureJeton);
         this.inactivite = inactivite;
         this.cookieSecurise = cookieSecurise;
     }

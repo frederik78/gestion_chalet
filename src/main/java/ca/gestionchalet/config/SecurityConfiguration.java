@@ -16,7 +16,6 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
-import org.springframework.security.web.csrf.CsrfAuthenticationStrategy;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 
 /** Chaîne de sécurité explicite, refus par défaut (ADR 0001). */
@@ -62,9 +61,7 @@ public class SecurityConfiguration {
 
     @Bean
     SessionUtilisateur sessionUtilisateur(SecurityContextRepository contextes, CsrfTokenRepository jetons, SecuriteProperties proprietes) {
-        CsrfAuthenticationStrategy renouvellement = new CsrfAuthenticationStrategy(jetons);
-        renouvellement.setRequestHandler(new JetonCsrfParEnTete());
-        return new SessionUtilisateur(contextes, jetons, renouvellement, proprietes.inactiviteSession(), proprietes.cookieSecurise());
+        return new SessionUtilisateur(contextes, jetons, new JetonCsrfParEnTete(), proprietes.inactiviteSession(), proprietes.cookieSecurise());
     }
 
     @Bean

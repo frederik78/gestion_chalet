@@ -1,4 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Toute exclusion est ciblée (classe et motif) et justifiée par un commentaire. -->
 <FindBugsFilter>
+  <!-- Motif informatif : signale l'existence d'un point d'entrée. Le contrôle d'accès de chaque route est prouvé par cs01 et cs02, qui parcourent les routes enregistrées. -->
+  <Match>
+    <Class name="~ca\.gestionchalet\.web\.rest\.(errors\.)?[A-Za-z]+Resource"/>
+    <Bug pattern="SPRING_ENDPOINT"/>
+  </Match>
+  <!-- /error reçoit le renvoi d'erreur du serveur quelle que soit la méthode d'origine : il ne change aucun état et le CSRF reste actif sur les vraies routes. -->
+  <Match>
+    <Class name="ca.gestionchalet.web.rest.errors.ErreurResource"/>
+    <Bug pattern="SPRING_CSRF_UNRESTRICTED_REQUEST_MAPPING"/>
+  </Match>
+  <!-- L'en-tête est le jeton CSRF lui-même : Spring Security le compare au cookie, c'est précisément son rôle. -->
+  <Match>
+    <Class name="ca.gestionchalet.config.JetonCsrfParEnTete"/>
+    <Bug pattern="SERVLET_HEADER"/>
+  </Match>
+  <!-- Le type de contenu choisit seulement la limite applicable ; un type mensonger mène au multipart, borné par ses propres limites (cs08). -->
+  <Match>
+    <Class name="ca.gestionchalet.config.CorpsBorneFilter"/>
+    <Bug pattern="SERVLET_CONTENT_TYPE"/>
+  </Match>
+  <!-- Seuls sont journalisés un nom de classe et une trame de pile, jamais une donnée de la requête ni le message de l'exception. -->
+  <Match>
+    <Class name="ca.gestionchalet.web.rest.errors.GestionnaireErreurs"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
+  <!-- Le constructeur canonique recopie la liste par List.copyOf : elle est immuable, ce que le motif ne voit pas derrière l'opérateur ternaire. -->
+  <Match>
+    <Class name="ca.gestionchalet.web.rest.errors.ErreurDTO"/>
+    <Or>
+      <Bug pattern="EI_EXPOSE_REP"/>
+      <Bug pattern="EI_EXPOSE_REP2"/>
+    </Or>
+  </Match>
 </FindBugsFilter>

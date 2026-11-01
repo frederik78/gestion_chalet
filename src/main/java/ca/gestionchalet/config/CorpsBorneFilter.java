@@ -2,13 +2,10 @@ package ca.gestionchalet.config;
 
 import ca.gestionchalet.web.rest.errors.CodeErreur;
 import ca.gestionchalet.web.rest.errors.ReponsesErreur;
-import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ReadListener;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletInputStream;
-import jakarta.servlet.ServletRequest;
-import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
@@ -18,12 +15,13 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
  * Borne le corps des requêtes hors multipart, que sa longueur soit déclarée ou non (envoi fragmenté) : il est lu en mémoire
  * jusqu'à la limite, puis rejoué. Le multipart a ses propres limites ({@code spring.servlet.multipart.*}).
  */
-final class CorpsBorneFilter implements Filter {
+final class CorpsBorneFilter extends OncePerRequestFilter {
 
     private static final String PREFIXE_MULTIPART = "multipart/";
 
@@ -34,22 +32,22 @@ final class CorpsBorneFilter implements Filter {
     }
 
     @Override
-    public void doFilter(ServletRequest requete, ServletResponse reponse, FilterChain suite) throws IOException, ServletException {
-        HttpServletRequest http = (HttpServletRequest) requete;
-        if (estMultipart(http)) {
+    protected void doFilterInternal(HttpServletRequest requete, HttpServletResponse reponse, FilterChain suite)
+            throws IOException, ServletException {
+        if (estMultipart(requete)) {
             suite.doFilter(requete, reponse);
             return;
         }
-        if (http.getContentLengthLong() > limite) {
-            ReponsesErreur.ecrire((HttpServletResponse) reponse, CodeErreur.TAILLE_EXCESSIVE);
+        if (requete.getContentLengthLong() > limite) {
+            ReponsesErreur.ecrire(reponse, CodeErreur.TAILLE_EXCESSIVE);
             return;
         }
-        byte[] corps = http.getInputStream().readNBytes(limite + 1);
+        byte[] corps = requete.getInputStream().readNBytes(limite + 1);
         if (corps.length > limite) {
-            ReponsesErreur.ecrire((HttpServletResponse) reponse, CodeErreur.TAILLE_EXCESSIVE);
+            ReponsesErreur.ecrire(reponse, CodeErreur.TAILLE_EXCESSIVE);
             return;
         }
-        suite.doFilter(new CorpsRejoue(http, corps), reponse);
+        suite.doFilter(new CorpsRejoue(requete, corps), reponse);
     }
 
     private static boolean estMultipart(HttpServletRequest requete) {
