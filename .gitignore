@@ -1,0 +1,26 @@
+.env
+.DS_Store
+data/
+*.log
+.idea
+
+# Généré par ./factory/sync.sh (dépend de la machine : plugins installés) ; relancer sync.sh après un clone
+.claude/agents/
+.claude/settings.local.json
+
+# Généré par scripts/dashboard.sh
+dashboard.html
+
+# Configuration personnelle de la factory (adresse de notification...) ; .factory.conf, lui, est versionné
+.factory.local.conf
+
+# Java / Maven
+target/
+HELP.md
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+*.iml
+.classpath
+.project
+.settings
