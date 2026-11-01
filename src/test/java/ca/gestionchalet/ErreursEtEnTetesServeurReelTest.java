@@ -6,12 +6,10 @@ import ca.gestionchalet.support.ClientBrut;
 import ca.gestionchalet.support.ClientEssai;
 import ca.gestionchalet.support.ClientEssai.Reponse;
 import ca.gestionchalet.support.ConfigurationEssai;
-import ca.gestionchalet.support.RouteEssaiResource;
 import ca.gestionchalet.support.ServeurReelTest;
 import java.net.http.HttpRequest;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -21,6 +19,14 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 /** Corps d'erreur et en-têtes de sécurité sur serveur réel, y compris pour ce que le framework ou Tomcat rejette avant l'application. */
 @ServeurReelTest
 class ErreursEtEnTetesServeurReelTest {
+
+    /** La politique complète, recopiée ici à la main : toute source ajoutée, tierce ou non, doit faire échouer le test (CS09). */
+    private static final String POLITIQUE_CONTENU = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; "
+            + "connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+
+    private static final Map<String, Map<String, String>> CORPS = Map.of(
+            "REQUETE_INVALIDE", Map.of("erreur", "La requête est invalide.", "code", "REQUETE_INVALIDE"),
+            "INTROUVABLE", Map.of("erreur", "Ressource introuvable.", "code", "INTROUVABLE"));
 
     private static final Map<String, String> REQUETE_INVALIDE = Map.of("erreur", "La requête est invalide.", "code", "REQUETE_INVALIDE");
 
@@ -38,15 +44,9 @@ class ErreursEtEnTetesServeurReelTest {
     }
 
     private static void assertEnTetesDeSecurite(Map<String, List<String>> enTetes, String contexte) {
-        String csp = String.join(",", enTetes.getOrDefault("content-security-policy", List.of()));
-        assertThat(csp).as(contexte).contains("default-src 'none'", "script-src 'self'", "frame-ancestors 'none'")
-                .doesNotContain("unsafe-inline", "unsafe-eval", "http:", "https:", "*");
+        assertThat(enTetes.get("content-security-policy")).as(contexte).containsExactly(POLITIQUE_CONTENU);
         assertThat(enTetes.get("x-content-type-options")).as(contexte).containsExactly("nosniff");
         assertThat(enTetes.get("x-frame-options")).as(contexte).containsExactly("DENY");
-    }
-
-    private static void assertCorpsGenerique(String corps, String contexte) {
-        assertThat(corps).as(contexte).doesNotContainIgnoringCase("tomcat").doesNotContain("Exception", "<html", "java.", "at ca.", "ca.gestionchalet", RouteEssaiResource.DETAIL_SECRET);
     }
 
     @Test
@@ -55,7 +55,6 @@ class ErreursEtEnTetesServeurReelTest {
 
         assertThat(reponse.statut()).isEqualTo(500);
         assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Une erreur interne est survenue.", "code", "ERREUR_INTERNE"));
-        assertCorpsGenerique(reponse.corps(), "panne");
         assertEnTetesDeSecurite(reponse.enTetes(), "panne");
     }
 
@@ -158,8 +157,13 @@ class ErreursEtEnTetesServeurReelTest {
         String fin = "\"}";
         String corps = debut + "x".repeat(64 * 1024 - debut.length() - fin.length()) + fin;
 
-        assertThat(client().appelAvecJeton("POST", "/api/connexion", corps).statut()).isEqualTo(401);
-        assertThat(client().appelAvecJeton("POST", "/api/connexion", corps.replace("\"}", "x\"}")).statut()).isEqualTo(413);
+        Reponse aLaLimite = client().appelAvecJeton("POST", "/api/connexion", corps);
+        assertThat(aLaLimite.statut()).isEqualTo(401);
+        assertThat(aLaLimite.json()).isEqualTo(Map.of("erreur", "Identifiants invalides.", "code", "IDENTIFIANTS_INVALIDES"));
+
+        Reponse auDela = client().appelAvecJeton("POST", "/api/connexion", corps.replace("\"}", "x\"}"));
+        assertThat(auDela.statut()).isEqualTo(413);
+        assertThat(auDela.json()).isEqualTo(Map.of("erreur", "La requête est trop volumineuse.", "code", "TAILLE_EXCESSIVE"));
     }
 
     @Test
@@ -180,25 +184,27 @@ class ErreursEtEnTetesServeurReelTest {
                 + Integer.toHexString(corps.length()) + "\r\n" + corps + "\r\n0\r\n\r\n";
     }
 
-    /** Requêtes écrites à la main : aucun client HTTP correct ne les enverrait. Rejetées par le pare-feu HTTP ou par Tomcat. */
+    /**
+     * Requêtes écrites à la main : aucun client HTTP correct ne les enverrait. Rejetées par le pare-feu HTTP ou par Tomcat, avec le
+     * code du tableau d'erreurs du PRD : 400 pour une requête illisible. TRACE, que Tomcat refuse en 405, suit la règle des méthodes : 404.
+     */
     @ParameterizedTest(name = "{0}")
     @CsvSource(delimiter = '|', value = {
-            "barre encodee       | GET /api/%2F..%2Fetc%2Fpasswd HTTP/1.1",
-            "antislash encode    | GET /api/%5C..%5Cetc HTTP/1.1",
-            "octet nul           | GET /api/%00 HTTP/1.1",
-            "point-virgule       | GET /api/;jsessionid=1 HTTP/1.1",
-            "double encodage     | GET /api/%252e%252e/ HTTP/1.1",
-            "remontee            | GET /api/../../etc/passwd HTTP/1.1",
-            "crochets interdits  | GET /api/[x] HTTP/1.1",
-            "methode inconnue    | PROPFIND /api/x HTTP/1.1",
-            "methode trace       | TRACE /api/x HTTP/1.1",
+            "barre encodee       | GET /api/%2F..%2Fetc%2Fpasswd HTTP/1.1 | 400 | REQUETE_INVALIDE",
+            "antislash encode    | GET /api/%5C..%5Cetc HTTP/1.1          | 400 | REQUETE_INVALIDE",
+            "octet nul           | GET /api/%00 HTTP/1.1                  | 400 | REQUETE_INVALIDE",
+            "point-virgule       | GET /api/;jsessionid=1 HTTP/1.1        | 400 | REQUETE_INVALIDE",
+            "double encodage     | GET /api/%252e%252e/ HTTP/1.1          | 400 | REQUETE_INVALIDE",
+            "remontee            | GET /api/../../etc/passwd HTTP/1.1     | 400 | REQUETE_INVALIDE",
+            "crochets interdits  | GET /api/[x] HTTP/1.1                  | 400 | REQUETE_INVALIDE",
+            "methode inconnue    | PROPFIND /api/x HTTP/1.1               | 400 | REQUETE_INVALIDE",
+            "methode trace       | TRACE /api/x HTTP/1.1                  | 404 | INTROUVABLE",
     })
-    void cs08_requeteMalformeeRejeteeAvantLApplication(String nom, String ligne) {
+    void cs08_requeteMalformeeRejeteeAvantLApplication(String nom, String ligne, int statut, String code) {
         ClientBrut.Reponse reponse = ClientBrut.envoyer(port, ligne + "\r\nHost: localhost\r\nConnection: close\r\n\r\n");
 
-        assertThat(reponse.statut()).as(nom + " : " + reponse.corps()).isBetween(400, 499);
-        assertThat(reponse.json().keySet()).as(nom).isEqualTo(Set.of("erreur", "code"));
-        assertCorpsGenerique(reponse.corps(), nom);
+        assertThat(reponse.statut()).as(nom + " : " + reponse.corps()).isEqualTo(statut);
+        assertThat(reponse.json()).as(nom).isEqualTo(CORPS.get(code));
         assertEnTetesDeSecurite(reponse.enTetes(), nom);
     }
 
@@ -207,8 +213,8 @@ class ErreursEtEnTetesServeurReelTest {
         ClientBrut.Reponse reponse = ClientBrut.envoyer(port,
                 "GET /actuator/health HTTP/1.1\r\nHost: localhost\r\nX-Grand: " + "x".repeat(20_000) + "\r\nConnection: close\r\n\r\n");
 
-        assertThat(reponse.statut()).as(reponse.corps()).isBetween(400, 499);
-        assertThat(reponse.json().keySet()).isEqualTo(Set.of("erreur", "code"));
+        assertThat(reponse.statut()).as(reponse.corps()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(REQUETE_INVALIDE);
         assertEnTetesDeSecurite(reponse.enTetes(), "en-tete demesure");
     }
 
