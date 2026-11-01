@@ -26,12 +26,4 @@
     <Class name="ca.gestionchalet.web.rest.errors.GestionnaireErreurs"/>
     <Bug pattern="CRLF_INJECTION_LOGS"/>
   </Match>
-  <!-- Le constructeur canonique recopie la liste par List.copyOf : elle est immuable, ce que le motif ne voit pas derrière l'opérateur ternaire. -->
-  <Match>
-    <Class name="ca.gestionchalet.web.rest.errors.ErreurDTO"/>
-    <Or>
-      <Bug pattern="EI_EXPOSE_REP"/>
-      <Bug pattern="EI_EXPOSE_REP2"/>
-    </Or>
-  </Match>
 </FindBugsFilter>

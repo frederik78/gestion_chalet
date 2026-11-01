@@ -4,11 +4,15 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.List;
 
 /** Corps de toute réponse d'erreur : {@code erreur} et {@code code}, avec {@code champs} seulement pour VALIDATION. */
-@JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonInclude(JsonInclude.Include.NON_EMPTY)
 public record ErreurDTO(String erreur, String code, List<ChampInvalideDTO> champs) {
 
+    public ErreurDTO {
+        champs = List.copyOf(champs);
+    }
+
     public static ErreurDTO de(CodeErreur code) {
-        return new ErreurDTO(code.message(), code.name(), null);
+        return new ErreurDTO(code.message(), code.name(), List.of());
     }
 
     public static ErreurDTO validation(List<ChampInvalideDTO> champs) {
