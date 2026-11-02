@@ -58,7 +58,7 @@ public class SecurityConfiguration {
         RequestMatcher loginMatcher = PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, LOGIN_ROUTE);
         SecurityErrorHandler errorHandler = new SecurityErrorHandler(loginMatcher);
         CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
-        csrfTokenRepository.setCookieCustomizer(cookie -> cookie.secure(applicationProperties.cookieSecurise()).sameSite(SAME_SITE).path("/"));
+        csrfTokenRepository.setCookieCustomizer(cookie -> cookie.secure(applicationProperties.securite().cookieSecurise()).sameSite(SAME_SITE).path("/"));
         http
             .csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository).csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler()))
             .authorizeHttpRequests(authz -> authz
@@ -81,7 +81,7 @@ public class SecurityConfiguration {
                 .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT))
                 .permitAll()) // alignement JHipster, sans effet mesuré
             .addFilterBefore(
-                new LoginGuardFilter(loginMatcher, rateLimiter, applicationProperties.corpsRequeteMax().toBytes()),
+                new LoginGuardFilter(loginMatcher, rateLimiter, applicationProperties.securite().corpsRequeteMax().toBytes()),
                 UsernamePasswordAuthenticationFilter.class)
             .headers(AbstractHttpConfigurer::disable) // posés par SecurityHeadersFilter, avant le pare-feu HTTP
             .requestCache(AbstractHttpConfigurer::disable);
@@ -95,7 +95,7 @@ public class SecurityConfiguration {
 
     @Bean
     LoginRateLimiter loginRateLimiter(Clock clock) {
-        return new LoginRateLimiter(applicationProperties.echecsAvantBlocage(), applicationProperties.dureeBlocage(), applicationProperties.sourcesSuiviesMax(), clock);
+        return new LoginRateLimiter(applicationProperties.securite().echecsAvantBlocage(), applicationProperties.securite().dureeBlocage(), applicationProperties.securite().sourcesSuiviesMax(), clock);
     }
 
     /**

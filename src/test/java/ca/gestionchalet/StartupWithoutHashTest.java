@@ -10,6 +10,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.boot.context.properties.bind.validation.BindValidationException;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -40,6 +41,18 @@ class StartupWithoutHashTest {
         assertThatThrownBy(() -> demarrer("recus.securite.condense-mot-de-passe=" + condense))
                 .hasRootCauseInstanceOf(IllegalStateException.class)
                 .rootCause().hasMessageContaining("Condensé du mot de passe absent ou trop faible");
+    }
+
+    /** {@code recus.securite} est imbriqué : sa validation dépend de {@code @Valid}, à ne pas perdre. */
+    @ParameterizedTest
+    @ValueSource(strings = {"echecs-avant-blocage", "sources-suivies-max"})
+    void cs07_uneValeurInvalideSousSecuriteEmpecheLeDemarrage(String cle) {
+        String condense = new BCryptPasswordEncoder(10).encode("secret");
+        // En argument : les propriétés du constructeur sont des valeurs par défaut, et application.yml les remplacerait.
+        assertThatThrownBy(() -> new SpringApplicationBuilder(GestionChaletApplication.class)
+                .properties("server.port=0", "recus.securite.condense-mot-de-passe=" + condense)
+                .run("--recus.securite." + cle + "=0"))
+                .hasRootCauseInstanceOf(BindValidationException.class);
     }
 
     /** Le seul compte est le compte local : Spring Boot n'en génère aucun, et n'affiche donc aucun mot de passe. */

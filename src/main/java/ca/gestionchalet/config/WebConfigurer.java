@@ -26,7 +26,7 @@ public class WebConfigurer {
     @Bean
     FilterRegistrationBean<RequestBodyLimitFilter> requestBodyLimitFilter(ApplicationProperties properties) {
         FilterRegistrationBean<RequestBodyLimitFilter> registration =
-                new FilterRegistrationBean<>(new RequestBodyLimitFilter(Math.toIntExact(properties.corpsRequeteMax().toBytes())));
+                new FilterRegistrationBean<>(new RequestBodyLimitFilter(Math.toIntExact(properties.securite().corpsRequeteMax().toBytes())));
         registration.setOrder(0);
         return registration;
     }
