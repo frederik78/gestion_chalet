@@ -141,7 +141,7 @@ L'état et les alertes sont calculés par le serveur. Ils ne sont jamais lus de 
 - **R-08** Une taxe absente reste vide : ni calcul, ni mise à 0. Un 0 saisi ou imprimé reste 0. Vide et 0 restent distincts en base, dans l'API et dans le Sheet.
 - **R-09** Le type de dépense appartient à la liste fermée, tenue en configuration, dans l'orthographe du Sheet (D-20) : Honoraires professionnel, Fournitures, Entretien / Réparations, Électricité / Internet, Impôts / Taxes, Assurances, Publicité, Autres dépenses, Frais de voyage, Intérêts, Administration.
 - **R-10** La date n'est pas postérieure à la date du jour, fuseau de Montréal. Un montant vaut de 0 à 1 000 000,00 $ ; le montant total est strictement positif.
-- **R-11** La validation est idempotente : un renvoi avec la même clé d'idempotence ne crée ni reçu ni photo supplémentaires, et rend le reçu déjà créé.
+- **R-11** La validation est idempotente : un renvoi avec la même clé d'idempotence ne crée ni reçu ni photo supplémentaires, et rend le reçu déjà créé. Si les valeurs ou les photos diffèrent de celles du reçu déjà créé, le renvoi est refusé : rien ne change et l'utilisateur en est averti.
 - **R-12** La validation est atomique : reçu et copie locale des photos sont tous deux enregistrés, ou aucun.
 
 ### Alertes (D-03, D-04, D-11, D-23)
@@ -241,6 +241,7 @@ Corps d'erreur : `{ "erreur": "<message générique en français>", "code": "<CO
 | 403 | `CSRF_INVALIDE` | jeton CSRF absent ou faux |
 | 404 | `INTROUVABLE` | ressource absente, ou méthode non permise sur une route existante, sans en-tête `Allow` (`OPTIONS` excepté) ; identique quelle qu'en soit la raison |
 | 409 | `VERSION_PERIMEE` | correction fondée sur une version dépassée |
+| 409 | `CLE_DEJA_UTILISEE` | clé d'idempotence déjà connue, avec des valeurs ou des photos différentes |
 | 413 | `TAILLE_EXCESSIVE` | photo ou requête trop lourde |
 | 415 | `FORMAT_NON_ACCEPTE` | format hors liste |
 | 429 | `TROP_DE_TENTATIVES` | avec en-tête `Retry-After` |
@@ -270,7 +271,7 @@ Valeurs fictives pour les numéros et le type.
 | `GET /api/configuration` | | 200 : `{ "typesDepense": […], "photosParRecuMax": 5, "tailleParPhotoMaxOctets": …, "formats": ["image/jpeg", "image/png"] }` |
 | `POST /api/lectures` | multipart, parties `photos` | 200 : objet lecture ; 400, 413, 415, 429 |
 | `POST /api/recus/controles` | JSON : `valeurs`, `montantTotalLuCents` (facultatif), `recuId` (facultatif, en correction) | 200 : `{ "alertes": [ … ] }` ; 400. N'enregistre rien |
-| `POST /api/recus` | multipart : partie `recu` en JSON (`cleIdempotence`, `valeurs`, `montantTotalLuCents`) et parties `photos` | 201 : objet reçu ; 200 si la clé est déjà connue ; 400, 413, 415 |
+| `POST /api/recus` | multipart : partie `recu` en JSON (`cleIdempotence`, `valeurs`, `montantTotalLuCents`) et parties `photos` | 201 : objet reçu ; 200 si la clé est déjà connue avec le même contenu ; 400, 409, 413, 415 |
 | `GET /api/recus` | `annee`, `etatCopie`, `page`, `taille` (100 au plus) | 200 : `{ "recus": [ … ], "total": n }`, par date décroissante |
 | `GET /api/recus/{id}` | | 200 : objet reçu ; 404 |
 | `PUT /api/recus/{id}` | JSON : `version`, `valeurs` | 200 : objet reçu ; 400, 404, 409 |
@@ -413,7 +414,7 @@ Sauf mention contraire, Anthropic, Google Sheets et Google Drive sont doublés :
 - **CA15** Given chacun des 11 types de D-20, puis `Autres` When un reçu est validé Then chacun des 11 est accepté et `Autres` est refusé avec `HORS_LISTE` ; le même test avec une liste de configuration modifiée suit cette liste.
 - **CA16** Given une date postérieure à aujourd'hui (fuseau de Montréal), un total à 0, un total à 1 000 000,01 $ When ils sont validés Then chacun reçoit 400 `VALIDATION` avec le code `BORNE` (R-10).
 - **CA17** Given un total lu de 710,85 corrigé à 300,00 pour la part du chalet When il est validé Then 30000 est enregistré et écrit dans le Sheet, sans recalcul des autres montants (D-04, R-07).
-- **CA18** Given une validation envoyée deux fois avec la même `cleIdempotence` When la seconde arrive Then elle répond 200 avec le même reçu, et il n'existe qu'un reçu et un jeu de photos (R-11).
+- **CA18** Given une validation envoyée deux fois avec la même `cleIdempotence` When la seconde arrive Then elle répond 200 avec le même reçu, et il n'existe qu'un reçu et un jeu de photos ; si ses valeurs ou ses photos diffèrent, elle répond 409 `CLE_DEJA_UTILISEE`, le reçu reste inchangé et l'écran avertit que la modification n'a pas été appliquée (R-11).
 - **CA19** Given l'échec de l'écriture d'une photo locale, puis celui de l'enregistrement en base When la validation est envoyée Then la réponse est 500 `ERREUR_INTERNE`, il ne reste ni reçu ni fichier, et une nouvelle validation avec la même clé réussit (R-12).
 - **CA20** Given la lecture a échoué When l'utilisateur valide des valeurs saisies à la main avec une photo Then le reçu est créé avec `montantTotalLuCents` à `null` (Q-02).
 
