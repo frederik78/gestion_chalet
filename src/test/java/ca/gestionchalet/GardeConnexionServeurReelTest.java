@@ -138,6 +138,19 @@ class GardeConnexionServeurReelTest {
         verify(encodeur, never()).matches(any(), anyString());
     }
 
+    /** Un refus de taille ne compte aucune tentative : sinon, envoyer de gros formulaires bloquerait la source. */
+    @Test
+    void cs05_unFormulaireTropGrosNeCompteAucuneTentative() {
+        ClientEssai client = client();
+        for (int essai = 0; essai <= ECHECS_PAR_DEFAUT; essai++) {
+            Reponse reponse = client.envoyer(client.requeteConnexion("x")
+                    .POST(HttpRequest.BodyPublishers.ofString("motDePasse=" + "x".repeat(70_000))).build());
+            assertThat(reponse.statut()).as("envoi n° %d", essai + 1).isEqualTo(413);
+        }
+
+        assertThat(client.connecter(ConfigurationEssai.MOT_DE_PASSE).statut()).isEqualTo(204);
+    }
+
     /** Le corps annoncé n'arrive jamais : un refus qui tarderait trahirait une lecture. Refusé avant le compte des tentatives et avant bcrypt. */
     @ParameterizedTest
     @ValueSource(strings = {"multipart/form-data; boundary=x", "MULTIPART/FORM-DATA; boundary=x", "Multipart/Mixed; boundary=x", "text/plain", "*/*"})
