@@ -6,23 +6,23 @@ import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import archfixtures.couches.autre.AutreVersSecurity;
-import archfixtures.couches.client.ClientVersDomain;
-import archfixtures.couches.client.ClientVersService;
-import archfixtures.couches.config.ConfigVersWeb;
-import archfixtures.couches.domain.DomainVersService;
-import archfixtures.couches.repository.RepositoryVersDomain;
-import archfixtures.couches.repository.RepositoryVersSecurity;
-import archfixtures.couches.security.SecurityVersRepository;
-import archfixtures.couches.service.ServiceVersClient;
-import archfixtures.couches.service.ServiceVersRepository;
-import archfixtures.couches.service.ServiceVersSecurity;
-import archfixtures.couches.service.ServiceVersWeb;
-import archfixtures.couches.web.WebVersClient;
-import archfixtures.couches.web.WebVersConfig;
-import archfixtures.couches.web.WebVersRepository;
-import archfixtures.couches.web.WebVersSecurity;
-import archfixtures.couches.web.WebVersService;
+import archfixtures.layers.other.OtherToSecurity;
+import archfixtures.layers.client.ClientToDomain;
+import archfixtures.layers.client.ClientToService;
+import archfixtures.layers.config.ConfigToWeb;
+import archfixtures.layers.domain.DomainToService;
+import archfixtures.layers.repository.RepositoryToDomain;
+import archfixtures.layers.repository.RepositoryToSecurity;
+import archfixtures.layers.security.SecurityToRepository;
+import archfixtures.layers.service.ServiceToClient;
+import archfixtures.layers.service.ServiceToRepository;
+import archfixtures.layers.service.ServiceToSecurity;
+import archfixtures.layers.service.ServiceToWeb;
+import archfixtures.layers.web.WebToClient;
+import archfixtures.layers.web.WebToConfig;
+import archfixtures.layers.web.WebToRepository;
+import archfixtures.layers.web.WebToSecurity;
+import archfixtures.layers.web.WebToService;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
@@ -59,20 +59,20 @@ class TechnicalStructureTest {
             .ignoreDependency(belongToAnyOf(GestionChaletApplication.class), alwaysTrue());
 
     private static JavaClasses fixtures(Class<?> source) throws ClassNotFoundException {
-        String cible = source.getSimpleName().replaceFirst(".*Vers", "").toLowerCase();
-        return new ClassFileImporter().importClasses(source, Class.forName("archfixtures.couches." + cible + ".Cible"));
+        String cible = source.getSimpleName().replaceFirst(".*To", "").toLowerCase();
+        return new ClassFileImporter().importClasses(source, Class.forName("archfixtures.layers." + cible + ".Target"));
     }
 
     static Stream<Arguments> accesInterdits() {
         return Stream.of(
-                Arguments.of(WebVersConfig.class, "config : personne"),
-                Arguments.of(ServiceVersWeb.class, "web : config seulement"),
-                Arguments.of(ClientVersService.class, "service : web et config"),
-                Arguments.of(RepositoryVersSecurity.class, "security : config, service, web"),
-                Arguments.of(AutreVersSecurity.class, "security : refusée aussi à une classe hors couche"),
-                Arguments.of(WebVersRepository.class, "repository : service, security, config"),
-                Arguments.of(WebVersClient.class, "client : service, config"),
-                Arguments.of(DomainVersService.class, "le domaine ne dépend de rien"));
+                Arguments.of(WebToConfig.class, "config : personne"),
+                Arguments.of(ServiceToWeb.class, "web : config seulement"),
+                Arguments.of(ClientToService.class, "service : web et config"),
+                Arguments.of(RepositoryToSecurity.class, "security : config, service, web"),
+                Arguments.of(OtherToSecurity.class, "security : refusée aussi à une classe hors couche"),
+                Arguments.of(WebToRepository.class, "repository : service, security, config"),
+                Arguments.of(WebToClient.class, "client : service, config"),
+                Arguments.of(DomainToService.class, "le domaine ne dépend de rien"));
     }
 
     @ParameterizedTest(name = "{1}")
@@ -85,9 +85,9 @@ class TechnicalStructureTest {
     }
 
     static Stream<Class<?>> accesPermis() {
-        return Stream.of(ConfigVersWeb.class, WebVersService.class, WebVersSecurity.class, ServiceVersSecurity.class,
-                ServiceVersRepository.class, ServiceVersClient.class, SecurityVersRepository.class,
-                ClientVersDomain.class, RepositoryVersDomain.class);
+        return Stream.of(ConfigToWeb.class, WebToService.class, WebToSecurity.class, ServiceToSecurity.class,
+                ServiceToRepository.class, ServiceToClient.class, SecurityToRepository.class,
+                ClientToDomain.class, RepositoryToDomain.class);
     }
 
     @ParameterizedTest

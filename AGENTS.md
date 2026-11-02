@@ -29,7 +29,7 @@ Ne jamais appeler directement un outil propre à un fournisseur dans le code app
 ## Architecture
 La structure est décidée dans un ADR (`docs/adr/0001-architecture.md`) AVANT le premier code, et appliquée par des tests d'architecture qui
 échouent à la moindre violation. Elle ne change pas sans nouvel ADR.
-Structure en services, inspirée de JHipster, sans générateur : `config`, `domain`, `repository`, `service`, `client`, `security`, `web/rest`. Les droits d'accès entre couches sont dans l'ADR et exécutés par `TechnicalStructureTest` et `ReglesAgentsTest`.
+Structure en services, inspirée de JHipster, sans générateur : `config`, `domain`, `repository`, `service`, `client`, `security`, `web/rest`. Les droits d'accès entre couches sont dans l'ADR et exécutés par `TechnicalStructureTest` et `AgentRulesTest`.
 - Une `XxxResource` valide l'entrée et délègue à un `XxxService`, sans logique métier ni accès aux données.
 - Le domaine contient les entités JPA, sans setter public : l'état change par des fabriques et des transitions. Le statut et les alertes ne sont jamais lus d'une source non fiable (modèle, client).
 - Le JSON est un record `XxxDTO` projeté par MapStruct ; une entité n'est jamais sérialisée.

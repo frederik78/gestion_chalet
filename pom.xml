@@ -183,7 +183,7 @@
             <artifactId>exec-maven-plugin</artifactId>
             <version>${exec-plugin.version}</version>
             <configuration>
-              <mainClass>essaireel.EssaiLectureReelle</mainClass>
+              <mainClass>realreading.RealReadingTrial</mainClass>
               <arguments>
                 <argument>${photo}</argument>
                 <argument>${cote.max}</argument>

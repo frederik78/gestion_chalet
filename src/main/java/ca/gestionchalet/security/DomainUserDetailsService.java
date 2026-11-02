@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 /**
  * L'unique compte de l'application : un condensé bcrypt fourni par l'environnement, sans valeur par défaut. La connexion ne
  * demande aucun identifiant : le nom reçu est donc ignoré. {@code @Component} et non {@code @Service} comme JHipster :
- * {@code ReglesAgentsTest} réserve {@code @Service} au paquet {@code service}.
+ * {@code AgentRulesTest} réserve {@code @Service} au paquet {@code service}.
  */
 @Component("userDetailsService")
 public final class DomainUserDetailsService implements UserDetailsService {

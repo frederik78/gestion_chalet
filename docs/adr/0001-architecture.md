@@ -43,7 +43,7 @@ src/main/resources/
 Le package racine est à plat : pas de sous-package par module. Le métier est porté par le nom des classes (`Recu`, `RecuService`, `RecuRepository`, `RecuResource`).
 
 ### Règles exécutées par les tests
-`TechnicalStructureTest` et `ReglesAgentsTest` (ArchUnit) font échouer `./mvnw test` à la moindre violation. Chaque règle a un test qui échoue sur une violation volontaire.
+`TechnicalStructureTest` et `AgentRulesTest` (ArchUnit) font échouer `./mvnw test` à la moindre violation. Chaque règle a un test qui échoue sur une violation volontaire.
 
 | Couche | Accessible par |
 |---|---|
@@ -56,7 +56,7 @@ Le package racine est à plat : pas de sous-package par module. Le métier est p
 | `domain` | toutes les autres |
 
 - **Web** : une `XxxResource` valide l'entrée et délègue à un `XxxService`, sans logique métier ni accès aux données.
-- **Domaine** : annotations `jakarta.persistence` permises ; aucune dépendance à `web`, à l'API Servlet, à Spring MVC ou à Spring Security. Tout emprunt à `org.springframework..` ou `org.hibernate..` est une exception nommée dans `ReglesAgentsTest` et justifiée.
+- **Domaine** : annotations `jakarta.persistence` permises ; aucune dépendance à `web`, à l'API Servlet, à Spring MVC ou à Spring Security. Tout emprunt à `org.springframework..` ou `org.hibernate..` est une exception nommée dans `AgentRulesTest` et justifiée.
 - **Interfaces** : uniquement dans `client/`, pour les trois services externes. Le dépôt, le stockage local et l'authentification restent des classes concrètes, sans port.
 - **Entité** : pas de setter public ; l'état change par des fabriques et des transitions qui recalculent le statut et les alertes. Ceux-ci ne sont jamais lus d'une source non fiable (modèle, client). Le constructeur sans argument `protected` est réservé à JPA.
 - **DTO** : le JSON est un record `XxxDTO` projeté par MapStruct ; une entité n'est jamais sérialisée.
