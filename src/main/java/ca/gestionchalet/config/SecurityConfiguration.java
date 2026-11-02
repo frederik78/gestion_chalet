@@ -19,12 +19,14 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 
 /** Chaîne de sécurité explicite, refus par défaut (ADR 0001). */
 @Configuration
 @EnableConfigurationProperties(SecuriteProperties.class)
 public class SecurityConfiguration {
 
+    private static final String ROUTE_CONNEXION = "/api/connexion";
     private static final String SAME_SITE = "Lax";
 
     /** La santé et les seules ressources nécessaires à la page de connexion, listées une à une. */
@@ -35,7 +37,8 @@ public class SecurityConfiguration {
 
     @Bean
     SecurityFilterChain chaineDeSecurite(HttpSecurity http, SecuriteProperties proprietes, LimiteurConnexion limiteur) {
-        ErreursSecurite erreurs = new ErreursSecurite();
+        RequestMatcher connexion = PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, ROUTE_CONNEXION);
+        ErreursSecurite erreurs = new ErreursSecurite(connexion);
         CookieCsrfTokenRepository jetons = CookieCsrfTokenRepository.withHttpOnlyFalse();
         jetons.setCookieCustomizer(cookie -> cookie.secure(proprietes.cookieSecurise()).sameSite(SAME_SITE).path("/"));
         return http
@@ -46,7 +49,7 @@ public class SecurityConfiguration {
                 .csrf(csrf -> csrf.csrfTokenRepository(jetons).csrfTokenRequestHandler(new JetonCsrfParEnTete()))
                 .formLogin(formulaire -> formulaire
                         .loginPage("/")
-                        .loginProcessingUrl(ErreursSecurite.ROUTE_CONNEXION)
+                        .loginProcessingUrl(ROUTE_CONNEXION)
                         .passwordParameter("motDePasse")
                         .successHandler((requete, reponse, authentification) -> {
                             limiteur.reinitialiser(requete.getRemoteAddr());
@@ -58,8 +61,7 @@ public class SecurityConfiguration {
                         .deleteCookies("JSESSIONID")
                         .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
                 .addFilterBefore(
-                        new GardeConnexionFilter(PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, ErreursSecurite.ROUTE_CONNEXION),
-                                limiteur, proprietes.corpsRequeteMax().toBytes()),
+                        new GardeConnexionFilter(connexion, limiteur, proprietes.corpsRequeteMax().toBytes()),
                         UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(erreurs).accessDeniedHandler(erreurs))
                 .headers(AbstractHttpConfigurer::disable) // posés par EnTetesSecuriteFilter, avant le pare-feu HTTP

@@ -226,6 +226,15 @@ class AccesEtCsrfServeurReelTest {
         assertThat(reponse.json()).isEqualTo(chemin.equals("/api/connexion") ? CSRF_INVALIDE : NON_AUTHENTIFIE);
     }
 
+    /** Tomcat décode l'URL avant le matcher de la connexion : le chemin encodé est donc la même route, avec le même refus. */
+    @Test
+    void cs02_laConnexionAuCheminEncodeDonneLeMemeRefusCsrf() {
+        Reponse reponse = client().appelSansJeton("POST", "/api/%63onnexion", "motDePasse=x", null);
+
+        assertThat(reponse.statut()).isEqualTo(403);
+        assertThat(reponse.json()).isEqualTo(CSRF_INVALIDE);
+    }
+
     @Test
     void cs02_leJetonEnParametreDuFormulaireNEstPasAccepte() {
         ClientEssai client = client();
