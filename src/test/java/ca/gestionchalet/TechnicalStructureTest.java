@@ -6,6 +6,7 @@ import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import archfixtures.couches.autre.AutreVersSecurity;
 import archfixtures.couches.client.ClientVersDomain;
 import archfixtures.couches.client.ClientVersService;
 import archfixtures.couches.config.ConfigVersWeb;
@@ -75,6 +76,7 @@ class TechnicalStructureTest {
                 Arguments.of(ServiceVersWeb.class, "web : config seulement"),
                 Arguments.of(ClientVersService.class, "service : web et config"),
                 Arguments.of(RepositoryVersSecurity.class, "security : config, service, web"),
+                Arguments.of(AutreVersSecurity.class, "security : refusée aussi à une classe hors couche"),
                 Arguments.of(WebVersRepository.class, "repository : service, security, config"),
                 Arguments.of(WebVersClient.class, "client : service, config"),
                 Arguments.of(DomainVersService.class, "le domaine ne dépend de rien"));
