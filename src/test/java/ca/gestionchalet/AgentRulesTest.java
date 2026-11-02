@@ -6,6 +6,7 @@ import static com.tngtech.archunit.core.domain.properties.CanBeAnnotated.Predica
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -20,6 +21,7 @@ import archfixtures.rules.domain.EntityWithPublicConstructor;
 import archfixtures.rules.domain.OutsidePackageDTO;
 import archfixtures.rules.domain.FloatingAmount;
 import archfixtures.rules.service.DirectProviderCallService;
+import archfixtures.rules.service.FileDeletingService;
 import archfixtures.rules.service.FloatingCalculationService;
 import archfixtures.rules.service.ControllerOutsideWebResource;
 import archfixtures.rules.service.EntityOutsideDomain;
@@ -33,6 +35,10 @@ import archfixtures.rules.web.rest.DataAccessResource;
 import archfixtures.rules.web.rest.ResourceBadlyNamed;
 import archfixtures.rules.web.rest.SerializesEntityResource;
 import archfixtures.rules.web.rest.ServiceOutsideLayerService;
+import ca.gestionchalet.domain.Photo;
+import ca.gestionchalet.repository.PhotoStorage;
+import ca.gestionchalet.repository.RecuRepository;
+import ca.gestionchalet.service.RecuService;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaCall;
 import com.tngtech.archunit.core.domain.JavaClass;
@@ -48,7 +54,9 @@ import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
 import java.io.IOException;
 import java.io.ObjectInputStream;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
@@ -193,6 +201,14 @@ class AgentRulesTest {
                 .allowEmptyShould(true);
     }
 
+    /** R-35 : aucun code ne retire un fichier, hors du retrait d'une validation qui n'a pas abouti. */
+    private static ArchRule fichiersRetiresSeulementParLeStockage(String racine) {
+        return noClasses().that().doNotHaveFullyQualifiedName(racine + ".repository.PhotoStorage")
+                .should().callMethodWhere(JavaCall.Predicates.target(DescribedPredicate.describe("retirer un fichier",
+                        cible -> cible.getOwner().isEquivalentTo(Files.class) && cible.getName().startsWith("delete"))))
+                .allowEmptyShould(true);
+    }
+
     private static final JavaClasses PROJET = new ClassFileImporter()
             .withImportOption(new ImportOption.DoNotIncludeTests())
             .importPackages("ca.gestionchalet");
@@ -203,7 +219,25 @@ class AgentRulesTest {
                 domaineSansSpringNiHibernate(racine), interfacesSeulementDansClient(racine), entitesDansLeDomaine(racine),
                 entitesSansSetterPublic(), entitesAvecConstructeurProtege(), dtoEnRecordsAuBonEndroit(racine),
                 entiteJamaisSerialisee(racine), jamaisDeFlottant(), jamaisDeDeserialisationPolymorphe(),
-                fournisseursDerriereClient(racine), servicesNommesDansService(racine));
+                fournisseursDerriereClient(racine), servicesNommesDansService(racine),
+                fichiersRetiresSeulementParLeStockage(racine));
+    }
+
+    @Test
+    void ca72_leDepotDesRecusNOffreAucuneSuppression() {
+        assertThat(RecuRepository.class.getMethods())
+                .extracting(Method::getName)
+                .noneMatch(nom -> nom.startsWith("delete") || nom.startsWith("remove"));
+    }
+
+    @Test
+    void ca72_seulLaValidationEnEchecRetireUnFichierDePhoto() {
+        noClasses().that().resideOutsideOfPackage("ca.gestionchalet.repository..")
+                .and().doNotHaveFullyQualifiedName(RecuService.class.getName())
+                .and(DescribedPredicate.describe("hors classes internes de RecuService",
+                        classe -> !classe.getName().startsWith(RecuService.class.getName() + "$")))
+                .should().callMethod(PhotoStorage.class, "discard", Photo.class)
+                .check(PROJET);
     }
 
     @ParameterizedTest
@@ -233,7 +267,8 @@ class AgentRulesTest {
                 Arguments.of(jamaisDeDeserialisationPolymorphe(), List.of(PolymorphicDTO.class)),
                 Arguments.of(fournisseursDerriereClient(racine), List.of(DirectProviderCallService.class)),
                 Arguments.of(servicesNommesDansService(racine), List.of(ServiceOutsideLayerService.class)),
-                Arguments.of(servicesNommesDansService(racine), List.of(BadlyNamed.class)));
+                Arguments.of(servicesNommesDansService(racine), List.of(BadlyNamed.class)),
+                Arguments.of(fichiersRetiresSeulementParLeStockage(racine), List.of(FileDeletingService.class)));
     }
 
     @ParameterizedTest(name = "{1}")

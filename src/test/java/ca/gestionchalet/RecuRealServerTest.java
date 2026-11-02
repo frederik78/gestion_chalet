@@ -22,6 +22,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
@@ -261,6 +262,94 @@ class RecuRealServerTest {
         assertThat(reponses).extracting(Reponse::statut).containsExactlyInAnyOrder(201, 200, 200, 200);
         assertThat(reponses).extracting(reponse -> reponse.json().get("id")).containsOnly(reponses.getFirst().json().get("id"));
         assertThat(etat()).isEqualTo(new Etat(avant.recus() + 1, avant.photos() + 1, avant.fichiers() + 1));
+    }
+
+    @Test
+    void ca72_aucuneRouteNeSupprimeUnRecuNiUnePhoto() throws IOException {
+        byte[] photo = RecuRequests.png();
+        String id = (String) RecuRequests.valider(client, RecuRequests.corps(RecuRequests.valeurs()), photo).json().get("id");
+        Etat avant = etat();
+
+        Reponse recu = client.appelAvecJeton("DELETE", "/api/recus/" + id, "");
+        Reponse photoSupprimee = client.appelAvecJeton("DELETE", "/api/recus/" + id + "/photos/1", "");
+
+        assertThat(recu.statut()).isIn(404, 405);
+        assertThat(photoSupprimee.statut()).isIn(404, 405);
+        assertThat(etat()).isEqualTo(avant);
+    }
+
+    @Test
+    void cs17_lesChampsCalculesEnvoyesParLeClientSontSansEffet() {
+        UUID idDuClient = UUID.randomUUID();
+        Map<String, Object> valeurs = RecuRequests.valeurs();
+        valeurs.put("etatCopie", "COPIEE");
+        valeurs.put("alertes", List.of(Map.of("code", "FAUSSE")));
+        Map<String, Object> corps = RecuRequests.corps(valeurs);
+        corps.put("id", idDuClient.toString());
+        corps.put("etatCopie", "COPIEE");
+        corps.put("alertes", List.of(Map.of("code", "FAUSSE")));
+        corps.put("motifBlocage", "FORMULE_PRESENTE");
+        corps.put("version", 99);
+
+        Reponse reponse = RecuRequests.valider(client, corps, RecuRequests.png());
+
+        assertThat(reponse.statut()).isEqualTo(201);
+        assertThat(reponse.json()).containsEntry("etatCopie", "A_COPIER").containsEntry("alertes", List.of())
+                .containsEntry("motifBlocage", null).containsEntry("version", 1);
+        assertThat(reponse.json().get("id")).isNotEqualTo(idDuClient.toString());
+        assertThat(base.queryForObject("select count(*) from recu where id = ?", Long.class, idDuClient.toString())).isZero();
+    }
+
+    @Test
+    void cs17_unPutPortantDesChampsCalculesNeChangeRien() {
+        String id = (String) RecuRequests.valider(client, RecuRequests.corps(RecuRequests.valeurs()), RecuRequests.png()).json().get("id");
+
+        Reponse reponse = client.appelAvecJeton("PUT", "/api/recus/" + id, "{\"etatCopie\":\"COPIEE\",\"alertes\":[],\"motifBlocage\":\"FORMULE_PRESENTE\"}");
+
+        assertThat(reponse.statut()).isEqualTo(404);
+        assertThat(base.queryForObject("select etat_copie from recu where id = ?", String.class, id)).isEqualTo("A_COPIER");
+    }
+
+    /** Un type qu'une désérialisation polymorphe instancierait : son constructeur laisse une trace. */
+    public static final class Piege {
+
+        static final AtomicInteger INSTANCES = new AtomicInteger();
+
+        public Piege() {
+            INSTANCES.incrementAndGet();
+        }
+    }
+
+    private static String corpsAvecValeurs(String debutDeValeurs) {
+        return "{\"cleIdempotence\":\"" + UUID.randomUUID() + "\",\"valeurs\":{" + debutDeValeurs
+                + "\"date\":\"2026-10-11\",\"fournisseur\":\"F\",\"typeDepense\":\"Fournitures\",\"montantTotalCents\":3500}}";
+    }
+
+    @Test
+    void cs27_lesMetadonneesDeTypeSontIgnoreesSansInstancierDeType() {
+        String type = "\"@class\":\"" + Piege.class.getName() + "\",";
+        String corps = "{" + type + corpsAvecValeurs(type).substring(1);
+
+        Reponse reponse = RecuRequests.validerJson(client, corps, RecuRequests.png());
+
+        assertThat(reponse.statut()).isEqualTo(201);
+        assertThat(Piege.INSTANCES).hasValue(0);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{\"@class\":\"%s\"}", "[\"%s\",{}]", "{\"a\":{\"b\":1}}"})
+    void cs27_unChampImbriqueInattenduEstRefuseSansInstancierDeType(String imbrique) throws IOException {
+        Etat avant = etat();
+        String valeur = imbrique.formatted(Piege.class.getName());
+        String corps = "{\"cleIdempotence\":\"" + UUID.randomUUID() + "\",\"valeurs\":{\"date\":\"2026-10-11\",\"fournisseur\":" + valeur
+                + ",\"typeDepense\":\"Fournitures\",\"montantTotalCents\":3500}}";
+
+        Reponse reponse = RecuRequests.validerJson(client, corps, RecuRequests.png());
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "La requête est invalide.", "code", "REQUETE_INVALIDE"));
+        assertThat(Piege.INSTANCES).hasValue(0);
+        assertThat(etat()).isEqualTo(avant);
     }
 
     @Test
