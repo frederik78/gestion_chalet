@@ -251,11 +251,12 @@ class ErreursEtEnTetesServeurReelTest {
 
     /** Un multipart annoncé sur une ressource publique : Tomcat le lirait dès qu'un composant demande les paramètres. */
     @ParameterizedTest
-    @ValueSource(strings = {"/actuator/health", "/", "/style.css"})
-    void cs08_unMultipartSansSessionSurUneRessourcePubliqueEstRefuseSansEtreLu(String chemin) {
+    @CsvSource({"/actuator/health, multipart/form-data", "/, multipart/form-data", "/style.css, multipart/form-data",
+            "/actuator/health, MULTIPART/FORM-DATA", "/, MULTIPART/FORM-DATA"})
+    void cs08_unMultipartSansSessionSurUneRessourcePubliqueEstRefuseSansEtreLu(String chemin, String type) {
         String jeton = UUID.randomUUID().toString();
         ClientBrut.Reponse reponse = ClientBrut.envoyerSansLaFinDuCorps(port, "GET " + chemin + " HTTP/1.1\r\nHost: localhost\r\n"
-                + "Content-Type: multipart/form-data; boundary=x\r\nContent-Length: 56000000\r\n\r\n--x\r\n", 5_000);
+                + "Content-Type: " + type + "; boundary=x\r\nContent-Length: 56000000\r\n\r\n--x\r\n", 5_000);
 
         assertThat(reponse.statut()).isEqualTo(415);
         assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Format non accepté.", "code", "FORMAT_NON_ACCEPTE"));
