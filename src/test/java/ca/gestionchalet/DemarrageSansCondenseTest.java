@@ -3,7 +3,7 @@ package ca.gestionchalet;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import ca.gestionchalet.security.CompteLocal;
+import ca.gestionchalet.security.DomainUserDetailsService;
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,7 +47,7 @@ class DemarrageSansCondenseTest {
     void cs07_aucunCompteParDefautAvecUnCondenseValide(CapturedOutput journal) {
         String condense = new BCryptPasswordEncoder(10).encode("secret");
         try (ConfigurableApplicationContext contexte = demarrer("recus.securite.condense-mot-de-passe=" + condense)) {
-            assertThat(contexte.getBeansOfType(UserDetailsService.class).values()).singleElement().isInstanceOf(CompteLocal.class);
+            assertThat(contexte.getBeansOfType(UserDetailsService.class).values()).singleElement().isInstanceOf(DomainUserDetailsService.class);
             assertThat(contexte.getBeanNamesForType(InMemoryUserDetailsManager.class)).isEmpty();
             assertThat(journal.getOut()).doesNotContain("generated security password");
         }

@@ -1,6 +1,5 @@
 package ca.gestionchalet.config;
 
-import ca.gestionchalet.security.CompteLocal;
 import ca.gestionchalet.security.LimiteurConnexion;
 import ca.gestionchalet.web.rest.errors.ErreursSecurite;
 import jakarta.servlet.DispatcherType;
@@ -89,11 +88,5 @@ public class SecurityConfiguration {
     @Bean
     LimiteurConnexion limiteurConnexion(Clock horloge) {
         return new LimiteurConnexion(securiteProperties.echecsAvantBlocage(), securiteProperties.dureeBlocage(), securiteProperties.sourcesSuiviesMax(), horloge);
-    }
-
-    /** Déclaré ici et non annoté {@code @Service} : la couche {@code security} n'a pas accès à {@code config} (ADR 0001). */
-    @Bean
-    CompteLocal compteLocal() {
-        return new CompteLocal(securiteProperties.condenseMotDePasse());
     }
 }

@@ -8,10 +8,8 @@ import org.springframework.util.unit.DataSize;
 import org.springframework.validation.annotation.Validated;
 
 /**
- * Réglages de sécurité ({@code recus.securite.*}). Le condensé du mot de passe vient de l'environnement ; il reste
- * nullable ici pour que le compte local refuse lui-même le démarrage avec son propre message.
+ * Réglages de sécurité ({@code recus.securite.*}). Le condensé du mot de passe, lui, est lu par {@code DomainUserDetailsService}.
  *
- * @param condenseMotDePasse condensé bcrypt du mot de passe du compte local
  * @param echecsAvantBlocage nombre d'échecs de connexion d'une source avant son blocage
  * @param dureeBlocage durée du blocage d'une source
  * @param sourcesSuiviesMax nombre maximal de sources suivies en mémoire
@@ -21,7 +19,6 @@ import org.springframework.validation.annotation.Validated;
 @Validated
 @ConfigurationProperties("recus.securite")
 public record SecuriteProperties(
-        String condenseMotDePasse,
         @Min(1) int echecsAvantBlocage,
         @NotNull Duration dureeBlocage,
         @Min(1) int sourcesSuiviesMax,

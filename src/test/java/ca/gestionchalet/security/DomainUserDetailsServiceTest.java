@@ -12,7 +12,7 @@ import org.springframework.security.core.CredentialsContainer;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
-class CompteLocalTest {
+class DomainUserDetailsServiceTest {
 
     private static final String MESSAGE = "Condensé du mot de passe absent ou trop faible : bcrypt de coût 10 à 31 requis (recus.securite.condense-mot-de-passe).";
 
@@ -37,7 +37,7 @@ class CompteLocalTest {
             "$2a$99$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuvwxyz01234",
     })
     void cs07_condenseAbsentOuFaibleRefuseLaCreationDuCompte(String condense) {
-        assertThatThrownBy(() -> new CompteLocal(condense))
+        assertThatThrownBy(() -> new DomainUserDetailsService(condense))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage(MESSAGE);
     }
@@ -46,13 +46,13 @@ class CompteLocalTest {
     void cs07_coutDixAcceptePourLaLimite() {
         String condense = bcrypt(10, "secret");
 
-        assertThat(new CompteLocal(condense).loadUserByUsername("").getPassword()).isEqualTo(condense);
+        assertThat(new DomainUserDetailsService(condense).loadUserByUsername("").getPassword()).isEqualTo(condense);
     }
 
     /** Spring Security efface le mot de passe de l'objet renvoyé après la connexion : la connexion suivante doit en recevoir un intact. */
     @Test
     void cs07_chaqueLectureRendUnCompteIntactQuelQueSoitLeNom() {
-        CompteLocal compte = new CompteLocal(bcrypt(10, "secret"));
+        DomainUserDetailsService compte = new DomainUserDetailsService(bcrypt(10, "secret"));
         UserDetails premier = compte.loadUserByUsername("");
         ((CredentialsContainer) premier).eraseCredentials();
 
@@ -65,6 +65,6 @@ class CompteLocalTest {
     /** Le coût maximal n'est pas calculé : à 31, une seule vérification durerait des jours. Seule la création du compte est testée. */
     @Test
     void cs07_coutTrenteEtUnAcceptePourLaLimiteHaute() {
-        assertThatCode(() -> new CompteLocal("$2a$31$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuvwxyz01234")).doesNotThrowAnyException();
+        assertThatCode(() -> new DomainUserDetailsService("$2a$31$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuvwxyz01234")).doesNotThrowAnyException();
     }
 }
