@@ -250,16 +250,22 @@ class ErreursEtEnTetesServeurReelTest {
     }
 
     private static String debutMultipartSansSession(String chemin) {
+        return debutMultipartSansSession(chemin, "multipart/form-data");
+    }
+
+    private static String debutMultipartSansSession(String chemin, String type) {
         String jeton = UUID.randomUUID().toString();
         return "POST " + chemin + " HTTP/1.1\r\nHost: localhost\r\n"
-                + "Content-Type: multipart/form-data; boundary=x\r\nContent-Length: 56000000\r\n"
+                + "Content-Type: " + type + "; boundary=x\r\nContent-Length: 56000000\r\n"
                 + "X-XSRF-TOKEN: " + jeton + "\r\nCookie: XSRF-TOKEN=" + jeton + "\r\n\r\n"
                 + "--x\r\nContent-Disposition: form-data; name=\"photos\"; filename=\"a.jpg\"\r\n\r\ndebut";
     }
 
-    @Test
-    void cs08_unMultipartSansSessionEstRefuseSansEtreLu() {
-        ClientBrut.Reponse reponse = ClientBrut.envoyerSansLaFinDuCorps(port, debutMultipartSansSession("/api/connexion"), 5_000);
+    /** Un type de contenu ne dépend pas de la casse : en majuscules, il ne doit pas échapper au refus. */
+    @ParameterizedTest
+    @ValueSource(strings = {"multipart/form-data", "MULTIPART/FORM-DATA"})
+    void cs08_unMultipartSansSessionEstRefuseSansEtreLu(String type) {
+        ClientBrut.Reponse reponse = ClientBrut.envoyerSansLaFinDuCorps(port, debutMultipartSansSession("/api/connexion", type), 5_000);
 
         assertThat(reponse.statut()).isEqualTo(415);
         assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Format non accepté.", "code", "FORMAT_NON_ACCEPTE"));
