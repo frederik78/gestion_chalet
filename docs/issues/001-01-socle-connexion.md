@@ -56,6 +56,5 @@ Tests rouges puis verts, `scripts/verify-clean.sh` à `VERIFY OK`, résultat de 
 - `@NotNull` sur `securite` sans test : le démarrage reste refusé sans lui, seul le message se dégrade (itération 8).
 - Famine des fils : reportée à NF-03, voir `docs/deploiement.md` (itération 3, M14).
 
-### Décisions en attente de l'utilisateur
-- PRD : inscrire la remise à zéro du compteur après une connexion réussie.
-- PRD : inscrire la règle 405 vers 404 dans le tableau des erreurs (CA72 ne la couvre pas seule).
+### Décisions de l'utilisateur
+- 2026-11-02 : remise à zéro du compteur après une connexion réussie, et conversion de 405 en 404, inscrites au PRD (D-33).

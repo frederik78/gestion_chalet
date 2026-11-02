@@ -239,7 +239,7 @@ Corps d'erreur : `{ "erreur": "<message générique en français>", "code": "<CO
 | 400 | `TROP_DE_PHOTOS`, `PHOTO_MANQUANTE`, `IMAGE_ILLISIBLE`, `IMAGE_TROP_GRANDE` | limites d'image |
 | 401 | `NON_AUTHENTIFIE`, `IDENTIFIANTS_INVALIDES` | pas de session ; mot de passe faux |
 | 403 | `CSRF_INVALIDE` | jeton CSRF absent ou faux |
-| 404 | `INTROUVABLE` | ressource absente ; identique quelle qu'en soit la raison |
+| 404 | `INTROUVABLE` | ressource absente, ou méthode non permise sur une route existante, sans en-tête `Allow` (`OPTIONS` excepté) ; identique quelle qu'en soit la raison |
 | 409 | `VERSION_PERIMEE` | correction fondée sur une version dépassée |
 | 413 | `TAILLE_EXCESSIVE` | photo ou requête trop lourde |
 | 415 | `FORMAT_NON_ACCEPTE` | format hors liste |
@@ -556,7 +556,7 @@ Point transmis à NF-03 : derrière Cloudflare Tunnel, toutes les requêtes semb
 - **CS02** Given une session valide et aucun jeton CSRF, ou un jeton faux When chaque route `POST` et `PUT` est appelée, `POST /api/connexion` compris Then la réponse est 403 `CSRF_INVALIDE` et rien ne change [A01, A07].
 - **CS03** Given un UUID inconnu, un identifiant non UUID, ou un rang inexistant ou sans rapport avec le reçu When il est demandé Then la réponse est 404 `INTROUVABLE`, de corps identique dans tous les cas (y compris une valeur de type `..%2F..%2Fetc%2Fpasswd`), et aucun fichier hors du dossier des photos n'est lu [A01].
 - **CS04** Given un mauvais mot de passe When `POST /api/connexion` est appelé Then la réponse est 401 `IDENTIFIANTS_INVALIDES` ; given le bon Then l'identifiant de session change, et le cookie porte `HttpOnly`, `SameSite`, et `Secure` en configuration hors poste local [A07].
-- **CS05** Given N échecs de connexion d'une même source When une nouvelle tentative arrive, même avec le bon mot de passe Then la réponse est 429 avec `Retry-After` ; après le délai, le bon mot de passe réussit ; une autre source n'est pas bloquée [A07].
+- **CS05** Given N échecs de connexion d'une même source When une nouvelle tentative arrive, même avec le bon mot de passe Then la réponse est 429 avec `Retry-After` ; après le délai, le bon mot de passe réussit ; une connexion réussie remet à zéro le compteur d'échecs de sa source ; une autre source n'est pas bloquée [A07].
 - **CS06** Given une session inactive au-delà de la durée configurée, ou une déconnexion effectuée When l'ancien cookie est réutilisé Then la réponse est 401 [A07].
 - **CS07** Given un condensé de mot de passe absent ou d'un algorithme faible en configuration When l'application démarre Then elle refuse de démarrer, sans compte par défaut [A02, A07].
 - **CS08** Given une erreur interne provoquée, et sur serveur réel des requêtes malformées (JSON cassé, multipart invalide, chemin encodé, requête trop grosse) When elles sont traitées Then le corps ne contient que `erreur` et `code` (et `champs` pour `VALIDATION`), sans trace de pile, nom de classe ni version, et les en-têtes de sécurité sont présents [A05].
