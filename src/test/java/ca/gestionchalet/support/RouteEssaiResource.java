@@ -1,9 +1,11 @@
 package ca.gestionchalet.support;
 
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -43,6 +45,21 @@ public class RouteEssaiResource {
     @GetMapping("/session")
     String session() {
         return "valide";
+    }
+
+    /** La réponse est déjà engagée quand la panne survient : plus aucun corps d'erreur n'est possible. */
+    @GetMapping("/panne-apres-flux")
+    void panneApresFlux(HttpServletResponse reponse) throws IOException {
+        reponse.getOutputStream().write('x');
+        reponse.flushBuffer();
+        throw new IllegalStateException(DETAIL_SECRET);
+    }
+
+    @GetMapping("/panne-apres-writer")
+    void panneApresWriter(HttpServletResponse reponse) throws IOException {
+        reponse.getWriter().write('x');
+        reponse.flushBuffer();
+        throw new IllegalStateException(DETAIL_SECRET);
     }
 
     /** Sa sérialisation échoue : la panne survient après la route, dans l'écriture de la réponse. */

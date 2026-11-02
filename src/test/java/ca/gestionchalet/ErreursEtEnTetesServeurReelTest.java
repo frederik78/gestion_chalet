@@ -74,6 +74,20 @@ class ErreursEtEnTetesServeurReelTest {
                 .doesNotContain(RouteEssaiResource.DETAIL_SECRET);
     }
 
+    /** Le message d'une exception peut porter un contenu de reçu : il ne doit atteindre aucun journal, même réponse engagée. */
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/essai/panne-apres-flux", "/api/essai/panne-apres-writer"})
+    @ExtendWith(OutputCaptureExtension.class)
+    void cs08_unePanneApresEngagementNeJournaliseJamaisSonMessage(String chemin, CapturedOutput journal) {
+        ClientEssai client = connecte();
+
+        Reponse reponse = client.get(chemin);
+
+        assertThat(reponse.statut()).isEqualTo(200);
+        assertThat(reponse.corps()).isEqualTo("x");
+        assertThat(journal.getAll()).contains("Erreur interne : java.lang.IllegalStateException").doesNotContain(RouteEssaiResource.DETAIL_SECRET);
+    }
+
     @Test
     void cs08_jsonCasseDonne400Generique() {
         Reponse reponse = connecte().appelAvecJeton("POST", "/api/essai/json", "{\"valeur\":");

@@ -1,6 +1,7 @@
 package ca.gestionchalet.web.rest.errors;
 
 import ca.gestionchalet.web.rest.errors.ErreurDTO.ChampInvalideDTO;
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +14,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
@@ -32,6 +34,13 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
         CodeErreur code = CodeErreur.pourStatut(statusCode.value());
         if (code == CodeErreur.ERREUR_INTERNE) {
             LOG.error("Erreur interne : {} en {}", ex.getClass().getName(), premiereTrame(ex));
+        }
+        // Même test que super, qui journaliserait ici le message de l'exception : il peut porter un contenu de reçu.
+        if (request instanceof ServletWebRequest requeteServlet) {
+            HttpServletResponse reponse = requeteServlet.getResponse();
+            if (reponse != null && reponse.isCommitted()) {
+                return null;
+            }
         }
         HttpHeaders json = new HttpHeaders();
         json.setContentType(MediaType.APPLICATION_JSON);
