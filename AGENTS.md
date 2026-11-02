@@ -1,18 +1,18 @@
 # Gestion de chalet
 
-<Une phrase : ce que fait l'application et pour qui.>
+Application de gestion d'un chalet loué au Québec, pour son propriétaire, construite module par module. Premier module : reporter en base et dans le Google Sheet les valeurs et la photo des reçus, pour la déclaration de la TPS et de la TVQ.
 
 Ce fichier (standard ouvert AGENTS.md) est la source de vérité pour tout agent de code (Claude Code, Codex, Cursor, Copilot, etc.).
 Il ne contient rien de propre à un outil. `CLAUDE.md` l'importe et n'ajoute que des directives propres à Claude Code.
-Périmètre actuel : <backend uniquement ? frontend ?>.
+Périmètre actuel : module Reçus, backend et PWA statique. Déploiement et sauvegardes reportés (backlog, NF-02 et NF-03).
 
 ## Stack
-<Langage et version, framework, outil de build, base de données. Les choix structurants sont dans docs/adr/.>
-Package racine : `<...>`.
+Java 25, Spring Boot 4.1, Maven (wrapper), Spring Security, Spring Data JPA, Liquibase, MapStruct, ArchUnit, SQLite, Spring AI 2.0.x (Claude Haiku 5.5 par défaut), PWA sans framework ni build. Décision : `docs/adr/0001-architecture.md`.
+Package racine : `ca.gestionchalet`, à plat.
 
 ## Commandes (toujours via le wrapper du build)
-- `<commande de tests>` : tests
-- `<commande de vérification complète>` : tests (dont tests d'architecture) + analyse statique de sécurité ; c'est exactement ce que lance la CI
+- `./mvnw test` : tests
+- `./mvnw -B clean verify` : tests (dont tests d'architecture) + analyse statique de sécurité ; c'est exactement ce que lance la CI
 - `scripts/verify-clean.sh` : la même vérification dans une copie propre du dépôt, hors IDE (à utiliser par les agents et chaque fois qu'un IDE est ouvert)
 - `scripts/criteres-sans-test.sh <issue>` : critères CA/CS d'une issue qu'aucun test ne mentionne
 - `scripts/couverture-prd.sh <prd>` : chaque critère du PRD est couvert par exactement une issue
@@ -29,7 +29,13 @@ Ne jamais appeler directement un outil propre à un fournisseur dans le code app
 ## Architecture
 La structure est décidée dans un ADR (`docs/adr/0001-architecture.md`) AVANT le premier code, et appliquée par des tests d'architecture qui
 échouent à la moindre violation. Elle ne change pas sans nouvel ADR.
-<Arborescence des packages, rôle de chaque couche, sens des dépendances. N'écrire ici que ce que le code ne montre pas (flux de travail, contraintes, décisions) : l'agent lit le reste lui-même dans le code.>
+Structure en services, inspirée de JHipster, sans générateur : `config`, `domain`, `repository`, `service`, `client`, `security`, `web/rest`. Les droits d'accès entre couches sont dans l'ADR et exécutés par `TechnicalStructureTest` et `ReglesAgentsTest`.
+- Une `XxxResource` valide l'entrée et délègue à un `XxxService`, sans logique métier ni accès aux données.
+- Le domaine contient les entités JPA, sans setter public : l'état change par des fabriques et des transitions. Le statut et les alertes ne sont jamais lus d'une source non fiable (modèle, client).
+- Le JSON est un record `XxxDTO` projeté par MapStruct ; une entité n'est jamais sérialisée.
+- Interfaces seulement dans `client/`, pour Claude, Google Sheets et Google Drive. Le dépôt, le stockage local et l'authentification restent concrets.
+- Liquibase est le seul gestionnaire du schéma (`ddl-auto=validate`) ; un changeset appliqué n'est jamais modifié.
+- Compte local unique, session par cookie, CSRF actif ; refus par défaut.
 
 ## Règles
 - **INTERDIT** aux agents : pousser, fusionner, réécrire l'historique (`git push`, `reset --hard`, `clean`, `branch -D`, `checkout --`, `restore`) ; lire ou copier les fichiers de secrets. Seul l'utilisateur
@@ -37,7 +43,11 @@ La structure est décidée dans un ADR (`docs/adr/0001-architecture.md`) AVANT l
 - **Modèle de branches** : `main` ne reçoit que les releases (états livrables, tags `vX.Y.Z`) ; personne n'y commite, seul l'utilisateur y fusionne `develop` (`git merge --no-ff develop`) puis tague. `develop` est la branche d'intégration : toute branche de travail (`feat/<prd>-<nn>-<slug>`, `fix/…`, `docs/…`, `refactor/…`, `test/…`, `build/…`) en part et y revient par PR (base = `develop`). Correctif urgent sur une release : `hotfix/<slug>` partant de `main`, fusionné dans `main` PUIS dans `develop` par l'utilisateur. Branches empilées : base = pointe de la branche dont l'issue dépend. Les agents ne travaillent jamais directement sur `main` ni sur `develop`.
 - **INTERDIT** : un test qui dépend d'un service externe réel ; toujours doubler la frontière externe.
 - Pas d'interface « au cas où » : une abstraction n'existe que pour une frontière externe à doubler ou s'il y a deux implémentations réelles.
-- <Règles métier transverses du projet : unités, devises, configuration plutôt que constantes, validation, etc.>
+- Montants en cents entiers, en dollars canadiens, jamais en flottants.
+- Rien n'est enregistré avant la validation par l'utilisateur. Une taxe absente d'un reçu reste vide : elle n'est jamais calculée ni mise à 0.
+- La base fait référence, le Google Sheet en est une copie ; un envoi échoué est réessayé sans perdre le reçu.
+- Modèle, seuils d'alerte, types de dépense, fichiers et onglets par année : en configuration (`recus.*`), jamais en constantes.
+- **INTERDIT** : écrire le contenu d'un reçu dans les journaux, ou verser des photos réelles au dépôt.
 
 ## Tests (TDD obligatoire)
 Pas de code de production sans un test RED préalable qui échoue. Cycle : RED, GREEN (code minimal), REFACTOR.
