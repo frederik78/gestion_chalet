@@ -42,6 +42,12 @@ src/main/resources/
 
 Le package racine est à plat : pas de sous-package par module. Le métier est porté par le nom des classes (`Recu`, `RecuService`, `RecuRepository`, `RecuResource`).
 
+### Référence de code
+JHipster 9.4.0, monolithe en session, sans frontend : les fichiers se lisent un par un (`factory/stacks/java-maven/README.md`), sans générateur ni dépendance à `jhipster-framework`. Ne sont pas repris, faute de critère : `rememberMe`, `AccountResource`, table `User`, CORS, AOP, `SpaWebFilter`.
+
+### Mécanismes du framework
+Connexion et déconnexion par `formLogin` et `logout` de Spring Security, CSRF par `CookieCsrfTokenRepository`, erreurs par `ResponseEntityExceptionHandler`. Ce qui s'en écarte, avec sa raison mesurée, est dans les rapports de `docs/reviews/001-01.md`.
+
 ### Règles exécutées par les tests
 `TechnicalStructureTest` et `AgentRulesTest` (ArchUnit) font échouer `./mvnw test` à la moindre violation. Chaque règle a un test qui échoue sur une violation volontaire.
 

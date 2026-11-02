@@ -37,6 +37,9 @@ La structure est décidée dans un ADR (`docs/adr/0001-architecture.md`) AVANT l
 - **Modèle de branches** : `main` ne reçoit que les releases (états livrables, tags `vX.Y.Z`) ; personne n'y commite, seul l'utilisateur y fusionne `develop` (`git merge --no-ff develop`) puis tague. `develop` est la branche d'intégration : toute branche de travail (`feat/<prd>-<nn>-<slug>`, `fix/…`, `docs/…`, `refactor/…`, `test/…`, `build/…`) en part et y revient par PR (base = `develop`). Correctif urgent sur une release : `hotfix/<slug>` partant de `main`, fusionné dans `main` PUIS dans `develop` par l'utilisateur. Branches empilées : base = pointe de la branche dont l'issue dépend. Les agents ne travaillent jamais directement sur `main` ni sur `develop`.
 - **INTERDIT** : un test qui dépend d'un service externe réel ; toujours doubler la frontière externe.
 - Pas d'interface « au cas où » : une abstraction n'existe que pour une frontière externe à doubler ou s'il y a deux implémentations réelles.
+- Le framework d'abord : un mécanisme transversal (session, authentification, CSRF, en-têtes, erreurs, validation, configuration) utilise ce que le framework fournit ; un équivalent écrit à la main se justifie par un critère du PRD ou une mesure.
+- La référence de code : la structure et la mise en œuvre se calent sur le projet que l'ADR nomme, lu fichier par fichier ; tout écart de nom ou de forme a une raison. <Application Spring Boot : dépendances Spring d'abord, JHipster comme modèle, voir `factory/stacks/java-maven/README.md`. Sinon : le projet nommé par l'ADR, ou « aucune ».>
+- **Langue du code** : les classes techniques sont impérativement en anglais.
 - <Règles métier transverses du projet : unités, devises, configuration plutôt que constantes, validation, etc.>
 
 ## Tests (TDD obligatoire)
