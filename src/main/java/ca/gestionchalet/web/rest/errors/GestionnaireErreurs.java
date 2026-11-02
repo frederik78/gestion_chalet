@@ -1,12 +1,9 @@
 package ca.gestionchalet.web.rest.errors;
 
-import ca.gestionchalet.security.IdentifiantsInvalidesException;
-import ca.gestionchalet.security.TropDeTentativesException;
 import ca.gestionchalet.web.rest.errors.ErreurDTO.ChampInvalideDTO;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -24,20 +21,6 @@ import org.springframework.web.multipart.MultipartException;
 public class GestionnaireErreurs {
 
     private static final Logger JOURNAL = LoggerFactory.getLogger(GestionnaireErreurs.class);
-
-    @ExceptionHandler(IdentifiantsInvalidesException.class)
-    ResponseEntity<ErreurDTO> identifiantsInvalides() {
-        return reponse(CodeErreur.IDENTIFIANTS_INVALIDES);
-    }
-
-    @ExceptionHandler(TropDeTentativesException.class)
-    ResponseEntity<ErreurDTO> tropDeTentatives(TropDeTentativesException exception) {
-        long secondes = exception.restant().plusNanos(999_999_999L).toSeconds();
-        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                .header(HttpHeaders.RETRY_AFTER, Long.toString(secondes))
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(ErreurDTO.de(CodeErreur.TROP_DE_TENTATIVES));
-    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ErreurDTO> validation(MethodArgumentNotValidException exception) {

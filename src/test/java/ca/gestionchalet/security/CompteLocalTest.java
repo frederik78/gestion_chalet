@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.security.core.CredentialsContainer;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 class CompteLocalTest {
@@ -42,22 +44,27 @@ class CompteLocalTest {
 
     @Test
     void cs07_coutDixAcceptePourLaLimite() {
-        CompteLocal compte = new CompteLocal(bcrypt(10, "secret"));
+        String condense = bcrypt(10, "secret");
 
-        assertThat(compte.verifier("secret")).isTrue();
-        assertThat(compte.verifier("autre")).isFalse();
+        assertThat(new CompteLocal(condense).loadUserByUsername("").getPassword()).isEqualTo(condense);
+    }
+
+    /** Spring Security efface le mot de passe de l'objet renvoyé après la connexion : la connexion suivante doit en recevoir un intact. */
+    @Test
+    void cs07_chaqueLectureRendUnCompteIntactQuelQueSoitLeNom() {
+        CompteLocal compte = new CompteLocal(bcrypt(10, "secret"));
+        UserDetails premier = compte.loadUserByUsername("");
+        ((CredentialsContainer) premier).eraseCredentials();
+
+        UserDetails second = compte.loadUserByUsername("autre");
+
+        assertThat(second.getPassword()).startsWith("$2a$10$");
+        assertThat(second.getUsername()).isEqualTo("proprietaire");
     }
 
     /** Le coût maximal n'est pas calculé : à 31, une seule vérification durerait des jours. Seule la création du compte est testée. */
     @Test
     void cs07_coutTrenteEtUnAcceptePourLaLimiteHaute() {
         assertThatCode(() -> new CompteLocal("$2a$31$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuvwxyz01234")).doesNotThrowAnyException();
-    }
-
-    @Test
-    void cs04_motDePasseDeMilleCaracteresEstRefuseSansErreur() {
-        CompteLocal compte = new CompteLocal(bcrypt(10, "secret"));
-
-        assertThat(compte.verifier("x".repeat(1000))).isFalse();
     }
 }

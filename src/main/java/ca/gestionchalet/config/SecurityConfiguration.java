@@ -2,26 +2,32 @@ package ca.gestionchalet.config;
 
 import ca.gestionchalet.security.CompteLocal;
 import ca.gestionchalet.security.LimiteurConnexion;
-import ca.gestionchalet.security.SessionUtilisateur;
 import ca.gestionchalet.web.rest.errors.ErreursSecurite;
 import jakarta.servlet.DispatcherType;
+import jakarta.servlet.http.Cookie;
 import java.time.Clock;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
-import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.logout.CookieClearingLogoutHandler;
+import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
-import org.springframework.security.web.csrf.CsrfTokenRepository;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 
 /** Chaîne de sécurité explicite, refus par défaut (ADR 0001). */
 @Configuration
 @EnableConfigurationProperties(SecuriteProperties.class)
 public class SecurityConfiguration {
+
+    private static final String SAME_SITE = "Lax";
 
     /** La santé et les seules ressources nécessaires à la page de connexion, listées une à une. */
     private static final String[] RESSOURCES_PUBLIQUES = {
@@ -30,38 +36,52 @@ public class SecurityConfiguration {
     };
 
     @Bean
-    SecurityFilterChain chaineDeSecurite(HttpSecurity http, CsrfTokenRepository jetons, SecurityContextRepository contextes) {
+    SecurityFilterChain chaineDeSecurite(HttpSecurity http, SecuriteProperties proprietes, LimiteurConnexion limiteur) {
         ErreursSecurite erreurs = new ErreursSecurite();
+        CookieCsrfTokenRepository jetons = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        jetons.setCookieCustomizer(cookie -> cookie.secure(proprietes.cookieSecurise()).sameSite(SAME_SITE).path("/"));
         return http
                 .authorizeHttpRequests(acces -> acces
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.GET, RESSOURCES_PUBLIQUES).permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/connexion").permitAll()
                         .anyRequest().authenticated())
                 .csrf(csrf -> csrf.csrfTokenRepository(jetons).csrfTokenRequestHandler(new JetonCsrfParEnTete()))
-                .securityContext(contexte -> contexte.securityContextRepository(contextes))
+                .formLogin(formulaire -> formulaire
+                        .loginPage("/")
+                        .loginProcessingUrl(ErreursSecurite.ROUTE_CONNEXION)
+                        .passwordParameter("motDePasse")
+                        .successHandler((requete, reponse, authentification) -> {
+                            limiteur.reinitialiser(requete.getRemoteAddr());
+                            reponse.setStatus(HttpStatus.NO_CONTENT.value());
+                        })
+                        .failureHandler(erreurs))
+                .logout(deconnexion -> deconnexion
+                        .logoutUrl("/api/deconnexion")
+                        .addLogoutHandler(new CookieClearingLogoutHandler(cookieSessionExpire(proprietes.cookieSecurise())))
+                        .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
+                .addFilterBefore(
+                        new GardeConnexionFilter(PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, ErreursSecurite.ROUTE_CONNEXION),
+                                limiteur, proprietes.corpsRequeteMax().toBytes()),
+                        UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(erreurs).accessDeniedHandler(erreurs))
                 .headers(AbstractHttpConfigurer::disable) // posés par EnTetesSecuriteFilter, avant le pare-feu HTTP
                 .requestCache(AbstractHttpConfigurer::disable)
-                .logout(AbstractHttpConfigurer::disable)
                 .build();
     }
 
-    @Bean
-    CsrfTokenRepository jetonsCsrf(SecuriteProperties proprietes) {
-        CookieCsrfTokenRepository jetons = CookieCsrfTokenRepository.withHttpOnlyFalse();
-        jetons.setCookieCustomizer(cookie -> cookie.secure(proprietes.cookieSecurise()).sameSite("Lax").path("/"));
-        return jetons;
+    private static Cookie cookieSessionExpire(boolean securise) {
+        Cookie cookie = new Cookie("JSESSIONID", "");
+        cookie.setPath("/");
+        cookie.setMaxAge(0);
+        cookie.setHttpOnly(true);
+        cookie.setSecure(securise);
+        cookie.setAttribute("SameSite", SAME_SITE);
+        return cookie;
     }
 
     @Bean
-    SecurityContextRepository contextesDeSecurite() {
-        return new HttpSessionSecurityContextRepository();
-    }
-
-    @Bean
-    SessionUtilisateur sessionUtilisateur(SecurityContextRepository contextes, CsrfTokenRepository jetons, SecuriteProperties proprietes) {
-        return new SessionUtilisateur(contextes, jetons, new JetonCsrfParEnTete(), proprietes.inactiviteSession(), proprietes.cookieSecurise());
+    PasswordEncoder encodeurMotDePasse() {
+        return new BCryptPasswordEncoder();
     }
 
     @Bean
@@ -74,6 +94,7 @@ public class SecurityConfiguration {
         return new LimiteurConnexion(proprietes.echecsAvantBlocage(), proprietes.dureeBlocage(), proprietes.sourcesSuiviesMax(), horloge);
     }
 
+    /** Déclaré ici et non annoté {@code @Service} : la couche {@code security} n'a pas accès à {@code config} (ADR 0001). */
     @Bean
     CompteLocal compteLocal(SecuriteProperties proprietes) {
         return new CompteLocal(proprietes.condenseMotDePasse());

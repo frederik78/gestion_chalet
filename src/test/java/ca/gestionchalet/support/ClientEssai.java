@@ -2,9 +2,11 @@ package ca.gestionchalet.support;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -120,8 +122,20 @@ public final class ClientEssai {
         return envoyer(requete.build());
     }
 
+    /** Envoie le formulaire de connexion avec le jeton CSRF courant, comme la page de connexion. */
     public Reponse connecter(String motDePasse) {
-        return appelAvecJeton("POST", "/api/connexion", "{\"motDePasse\":\"" + motDePasse + "\"}");
+        if (cookie("XSRF-TOKEN") == null) {
+            get("/actuator/health");
+        }
+        return envoyer(requeteConnexion(motDePasse).build());
+    }
+
+    /** La requête de connexion prête à envoyer, à compléter par le test ; le jeton CSRF doit déjà être connu. */
+    public HttpRequest.Builder requeteConnexion(String motDePasse) {
+        return requete("/api/connexion")
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("X-XSRF-TOKEN", cookie("XSRF-TOKEN"))
+                .POST(HttpRequest.BodyPublishers.ofString("motDePasse=" + URLEncoder.encode(motDePasse, StandardCharsets.UTF_8)));
     }
 
     public Reponse deconnecter() {

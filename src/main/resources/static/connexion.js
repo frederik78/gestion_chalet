@@ -23,7 +23,12 @@ document.getElementById('connexion').addEventListener('submit', async (evenement
   const champ = document.getElementById('mot-de-passe');
   message.textContent = '';
   try {
-    const reponse = await ecrireApi('/api/connexion', { motDePasse: champ.value });
+    const reponse = await fetch('/api/connexion', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-XSRF-TOKEN': lireCookie('XSRF-TOKEN') },
+      body: new URLSearchParams({ motDePasse: champ.value }),
+    });
     if (reponse.ok) {
       window.location.assign('/accueil.html');
       return;

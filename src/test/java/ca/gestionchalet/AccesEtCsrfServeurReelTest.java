@@ -2,6 +2,7 @@ package ca.gestionchalet;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ca.gestionchalet.support.ClientBrut;
 import ca.gestionchalet.support.ClientEssai;
 import ca.gestionchalet.support.ClientEssai.Reponse;
 import ca.gestionchalet.support.ConfigurationEssai;
@@ -18,6 +19,8 @@ import java.util.TreeSet;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -32,10 +35,17 @@ class AccesEtCsrfServeurReelTest {
     private static final Map<String, String> CSRF_INVALIDE = Map.of("erreur", "Jeton de sécurité absent ou invalide.", "code", "CSRF_INVALIDE");
 
     private static final List<String> METHODES = List.of("GET", "POST", "PUT", "DELETE", "PATCH");
-    private static final Set<String> PUBLIQUES = Set.of("GET /actuator/health", "POST /api/connexion");
+    private static final Set<String> PUBLIQUES = Set.of("GET /actuator/health");
+    /** Traitées par la chaîne de sécurité : elles ne figurent pas dans les routes de Spring MVC et sont donc ajoutées à la main. */
+    private static final List<Route> ROUTES_DE_LA_CHAINE = List.of(new Route("POST", "/api/connexion"), new Route("POST", "/api/deconnexion"));
     private static final List<String> CHEMINS_INCONNUS = List.of(
             "/api/inconnue", "/inconnue", "/actuator", "/actuator/env", "/actuator/beans", "/actuator/health/liveness",
-            "/actuator/heapdump", "/error", "/index.php", "/h2-console");
+            "/actuator/heapdump", "/error", "/index.php", "/h2-console", "/login", "/logout", "/default-ui.css");
+    /** Seul POST y est traité par la chaîne : toute autre méthode reste refusée. */
+    private static final List<Route> AUTRES_METHODES = List.of(
+            new Route("GET", "/api/connexion"), new Route("PUT", "/api/connexion"), new Route("DELETE", "/api/connexion"), new Route("PATCH", "/api/connexion"),
+            new Route("GET", "/api/deconnexion"), new Route("PUT", "/api/deconnexion"), new Route("DELETE", "/api/deconnexion"), new Route("PATCH", "/api/deconnexion"),
+            new Route("POST", "/"), new Route("PUT", "/"), new Route("DELETE", "/"), new Route("POST", "/index.html"));
 
     @LocalServerPort
     int port;
@@ -85,13 +95,13 @@ class AccesEtCsrfServeurReelTest {
         for (String chemin : CHEMINS_INCONNUS) {
             METHODES.forEach(methode -> routes.add(new Route(methode, chemin)));
         }
+        routes.addAll(AUTRES_METHODES);
         return routes;
     }
 
     @Test
     void lesRoutesAttenduesSontBienParcourues() {
         assertThat(routesEnregistrees()).contains(
-                new Route("POST", "/api/connexion"), new Route("POST", "/api/deconnexion"),
                 new Route("POST", "/api/essai/mutation/{id}"), new Route("PUT", "/api/essai/mutation/{id}"),
                 new Route("GET", "/actuator/health"));
     }
@@ -151,9 +161,11 @@ class AccesEtCsrfServeurReelTest {
     }
 
     private Set<Route> routesEnEcriture() {
-        return routesEnregistrees().stream()
+        Set<Route> routes = routesEnregistrees().stream()
                 .filter(route -> route.methode().equals("POST") || route.methode().equals("PUT"))
                 .collect(Collectors.toSet());
+        routes.addAll(ROUTES_DE_LA_CHAINE);
+        return routes;
     }
 
     @Test
@@ -201,6 +213,31 @@ class AccesEtCsrfServeurReelTest {
         assertThat(bonSansJeton.statut()).isEqualTo(403);
         assertThat(client.cookie("JSESSIONID")).isNull();
         assertThat(client.connecter(ConfigurationEssai.MOT_DE_PASSE).statut()).isEqualTo(204);
+    }
+
+    /** Le corps n'arrive jamais : si le contrôle CSRF lisait un paramètre, le serveur ne répondrait pas à temps. */
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/connexion", "/api/deconnexion"})
+    void cs02_unFormulaireSansJetonEstRefuseSansEtreLu(String chemin) {
+        ClientBrut.Reponse reponse = ClientBrut.envoyerSansLaFinDuCorps(port, "POST " + chemin + " HTTP/1.1\r\nHost: localhost\r\n"
+                + "Content-Type: application/x-www-form-urlencoded\r\nContent-Length: 1000\r\n\r\nmotDePasse=", 5_000);
+
+        assertThat(reponse.statut()).isEqualTo(chemin.equals("/api/connexion") ? 403 : 401);
+        assertThat(reponse.json()).isEqualTo(chemin.equals("/api/connexion") ? CSRF_INVALIDE : NON_AUTHENTIFIE);
+    }
+
+    @Test
+    void cs02_leJetonEnParametreDuFormulaireNEstPasAccepte() {
+        ClientEssai client = client();
+        client.get("/actuator/health");
+
+        Reponse reponse = client.envoyer(client.requete("/api/connexion")
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString("_csrf=" + client.cookie("XSRF-TOKEN") + "&motDePasse=" + ConfigurationEssai.MOT_DE_PASSE))
+                .build());
+
+        assertThat(reponse.statut()).isEqualTo(403);
+        assertThat(client.cookie("JSESSIONID")).isNull();
     }
 
     @Test

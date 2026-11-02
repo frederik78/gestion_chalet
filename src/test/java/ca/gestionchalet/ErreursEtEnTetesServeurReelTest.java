@@ -61,7 +61,7 @@ class ErreursEtEnTetesServeurReelTest {
 
     @Test
     void cs08_jsonCasseDonne400Generique() {
-        Reponse reponse = client().appelAvecJeton("POST", "/api/connexion", "{\"motDePasse\":");
+        Reponse reponse = connecte().appelAvecJeton("POST", "/api/essai/json", "{\"valeur\":");
 
         assertThat(reponse.statut()).isEqualTo(400);
         assertThat(reponse.json()).isEqualTo(REQUETE_INVALIDE);
@@ -70,10 +70,21 @@ class ErreursEtEnTetesServeurReelTest {
 
     @Test
     void cs08_typeInattenduDansLeJsonDonne400Generique() {
-        Reponse reponse = client().appelAvecJeton("POST", "/api/connexion", "{\"motDePasse\":{\"a\":[1]}}");
+        Reponse reponse = connecte().appelAvecJeton("POST", "/api/essai/json", "{\"valeur\":{\"a\":[1]}}");
 
         assertThat(reponse.statut()).isEqualTo(400);
         assertThat(reponse.json()).isEqualTo(REQUETE_INVALIDE);
+    }
+
+    @Test
+    void cs08_champInvalideDonne400AvecLeChamp() {
+        Reponse reponse = connecte().appelAvecJeton("POST", "/api/essai/json", "{}");
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(Map.of(
+                "erreur", "Certains champs sont invalides.",
+                "code", "VALIDATION",
+                "champs", List.of(Map.of("champ", "valeur", "code", "OBLIGATOIRE"))));
     }
 
     @Test
@@ -93,7 +104,7 @@ class ErreursEtEnTetesServeurReelTest {
 
     /** Sur une route protégée, avec session : le multipart y est analysé. */
     private Reponse envoyerMultipartAvecSession(String typeDeContenu, String corps) {
-        return envoyerMultipartAvecSession("/api/essai/mutation/1", typeDeContenu, corps);
+        return envoyerMultipartAvecSession("/api/essai/photos", typeDeContenu, corps);
     }
 
     private Reponse envoyerMultipartAvecSession(String chemin, String typeDeContenu, String corps) {
@@ -124,7 +135,7 @@ class ErreursEtEnTetesServeurReelTest {
         assertEnTetesDeSecurite(reponse.enTetes(), "multipart sans frontiere");
     }
 
-    /** Tomcat lit ce contenu comme un multipart vide : c'est la route, qui attend du JSON, qui le refuse. */
+    /** La connexion n'accepte qu'un formulaire : même avec une session, un multipart y est refusé. */
     @Test
     void cs08_contenuQuiNEstPasDuMultipartSurUneRouteJsonDonne415Generique() {
         Reponse reponse = envoyerMultipartAvecSession("/api/connexion", "multipart/form-data; boundary=x", "ceci n'est pas un multipart");
@@ -145,7 +156,7 @@ class ErreursEtEnTetesServeurReelTest {
 
     @Test
     void cs08_corpsJsonAuDelaDeLaLimiteDonne413() {
-        Reponse reponse = client().appelAvecJeton("POST", "/api/connexion", "{\"motDePasse\":\"" + "x".repeat(70_000) + "\"}");
+        Reponse reponse = connecte().appelAvecJeton("POST", "/api/essai/json", "{\"valeur\":\"" + "x".repeat(70_000) + "\"}");
 
         assertThat(reponse.statut()).isEqualTo(413);
         assertThat(reponse.json()).isEqualTo(Map.of("erreur", "La requête est trop volumineuse.", "code", "TAILLE_EXCESSIVE"));
@@ -154,35 +165,77 @@ class ErreursEtEnTetesServeurReelTest {
 
     @Test
     void cs08_corpsJsonALaLimiteResteTraite() {
-        String debut = "{\"motDePasse\":\"faux\",\"bourrage\":\"";
+        String debut = "{\"valeur\":\"v\",\"bourrage\":\"";
         String fin = "\"}";
         String corps = debut + "x".repeat(64 * 1024 - debut.length() - fin.length()) + fin;
+        ClientEssai client = connecte();
 
-        Reponse aLaLimite = client().appelAvecJeton("POST", "/api/connexion", corps);
+        assertThat(client.appelAvecJeton("POST", "/api/essai/json", corps).statut()).isEqualTo(200);
+
+        Reponse auDela = client.appelAvecJeton("POST", "/api/essai/json", corps.replace("\"}", "x\"}"));
+        assertThat(auDela.statut()).isEqualTo(413);
+        assertThat(auDela.json()).isEqualTo(Map.of("erreur", "La requête est trop volumineuse.", "code", "TAILLE_EXCESSIVE"));
+    }
+
+    @Test
+    void cs08_formulaireDeConnexionBorneA64Ko() {
+        String debut = "motDePasse=faux&bourrage=";
+        String corps = debut + "x".repeat(64 * 1024 - debut.length());
+        ClientEssai client = client();
+        client.get("/actuator/health");
+
+        Reponse aLaLimite = client.envoyer(client.requeteConnexion("x").POST(HttpRequest.BodyPublishers.ofString(corps)).build());
         assertThat(aLaLimite.statut()).isEqualTo(401);
         assertThat(aLaLimite.json()).isEqualTo(Map.of("erreur", "Identifiants invalides.", "code", "IDENTIFIANTS_INVALIDES"));
 
-        Reponse auDela = client().appelAvecJeton("POST", "/api/connexion", corps.replace("\"}", "x\"}"));
+        Reponse auDela = client.envoyer(client.requeteConnexion("x").POST(HttpRequest.BodyPublishers.ofString(corps + "x")).build());
         assertThat(auDela.statut()).isEqualTo(413);
         assertThat(auDela.json()).isEqualTo(Map.of("erreur", "La requête est trop volumineuse.", "code", "TAILLE_EXCESSIVE"));
     }
 
     @Test
     void cs08_corpsJsonSansLongueurDeclareeEstAussiBorne() {
-        ClientBrut.Reponse reponse = ClientBrut.envoyer(port, jetonEtCorpsFragmente());
+        ClientEssai client = connecte();
+        String morceau = "x".repeat(70_000);
+        ClientBrut.Reponse reponse = ClientBrut.envoyer(port, "POST /api/essai/json HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n"
+                + "Content-Type: application/json\r\nX-XSRF-TOKEN: " + client.cookie("XSRF-TOKEN")
+                + "\r\nCookie: XSRF-TOKEN=" + client.cookie("XSRF-TOKEN") + "; JSESSIONID=" + client.cookie("JSESSIONID") + "\r\n"
+                + "Transfer-Encoding: chunked\r\n\r\n" + Integer.toHexString(morceau.length()) + "\r\n" + morceau + "\r\n0\r\n\r\n");
 
         assertThat(reponse.statut()).isEqualTo(413);
         assertThat(reponse.json()).isEqualTo(Map.of("erreur", "La requête est trop volumineuse.", "code", "TAILLE_EXCESSIVE"));
     }
 
-    private String jetonEtCorpsFragmente() {
+    /** Sans longueur déclarée, la borne ne peut se vérifier sans lire : la connexion refuse, et rien n'est compté. */
+    @Test
+    void cs08_formulaireDeConnexionSansLongueurDeclareeEstRefuse() {
         String jeton = UUID.randomUUID().toString();
-        String morceau = "x".repeat(70_000);
-        String corps = "{\"motDePasse\":\"" + morceau + "\"}";
-        return "POST /api/connexion HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n"
-                + "Content-Type: application/json\r\nX-XSRF-TOKEN: " + jeton + "\r\nCookie: XSRF-TOKEN=" + jeton + "\r\n"
-                + "Transfer-Encoding: chunked\r\n\r\n"
-                + Integer.toHexString(corps.length()) + "\r\n" + corps + "\r\n0\r\n\r\n";
+        ClientBrut.Reponse reponse = ClientBrut.envoyerSansLaFinDuCorps(port, "POST /api/connexion HTTP/1.1\r\nHost: localhost\r\n"
+                + "Content-Type: application/x-www-form-urlencoded\r\nX-XSRF-TOKEN: " + jeton + "\r\nCookie: XSRF-TOKEN=" + jeton + "\r\n"
+                + "Transfer-Encoding: chunked\r\n\r\n10000\r\nmotDePasse=", 5_000);
+
+        assertThat(reponse.statut()).isEqualTo(413);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "La requête est trop volumineuse.", "code", "TAILLE_EXCESSIVE"));
+    }
+
+    /** Un multipart annoncé sur une ressource publique : Tomcat le lirait dès qu'un composant demande les paramètres. */
+    @ParameterizedTest
+    @ValueSource(strings = {"/actuator/health", "/", "/style.css"})
+    void cs08_unMultipartSansSessionSurUneRessourcePubliqueEstRefuseSansEtreLu(String chemin) {
+        String jeton = UUID.randomUUID().toString();
+        ClientBrut.Reponse reponse = ClientBrut.envoyerSansLaFinDuCorps(port, "GET " + chemin + " HTTP/1.1\r\nHost: localhost\r\n"
+                + "Content-Type: multipart/form-data; boundary=x\r\nContent-Length: 56000000\r\n\r\n--x\r\n", 5_000);
+
+        assertThat(reponse.statut()).isEqualTo(415);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Format non accepté.", "code", "FORMAT_NON_ACCEPTE"));
+    }
+
+    @Test
+    void cs08_unJsonSurLaConnexionDonne415() {
+        Reponse reponse = client().appelAvecJeton("POST", "/api/connexion", "{\"motDePasse\":\"faux\"}");
+
+        assertThat(reponse.statut()).isEqualTo(415);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Format non accepté.", "code", "FORMAT_NON_ACCEPTE"));
     }
 
     /**

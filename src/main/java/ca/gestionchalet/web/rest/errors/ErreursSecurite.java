@@ -8,12 +8,13 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 
 /** Refus de la chaîne de sécurité, au format d'erreur de l'API. */
-public final class ErreursSecurite implements AuthenticationEntryPoint, AccessDeniedHandler {
+public final class ErreursSecurite implements AuthenticationEntryPoint, AccessDeniedHandler, AuthenticationFailureHandler {
 
-    /** Seule route ouverte sans session : son refus CSRF reste un refus CSRF. Partout ailleurs, l'absence de session prime. */
-    private static final String ROUTE_CONNEXION = "/api/connexion";
+    /** Seule route ouverte sans session, en POST : son refus CSRF reste un refus CSRF. Partout ailleurs, l'absence de session prime. */
+    public static final String ROUTE_CONNEXION = "/api/connexion";
 
     @Override
     public void commence(HttpServletRequest requete, HttpServletResponse reponse, AuthenticationException cause) throws IOException {
@@ -23,7 +24,12 @@ public final class ErreursSecurite implements AuthenticationEntryPoint, AccessDe
     @Override
     public void handle(HttpServletRequest requete, HttpServletResponse reponse, AccessDeniedException cause) throws IOException {
         boolean sansSession = SecurityContextHolder.getContext().getAuthentication() == null;
-        boolean connexion = ROUTE_CONNEXION.equals(requete.getRequestURI());
+        boolean connexion = "POST".equals(requete.getMethod()) && ROUTE_CONNEXION.equals(requete.getRequestURI());
         ReponsesErreur.ecrire(reponse, sansSession && !connexion ? CodeErreur.NON_AUTHENTIFIE : CodeErreur.CSRF_INVALIDE);
+    }
+
+    @Override
+    public void onAuthenticationFailure(HttpServletRequest requete, HttpServletResponse reponse, AuthenticationException cause) throws IOException {
+        ReponsesErreur.ecrire(reponse, CodeErreur.IDENTIFIANTS_INVALIDES);
     }
 }

@@ -17,7 +17,8 @@ class ValeursParDefautTest {
     @CsvSource({
         "recus.securite.echecs-avant-blocage, 5",
         "recus.securite.duree-blocage, 15m",
-        "recus.securite.inactivite-session, 8h",
+        "server.servlet.session.timeout, 8h",
+        "server.tomcat.max-http-form-post-size, 64KB",
         "recus.securite.cookie-securise, true",
         "server.forward-headers-strategy, none",
         "spring.mvc.formcontent.filter.enabled, false",

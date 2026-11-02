@@ -30,7 +30,7 @@ class LimiteMultipartServeurReelTest {
         ClientEssai client = new ClientEssai(port, "source-multipart");
         assertThat(client.connecter(ConfigurationEssai.MOT_DE_PASSE).statut()).isEqualTo(204);
 
-        Reponse reponse = client.envoyer(client.requete("/api/essai/mutation/1")
+        Reponse reponse = client.envoyer(client.requete("/api/essai/photos")
                 .header("Content-Type", "multipart/form-data; boundary=x")
                 .header("X-XSRF-TOKEN", client.cookie("XSRF-TOKEN"))
                 .POST(HttpRequest.BodyPublishers.ofString(multipart(2048)))

@@ -21,6 +21,14 @@
     <Class name="ca.gestionchalet.config.CorpsBorneFilter"/>
     <Bug pattern="SERVLET_CONTENT_TYPE"/>
   </Match>
+  <!-- Le type et l'absence de paramètres d'URL servent seulement à refuser la requête avant formLogin ; aucune valeur n'est recopiée. -->
+  <Match>
+    <Class name="ca.gestionchalet.config.GardeConnexionFilter"/>
+    <Or>
+      <Bug pattern="SERVLET_CONTENT_TYPE"/>
+      <Bug pattern="SERVLET_QUERY_STRING"/>
+    </Or>
+  </Match>
   <!-- Seuls sont journalisés un nom de classe et une trame de pile, jamais une donnée de la requête ni le message de l'exception. -->
   <Match>
     <Class name="ca.gestionchalet.web.rest.errors.GestionnaireErreurs"/>

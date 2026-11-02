@@ -13,17 +13,25 @@ import org.springframework.test.context.TestPropertySource;
 
 /** La durée d'inactivité vient de la configuration ; le serveur réel fait expirer la session. */
 @ServeurReelTest
-@TestPropertySource(properties = "recus.securite.inactivite-session=2s")
+@TestPropertySource(properties = "server.servlet.session.timeout=1m")
 class InactiviteSessionServeurReelTest {
 
     @LocalServerPort
     int port;
 
     @Test
-    void cs06_auDelaDeLaDureeConfigureeLAncienCookieDonne401() throws InterruptedException {
+    void cs06_laSessionRecoitLaDureeConfiguree() {
+        ClientEssai client = new ClientEssai(port, "source-duree");
+        client.connecter(ConfigurationEssai.MOT_DE_PASSE);
+
+        assertThat(client.get("/api/essai/inactivite").corps()).isEqualTo("60");
+    }
+
+    @Test
+    void cs06_uneSessionExpireeDonne401() throws InterruptedException {
         ClientEssai client = new ClientEssai(port, "source-inactivite");
         client.connecter(ConfigurationEssai.MOT_DE_PASSE);
-        assertThat(client.get("/api/essai/session").statut()).isEqualTo(200);
+        assertThat(client.get("/api/essai/expirer-bientot").statut()).isEqualTo(200);
 
         Thread.sleep(2100);
 

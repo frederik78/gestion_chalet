@@ -3,16 +3,22 @@ package ca.gestionchalet;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import ca.gestionchalet.security.CompteLocal;
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 
 /** L'application complète refuse de démarrer sans condensé fort, et n'a aucun compte par défaut. */
+@ExtendWith(OutputCaptureExtension.class)
 class DemarrageSansCondenseTest {
 
     private static ConfigurableApplicationContext demarrer(String... proprietes) {
@@ -36,11 +42,14 @@ class DemarrageSansCondenseTest {
                 .rootCause().hasMessageContaining("Condensé du mot de passe absent ou trop faible");
     }
 
+    /** Le seul compte est le compte local : Spring Boot n'en génère aucun, et n'affiche donc aucun mot de passe. */
     @Test
-    void cs07_aucunCompteParDefautAvecUnCondenseValide() {
+    void cs07_aucunCompteParDefautAvecUnCondenseValide(CapturedOutput journal) {
         String condense = new BCryptPasswordEncoder(10).encode("secret");
         try (ConfigurableApplicationContext contexte = demarrer("recus.securite.condense-mot-de-passe=" + condense)) {
-            assertThat(contexte.getBeansOfType(UserDetailsService.class)).isEmpty();
+            assertThat(contexte.getBeansOfType(UserDetailsService.class).values()).singleElement().isInstanceOf(CompteLocal.class);
+            assertThat(contexte.getBeanNamesForType(InMemoryUserDetailsManager.class)).isEmpty();
+            assertThat(journal.getOut()).doesNotContain("generated security password");
         }
     }
 }

@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import ca.gestionchalet.support.ClientEssai;
 import ca.gestionchalet.support.ClientEssai.Reponse;
 import ca.gestionchalet.support.ConfigurationEssai;
-import java.net.http.HttpRequest;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -38,11 +37,8 @@ class SourceReelleServeurReelTest {
         }
         assertThat(client.connecter("faux").statut()).isEqualTo(429);
 
-        Reponse reponse = client.envoyer(client.requete("/api/connexion")
-                .header("Content-Type", "application/json")
-                .header("X-XSRF-TOKEN", client.cookie("XSRF-TOKEN"))
+        Reponse reponse = client.envoyer(client.requeteConnexion(ConfigurationEssai.MOT_DE_PASSE)
                 .header(enTete, valeur)
-                .POST(HttpRequest.BodyPublishers.ofString("{\"motDePasse\":\"" + ConfigurationEssai.MOT_DE_PASSE + "\"}"))
                 .build());
 
         assertThat(reponse.statut()).isEqualTo(429);

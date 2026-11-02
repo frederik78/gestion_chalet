@@ -1,9 +1,6 @@
 spring:
   application:
     name: gestion-chalet
-  # Aucun compte généré : le seul compte est le compte local (CS07).
-  autoconfigure:
-    exclude: org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
   servlet:
     multipart:
       max-file-size: 15MB
@@ -31,8 +28,12 @@ server:
   forward-headers-strategy: none
   mime-mappings:
     webmanifest: application/manifest+json
+  tomcat:
+    # Le formulaire de connexion est lu par Tomcat, avant CorpsBorneFilter (2 Mo par défaut).
+    max-http-form-post-size: 64KB
   servlet:
     session:
+      timeout: 8h
       tracking-modes: cookie
       cookie:
         http-only: true
@@ -60,7 +61,6 @@ recus:
     echecs-avant-blocage: 5
     duree-blocage: 15m
     sources-suivies-max: 10000
-    inactivite-session: 8h
     corps-requete-max: 64KB
     # Vrai partout, sauf sur le poste local en HTTP (RECUS_SECURITE_COOKIE_SECURISE=false).
     cookie-securise: true

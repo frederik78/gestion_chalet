@@ -86,27 +86,20 @@ class ConnexionServeurReelTest {
     }
 
     @Test
-    void cs04_motDePasseAbsentDonne400Validation() {
-        Reponse reponse = client().appelAvecJeton("POST", "/api/connexion", "{}");
+    void cs04_motDePasseAbsentDonne401EtCompteUneTentative() {
+        ClientEssai client = client();
+        client.get("/actuator/health");
 
-        assertThat(reponse.statut()).isEqualTo(400);
-        assertThat(reponse.json()).isEqualTo(Map.of(
-                "erreur", "Certains champs sont invalides.",
-                "code", "VALIDATION",
-                "champs", List.of(Map.of("champ", "motDePasse", "code", "OBLIGATOIRE"))));
+        Reponse reponse = client.envoyer(client.requeteConnexion("x")
+                .POST(HttpRequest.BodyPublishers.ofString("autre=1")).build());
+
+        assertThat(reponse.statut()).isEqualTo(401);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Identifiants invalides.", "code", "IDENTIFIANTS_INVALIDES"));
     }
 
     @Test
-    void cs04_motDePasseBorneA1000Caracteres() {
-        assertThat(client().connecter("x".repeat(1000)).statut()).isEqualTo(401);
-
-        Reponse trop = client().connecter("x".repeat(1001));
-
-        assertThat(trop.statut()).isEqualTo(400);
-        assertThat(trop.json()).isEqualTo(Map.of(
-                "erreur", "Certains champs sont invalides.",
-                "code", "VALIDATION",
-                "champs", List.of(Map.of("champ", "motDePasse", "code", "BORNE"))));
+    void cs04_unLongMotDePasseEstRefuseSansErreur() {
+        assertThat(client().connecter("x".repeat(1001)).statut()).isEqualTo(401);
     }
 
     private ClientEssai clientBloque() {
@@ -154,11 +147,8 @@ class ConnexionServeurReelTest {
         ClientEssai client = clientBloque();
         client.get("/actuator/health");
 
-        Reponse reponse = client.envoyer(client.requete("/api/connexion")
-                .header("Content-Type", "application/json")
-                .header("X-XSRF-TOKEN", client.cookie("XSRF-TOKEN"))
+        Reponse reponse = client.envoyer(client.requeteConnexion(ConfigurationEssai.MOT_DE_PASSE)
                 .header("X-Forwarded-For", "203.0.113.9")
-                .POST(HttpRequest.BodyPublishers.ofString("{\"motDePasse\":\"" + ConfigurationEssai.MOT_DE_PASSE + "\"}"))
                 .build());
 
         assertThat(reponse.statut()).isEqualTo(429);
@@ -175,11 +165,19 @@ class ConnexionServeurReelTest {
         Reponse deconnexion = client.deconnecter();
 
         assertThat(deconnexion.statut()).isEqualTo(204);
-        assertThat(deconnexion.setCookie("JSESSIONID").getFirst()).contains("Max-Age=0", "HttpOnly", "SameSite=Lax", "Secure");
+        assertThat(deconnexion.setCookie("JSESSIONID")).containsExactly("JSESSIONID=; Expires=Thu, 01 Jan 1970 00:00:10 GMT; Path=/; Secure; HttpOnly; SameSite=Lax");
         assertThat(client.cookie("JSESSIONID")).isNull();
         Reponse rejeu = ancien.get("/api/essai/session");
         assertThat(rejeu.statut()).isEqualTo(401);
         assertThat(rejeu.json()).isEqualTo(Map.of("erreur", "Authentification requise.", "code", "NON_AUTHENTIFIE"));
+    }
+
+    @Test
+    void cs06_uneDeconnexionSansSessionDonne204() {
+        Reponse reponse = client().deconnecter();
+
+        assertThat(reponse.statut()).isEqualTo(204);
+        assertThat(reponse.corps()).isEmpty();
     }
 
     /** bcrypt dure plusieurs dizaines de millisecondes : c'est la fenêtre dans laquelle des requêtes simultanées échapperaient au compte. */
@@ -190,11 +188,7 @@ class ConnexionServeurReelTest {
         client.get("/actuator/health");
         List<HttpRequest> requetes = new ArrayList<>();
         for (int i = 0; i < simultanees; i++) {
-            requetes.add(client.requete("/api/connexion")
-                    .header("Content-Type", "application/json")
-                    .header("X-XSRF-TOKEN", client.cookie("XSRF-TOKEN"))
-                    .POST(HttpRequest.BodyPublishers.ofString("{\"motDePasse\":\"faux\"}"))
-                    .build());
+            requetes.add(client.requeteConnexion("faux").build());
         }
 
         CountDownLatch depart = new CountDownLatch(1);
