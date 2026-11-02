@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 
-/** Ce qui s'applique à toute réponse, y compris avant la chaîne de sécurité et avant l'application. */
+/** Ce qui s'applique à toute réponse, y compris avant la chaîne de sécurité et avant l'application. CORS et console H2 de JHipster exclus : même origine, et pas de H2. */
 @Configuration
 public class WebConfigurer {
 

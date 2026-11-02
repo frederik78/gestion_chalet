@@ -169,7 +169,7 @@ class ErreursEtEnTetesServeurReelTest {
         assertThat(reponse.enTete("Allow")).isNull();
     }
 
-    /** La route existe, en POST seulement : le 405 de Spring MVC devient un 404 générique, sans révéler les méthodes permises. */
+    /** La route existe, en POST seulement : le 405 de Spring MVC devient un 404 générique, sans en-tête Allow. */
     @Test
     void cs08_uneMethodeNonPermiseSurUneRouteExistanteDonne404SansAllow() {
         Reponse reponse = connecte().appelAvecJeton("PUT", "/api/essai/json", "{}");

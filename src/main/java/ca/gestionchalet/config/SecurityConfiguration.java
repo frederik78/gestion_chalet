@@ -74,7 +74,7 @@ public class SecurityConfiguration {
                     limiteur.reinitialiser(request.getRemoteAddr());
                     response.setStatus(HttpStatus.NO_CONTENT.value());
                 })
-                .failureHandler(erreurs)) // sans permitAll : il ouvrirait toutes les méthodes sur "/" et la connexion (404 au lieu de 401, cs01)
+                .failureHandler(erreurs)) // sans permitAll : il ouvrirait toutes les méthodes sur "/" et la connexion, contre le refus par défaut (ADR 0001)
             .logout(logout -> logout
                 .logoutUrl("/api/deconnexion")
                 .deleteCookies("JSESSIONID")
