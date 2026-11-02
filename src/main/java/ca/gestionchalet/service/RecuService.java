@@ -16,6 +16,7 @@ import java.io.UncheckedIOException;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -40,6 +41,11 @@ public class RecuService {
     public RecuValidationResult validate(RecuValidationDTO validation, List<MultipartFile> files) {
         if (files == null || files.isEmpty() || files.stream().anyMatch(MultipartFile::isEmpty)) {
             throw new MissingPhotoException();
+        }
+        // Le lien unique vers la base (hikari.maximum-pool-size) fait attendre un envoi simultané ici : il voit le reçu du premier.
+        Optional<Recu> known = recuRepository.findByCleIdempotence(validation.cleIdempotence());
+        if (known.isPresent()) {
+            return new RecuValidationResult(recuMapper.toDto(known.get()), false);
         }
         List<Photo> photos = new ArrayList<>();
         for (MultipartFile file : files) {

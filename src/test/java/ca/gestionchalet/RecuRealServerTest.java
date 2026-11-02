@@ -19,6 +19,10 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -224,6 +228,39 @@ class RecuRealServerTest {
         assertThat(validerAvec("numeroInscriptionTps", "1".repeat(30)).statut()).isEqualTo(201);
         assertThat(validerAvec("numeroInscriptionTps", "1".repeat(31)).json()).isEqualTo(erreurDeChamp("numeroInscriptionTps", "BORNE"));
         assertThat(validerAvec("numeroInscriptionTvq", "12<3").json()).isEqualTo(erreurDeChamp("numeroInscriptionTvq", "FORMAT"));
+    }
+
+    @Test
+    void ca18_unRenvoiAvecLaMemeCleRendLeMemeRecuSansRienAjouter() throws IOException {
+        Map<String, Object> corps = RecuRequests.corps(RecuRequests.valeurs());
+        Reponse premier = RecuRequests.valider(client, corps, RecuRequests.png());
+        assertThat(premier.statut()).isEqualTo(201);
+        Etat apres = etat();
+
+        Reponse second = RecuRequests.valider(client, corps, RecuRequests.png());
+
+        assertThat(second.statut()).isEqualTo(200);
+        assertThat(second.json()).isEqualTo(premier.json());
+        assertThat(etat()).isEqualTo(apres);
+    }
+
+    @Test
+    void ca18_deuxEnvoisSimultanesNeCreentQuUnSeulRecu() throws IOException {
+        Map<String, Object> corps = RecuRequests.corps(RecuRequests.valeurs());
+        byte[] photo = RecuRequests.png(400);
+        Etat avant = etat();
+
+        List<Reponse> reponses;
+        try (ExecutorService fils = Executors.newFixedThreadPool(4)) {
+            List<CompletableFuture<Reponse>> envois = IntStream.range(0, 4)
+                    .mapToObj(i -> CompletableFuture.supplyAsync(() -> RecuRequests.valider(client, corps, photo), fils))
+                    .toList();
+            reponses = envois.stream().map(CompletableFuture::join).toList();
+        }
+
+        assertThat(reponses).extracting(Reponse::statut).containsExactlyInAnyOrder(201, 200, 200, 200);
+        assertThat(reponses).extracting(reponse -> reponse.json().get("id")).containsOnly(reponses.getFirst().json().get("id"));
+        assertThat(etat()).isEqualTo(new Etat(avant.recus() + 1, avant.photos() + 1, avant.fichiers() + 1));
     }
 
     @Test
