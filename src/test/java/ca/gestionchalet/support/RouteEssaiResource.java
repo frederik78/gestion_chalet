@@ -45,6 +45,19 @@ public class RouteEssaiResource {
         return "valide";
     }
 
+    /** Sa sérialisation échoue : la panne survient après la route, dans l'écriture de la réponse. */
+    @GetMapping("/non-serialisable")
+    NonSerialisable nonSerialisable() {
+        return new NonSerialisable();
+    }
+
+    public static final class NonSerialisable {
+
+        public String getValeur() {
+            throw new IllegalStateException(DETAIL_SECRET);
+        }
+    }
+
     /** Une route à corps JSON validé : la borne de 64 Ko et les erreurs de lecture et de validation s'y vérifient. */
     @PostMapping("/json")
     void json(@Valid @RequestBody CorpsEssai corps) {

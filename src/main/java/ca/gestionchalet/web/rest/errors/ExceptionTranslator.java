@@ -5,11 +5,11 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
-import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -26,10 +26,13 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
 
     private static final Logger LOG = LoggerFactory.getLogger(ExceptionTranslator.class);
 
-    /** Toutes les exceptions de Spring MVC passent ici : seul leur statut compte, et aucun de leurs en-têtes ({@code Allow}) n'est repris. */
+    /** Point de sortie unique : seul le statut compte, aucun en-tête d'exception ({@code Allow}) n'est repris, et une panne est journalisée sans son message. */
     @Override
     protected ResponseEntity<Object> handleExceptionInternal(Exception ex, Object body, HttpHeaders headers, HttpStatusCode statusCode, WebRequest request) {
         CodeErreur code = CodeErreur.pourStatut(statusCode.value());
+        if (code == CodeErreur.ERREUR_INTERNE) {
+            LOG.error("Erreur interne : {} en {}", ex.getClass().getName(), premiereTrame(ex));
+        }
         HttpHeaders json = new HttpHeaders();
         json.setContentType(MediaType.APPLICATION_JSON);
         Object corps = body instanceof ErreurDTO ? body : ErreurDTO.de(code);
@@ -45,18 +48,13 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler(MultipartException.class)
-    public ResponseEntity<ErreurDTO> handleMultipartException() {
-        return reponse(CodeErreur.REQUETE_INVALIDE);
+    public ResponseEntity<Object> handleMultipartException(MultipartException ex, WebRequest request) {
+        return handleExceptionInternal(ex, null, new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
     }
 
-    /** Les autres exceptions de Spring portent leur statut ; tout le reste est une panne, journalisée sans son message. */
     @ExceptionHandler
-    public ResponseEntity<ErreurDTO> handleAnyException(Exception ex) {
-        if (ex instanceof ErrorResponse reponseFramework) {
-            return reponse(CodeErreur.pourStatut(reponseFramework.getStatusCode().value()));
-        }
-        LOG.error("Erreur interne : {} en {}", ex.getClass().getName(), premiereTrame(ex));
-        return reponse(CodeErreur.ERREUR_INTERNE);
+    public ResponseEntity<Object> handleAnyException(Exception ex, WebRequest request) {
+        return handleExceptionInternal(ex, null, new HttpHeaders(), HttpStatus.INTERNAL_SERVER_ERROR, request);
     }
 
     private static String premiereTrame(Exception ex) {
@@ -71,9 +69,5 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
             default -> "FORMAT";
         };
         return new ChampInvalideDTO(erreur.getField(), code);
-    }
-
-    private static ResponseEntity<ErreurDTO> reponse(CodeErreur code) {
-        return ResponseEntity.status(code.statut()).contentType(MediaType.APPLICATION_JSON).body(ErreurDTO.de(code));
     }
 }

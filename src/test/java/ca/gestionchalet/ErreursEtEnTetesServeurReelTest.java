@@ -6,15 +6,19 @@ import ca.gestionchalet.support.ClientBrut;
 import ca.gestionchalet.support.ClientEssai;
 import ca.gestionchalet.support.ClientEssai.Reponse;
 import ca.gestionchalet.support.ConfigurationEssai;
+import ca.gestionchalet.support.RouteEssaiResource;
 import ca.gestionchalet.support.ServeurReelTest;
 import java.net.http.HttpRequest;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
 /** Corps d'erreur et en-têtes de sécurité sur serveur réel, y compris pour ce que le framework ou Tomcat rejette avant l'application. */
@@ -57,6 +61,17 @@ class ErreursEtEnTetesServeurReelTest {
         assertThat(reponse.statut()).isEqualTo(500);
         assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Une erreur interne est survenue.", "code", "ERREUR_INTERNE"));
         assertEnTetesDeSecurite(reponse.enTetes(), "panne");
+    }
+
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void cs08_unePanneDeSerialisationDonne500EtUneLigneDeJournal(CapturedOutput journal) {
+        Reponse reponse = connecte().get("/api/essai/non-serialisable");
+
+        assertThat(reponse.statut()).isEqualTo(500);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Une erreur interne est survenue.", "code", "ERREUR_INTERNE"));
+        assertThat(journal.getOut()).contains("Erreur interne : org.springframework.http.converter.HttpMessageNotWritableException")
+                .doesNotContain(RouteEssaiResource.DETAIL_SECRET);
     }
 
     @Test
