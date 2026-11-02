@@ -18,32 +18,32 @@ import org.springframework.stereotype.Component;
 public final class DomainUserDetailsService implements UserDetailsService {
 
     private static final Pattern BCRYPT = Pattern.compile("\\A\\$2[aby]\\$(\\d{2})\\$[./0-9A-Za-z]{53}\\z");
-    private static final int COUT_MINIMAL = 10;
-    private static final int COUT_MAXIMAL = 31;
-    private static final String PROPRIETAIRE = "proprietaire";
+    private static final int MIN_COST = 10;
+    private static final int MAX_COST = 31;
+    private static final String OWNER = "proprietaire";
 
-    private final String condense;
+    private final String passwordHash;
 
-    public DomainUserDetailsService(@Value("${recus.securite.condense-mot-de-passe:}") String condense) {
-        if (condense == null || !estFort(condense)) {
+    public DomainUserDetailsService(@Value("${recus.securite.condense-mot-de-passe:}") String passwordHash) {
+        if (passwordHash == null || !isStrong(passwordHash)) {
             throw new IllegalStateException("Condensé du mot de passe absent ou trop faible : bcrypt de coût "
-                    + COUT_MINIMAL + " à " + COUT_MAXIMAL + " requis (recus.securite.condense-mot-de-passe).");
+                    + MIN_COST + " à " + MAX_COST + " requis (recus.securite.condense-mot-de-passe).");
         }
-        this.condense = condense;
+        this.passwordHash = passwordHash;
     }
 
-    private static boolean estFort(String condense) {
-        Matcher format = BCRYPT.matcher(condense);
+    private static boolean isStrong(String passwordHash) {
+        Matcher format = BCRYPT.matcher(passwordHash);
         if (!format.matches()) {
             return false;
         }
-        int cout = Integer.parseInt(format.group(1));
-        return cout >= COUT_MINIMAL && cout <= COUT_MAXIMAL;
+        int cost = Integer.parseInt(format.group(1));
+        return cost >= MIN_COST && cost <= MAX_COST;
     }
 
     /** Un nouvel objet à chaque appel : Spring Security efface le mot de passe de celui qu'il a reçu. */
     @Override
-    public UserDetails loadUserByUsername(String nomIgnore) {
-        return new User(PROPRIETAIRE, condense, List.of());
+    public UserDetails loadUserByUsername(String ignoredName) {
+        return new User(OWNER, passwordHash, List.of());
     }
 }

@@ -1,6 +1,6 @@
 package ca.gestionchalet.config;
 
-import ca.gestionchalet.security.LimiteurConnexion;
+import ca.gestionchalet.security.LoginRateLimiter;
 import ca.gestionchalet.web.rest.errors.SecurityErrorHandler;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
@@ -54,7 +54,7 @@ public class SecurityConfiguration {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, LimiteurConnexion limiteur) {
+    public SecurityFilterChain filterChain(HttpSecurity http, LoginRateLimiter limiteur) {
         RequestMatcher connexion = PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, ROUTE_CONNEXION);
         SecurityErrorHandler erreurs = new SecurityErrorHandler(connexion);
         CookieCsrfTokenRepository jetons = CookieCsrfTokenRepository.withHttpOnlyFalse();
@@ -71,7 +71,7 @@ public class SecurityConfiguration {
                 .loginProcessingUrl(ROUTE_CONNEXION)
                 .passwordParameter("motDePasse")
                 .successHandler((request, response, authentication) -> {
-                    limiteur.reinitialiser(request.getRemoteAddr());
+                    limiteur.reset(request.getRemoteAddr());
                     response.setStatus(HttpStatus.NO_CONTENT.value());
                 })
                 .failureHandler(erreurs)) // sans permitAll : il ouvrirait toutes les méthodes sur "/" et la connexion, contre le refus par défaut (ADR 0001)
@@ -94,8 +94,8 @@ public class SecurityConfiguration {
     }
 
     @Bean
-    LimiteurConnexion limiteurConnexion(Clock horloge) {
-        return new LimiteurConnexion(securiteProperties.echecsAvantBlocage(), securiteProperties.dureeBlocage(), securiteProperties.sourcesSuiviesMax(), horloge);
+    LoginRateLimiter limiteurConnexion(Clock horloge) {
+        return new LoginRateLimiter(securiteProperties.echecsAvantBlocage(), securiteProperties.dureeBlocage(), securiteProperties.sourcesSuiviesMax(), horloge);
     }
 
     /**

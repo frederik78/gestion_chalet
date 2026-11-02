@@ -1,6 +1,6 @@
 package ca.gestionchalet.config;
 
-import ca.gestionchalet.security.LimiteurConnexion;
+import ca.gestionchalet.security.LoginRateLimiter;
 import ca.gestionchalet.web.rest.errors.ErrorCode;
 import ca.gestionchalet.web.rest.errors.ErrorResponses;
 import jakarta.servlet.FilterChain;
@@ -24,10 +24,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
 final class GardeConnexionFilter extends OncePerRequestFilter {
 
     private final RequestMatcher connexion;
-    private final LimiteurConnexion limiteur;
+    private final LoginRateLimiter limiteur;
     private final long limite;
 
-    GardeConnexionFilter(RequestMatcher connexion, LimiteurConnexion limiteur, long limite) {
+    GardeConnexionFilter(RequestMatcher connexion, LoginRateLimiter limiteur, long limite) {
         this.connexion = connexion;
         this.limiteur = limiteur;
         this.limite = limite;
@@ -49,7 +49,7 @@ final class GardeConnexionFilter extends OncePerRequestFilter {
         } else if (longueur < 0 || longueur > limite) {
             ErrorResponses.write(reponse, ErrorCode.TAILLE_EXCESSIVE);
         } else {
-            Optional<Duration> restant = limiteur.reserver(requete.getRemoteAddr());
+            Optional<Duration> restant = limiteur.reserve(requete.getRemoteAddr());
             if (restant.isPresent()) {
                 reponse.setHeader(HttpHeaders.RETRY_AFTER, Long.toString(restant.get().plusNanos(999_999_999L).toSeconds()));
                 ErrorResponses.write(reponse, ErrorCode.TROP_DE_TENTATIVES);
