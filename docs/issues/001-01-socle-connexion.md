@@ -3,12 +3,12 @@ id: 001-01
 titre: Socle et connexion
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: En cours
+statut: Fait
 depend_de: []
 criteres: [CS01, CS02, CS04, CS05, CS06, CS07, CS08, CS09, CS28, CA83]
 branche: feat/001-01-socle-connexion
-commits: []
-revue:
+commits: [401429a..ac47c30]
+revue: docs/reviews/001-01.md
 ---
 
 ## Objectif
@@ -31,3 +31,30 @@ Tests rouges puis verts, `scripts/verify-clean.sh` à `VERIFY OK`, résultat de 
 
 ## Notes
 - 2026-11-01 : Besoin d'une clé d'API Anthropic pour l'essai réel. Si Spring AI ne convient pas, repli sur le SDK Java officiel derrière la même frontière (ADR 0001).
+- 2026-11-02 : Essai réel fait par l'utilisateur sur une photo, modèle `claude-haiku-5-5`, copie de 157 861 octets, sortie structurée. Date, fournisseur, montant avant taxes, TPS, TVQ, total, objet et type de dépense : présents et jugés bons par l'utilisateur. Le total égale la somme, et les taxes correspondent à 5 % et 9,975 %, au cent. Numéros d'inscription TPS et TVQ : `null`, non comparés au reçu. Spring AI est retenu. Les 3 autres photos n'ont pas été essayées.
+- 2026-11-02 : Revue : 8 itérations, approuvée. Limite de 5 atteinte sans approbation ; la correction de l'itération 6 et le renommage (7, 8) ont été accordés hors limite par l'utilisateur. Dernière vérification à ac47c30 : 230 tests, 0 échec, 0 SpotBugs, 10 critères. Dependency-Check non lancé (pas de `NVD_API_KEY`).
+
+### Écarts
+- TDD : un RED global par échec de compilation et quatre commits intermédiaires rouges sur SpotBugs à la première livraison ; `33a3e17` rouge, corrigé par `39c3aa1`. Historique non réécrit.
+- Écarts à JHipster et raisons : tableaux des rapports, `docs/reviews/001-01.md`. `@Component` reste sur `DomainUserDetailsService`, par décision de l'utilisateur. `formLogin.permitAll()` n'est pas repris (7 routes passeraient de 401 à 404 sans session). `loginPage("/")` et `logout.permitAll()` sont repris sans effet mesuré.
+
+### Pour 001-02
+- Une validation sans photo est refusée.
+- Une route ne doit pas appeler `getWriter()` avant de lever une exception sans réponse engagée : Tomcat journalise alors la trace avec le message de l'exception (itération 6, M1). À vérifier dès qu'une route porte un reçu.
+- À reprendre de JHipster : `CRLFLogConverter`, `LiquibaseConfiguration`, `AbstractAuditingEntity`, s'ils répondent à un critère.
+- Multipart réel à essayer de bout en bout.
+
+### Mineurs ouverts
+- `spotbugs-exclude.xml` : exclusion `CRLF_INJECTION_LOGS` sur toute une classe (itération 1, M2).
+- `tracking-modes: cookie` sans test (itération 1, M5).
+- Sur socket brute : `OPTIONS *` sans en-têtes de sécurité ; `GET / HTTP/9.9`, `CONNECT` et `Transfer-Encoding: gzip2` donnent 500 (itération 1, M6).
+- `InactiviteSession` : le `Thread.sleep` et l'assertion 200 qui le précède peuvent échouer sur une CI lente (itération 1, M9).
+- Lisibilité et doublons des utilitaires de test (itération 1, M10).
+- `ExceptionTranslator` : `@ResponseStatus(409)` et `AccessDeniedException` donnent 500, à reprendre avec `VERSION_PERIMEE` (itération 4, M3).
+- Après engagement, une exception de statut non 500 ne laisse aucune trace (itération 6, M2).
+- `@NotNull` sur `securite` sans test : le démarrage reste refusé sans lui, seul le message se dégrade (itération 8).
+- Famine des fils : reportée à NF-03, voir `docs/deploiement.md` (itération 3, M14).
+
+### Décisions en attente de l'utilisateur
+- PRD : inscrire la remise à zéro du compteur après une connexion réussie.
+- PRD : inscrire la règle 405 vers 404 dans le tableau des erreurs (CA72 ne la couvre pas seule).

@@ -12,7 +12,7 @@ Package racine : `ca.gestionchalet`, à plat.
 
 ## Commandes (toujours via le wrapper du build)
 - `./mvnw test` : tests
-- `./mvnw -B clean verify` : tests (dont tests d'architecture) + analyse statique de sécurité ; c'est exactement ce que lance la CI
+- `./mvnw -B verify` : tests (dont tests d'architecture) + analyse statique de sécurité ; c'est exactement ce que lance la CI
 - `scripts/verify-clean.sh` : la même vérification dans une copie propre du dépôt, hors IDE (à utiliser par les agents et chaque fois qu'un IDE est ouvert)
 - `scripts/criteres-sans-test.sh <issue>` : critères CA/CS d'une issue qu'aucun test ne mentionne
 - `scripts/couverture-prd.sh <prd>` : chaque critère du PRD est couvert par exactement une issue

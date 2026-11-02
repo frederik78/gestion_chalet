@@ -86,7 +86,7 @@ Modèle, seuils d'alerte (100 $, 500 $, 0,02 $), liste des types de dépense, co
 
 ### Tests
 - `domain/`, `service/` : tests unitaires ; l'entité se teste sans Spring ; collaborateurs doublés.
-- `web/rest/` : contrat JSON avec `@WebMvcTest` ; sécurité avec `SecurityConfiguration` importée, plus un test sur serveur réel, requêtes malformées comprises (`factory/LESSONS.md` n° 10).
+- `web/rest/` : contrat JSON et sécurité sur serveur réel (port aléatoire), requêtes malformées comprises (`factory/LESSONS.md` n° 10).
 - `repository/` : `@DataJpaTest` sur une base SQLite temporaire, schéma appliqué par Liquibase.
 - `client/` : implémentations testées sans service réel. Aucun test ne dépend d'un service externe.
 
