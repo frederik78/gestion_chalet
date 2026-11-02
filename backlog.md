@@ -61,6 +61,7 @@ Vue d'ensemble des besoins. Détail dans `docs/prd/`, suivi de la livraison dans
 | D-26 | 2026-11-01 | ADR 0001 accepté : structure JHipster à plat sans générateur, Spring AI 2.0.x pour appeler Claude, à confirmer par un essai réel en première issue, SDK officiel en repli | tous |
 | D-27 | 2026-11-01 | Issues indépendantes livrées en parallèle, jusqu'à 3 à la fois | F-01 |
 | D-28 | 2026-11-01 | Connexion façon JHipster : `formLogin` et `logout` de Spring Security, formulaire au lieu de JSON, déconnexion 204 même sans session | F-01 |
+| D-29 | 2026-11-02 | Connexion : pas de limite de 1 000 caractères sur le mot de passe ; cas limites acceptés (vide ou absent 401, JSON 415, paramètre d'URL 400, sans longueur déclarée 413, corps jamais terminé fermé à 60 s) | F-01 |
 
 ## À trancher
 
