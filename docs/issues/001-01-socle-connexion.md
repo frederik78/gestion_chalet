@@ -35,6 +35,7 @@ Tests rouges puis verts, `scripts/verify-clean.sh` à `VERIFY OK`, résultat de 
 - 2026-11-02 : Revue : 8 itérations, approuvée. Limite de 5 atteinte sans approbation ; la correction de l'itération 6 et le renommage (7, 8) ont été accordés hors limite par l'utilisateur. Dernière vérification à ac47c30 : 230 tests, 0 échec, 0 SpotBugs, 10 critères. Dependency-Check non lancé (pas de `NVD_API_KEY`).
 
 ### Écarts
+- Fusion locale dans `develop`, sans PR, à la demande de l'utilisateur ; CI verte sur le push de `develop` (run 41461982551). Dependency-Check n'a pas tourné (pas de `NVD_API_KEY`).
 - TDD : un RED global par échec de compilation et quatre commits intermédiaires rouges sur SpotBugs à la première livraison ; `33a3e17` rouge, corrigé par `39c3aa1`. Historique non réécrit.
 - Écarts à JHipster et raisons : tableaux des rapports, `docs/reviews/001-01.md`. `@Component` reste sur `DomainUserDetailsService`, par décision de l'utilisateur. `formLogin.permitAll()` n'est pas repris (7 routes passeraient de 401 à 404 sans session). `loginPage("/")` et `logout.permitAll()` sont repris sans effet mesuré.
 
