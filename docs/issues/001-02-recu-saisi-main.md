@@ -3,7 +3,7 @@ id: 001-02
 titre: Reçu saisi à la main
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: À faire
+statut: En cours
 depend_de: [001-01]
 criteres: [CA14, CA15, CA16, CA18, CA19, CA20, CA72, CA75, CA76, CA79, CA81, CS17, CS27]
 branche: feat/001-02-recu-saisi-main
