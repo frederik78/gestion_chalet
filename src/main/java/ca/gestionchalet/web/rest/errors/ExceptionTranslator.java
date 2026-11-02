@@ -86,7 +86,8 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
     private static InvalidFieldDTO invalidField(FieldError error) {
         String code = switch (String.valueOf(error.getCode())) {
             case "NotNull", "NotBlank", "NotEmpty" -> "OBLIGATOIRE";
-            case "Size", "Min", "Max", "Positive", "PositiveOrZero" -> "BORNE";
+            case "Size", "Min", "Max", "Positive", "PositiveOrZero", "PastOrPresent", "AmountCents" -> "BORNE";
+            case "ExpenseType" -> "HORS_LISTE";
             default -> "FORMAT";
         };
         // Le contrat nomme le champ lui-même, sans l'objet qui le porte : « date » et non « valeurs.date ».

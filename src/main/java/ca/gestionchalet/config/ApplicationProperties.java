@@ -2,9 +2,12 @@ package ca.gestionchalet.config;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.ZoneId;
+import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.unit.DataSize;
 import org.springframework.validation.annotation.Validated;
@@ -15,10 +18,16 @@ import org.springframework.validation.annotation.Validated;
  *
  * @param securite réglages de sécurité ({@code recus.securite.*})
  * @param dossierPhotos dossier des photos, hors de la base et de la racine web
+ * @param typesDepense liste fermée des types de dépense, dans l'orthographe du Sheet
+ * @param montantMaxCents montant le plus élevé accepté, en cents
+ * @param fuseauHoraire fuseau de la date du jour, à laquelle une date de reçu ne peut être postérieure
  */
 @Validated
 @ConfigurationProperties("recus")
-public record ApplicationProperties(@Valid @NotNull Security securite, @NotNull Path dossierPhotos) {
+public record ApplicationProperties(@Valid @NotNull Security securite, @NotNull Path dossierPhotos,
+        @NotEmpty List<String> typesDepense,
+        @Min(1) long montantMaxCents,
+        @NotNull ZoneId fuseauHoraire) {
 
     /**
      * Le condensé du mot de passe, lui, est lu par {@code DomainUserDetailsService}.

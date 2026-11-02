@@ -12,6 +12,10 @@ import ca.gestionchalet.support.TestDoublesConfiguration;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -19,6 +23,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -114,6 +119,111 @@ class RecuRealServerTest {
         assertThat(reponse.statut()).isEqualTo(400);
         assertThat(reponse.json().get("code")).isEqualTo("PHOTO_MANQUANTE");
         assertThat(etat()).isEqualTo(avant);
+    }
+
+    private Reponse validerAvec(String champ, Object valeur) {
+        Map<String, Object> valeurs = RecuRequests.valeurs();
+        valeurs.put(champ, valeur);
+        return RecuRequests.valider(client, RecuRequests.corps(valeurs), RecuRequests.png());
+    }
+
+    private static Map<String, Object> erreurDeChamp(String champ, String code) {
+        return Map.of("erreur", "Certains champs sont invalides.", "code", "VALIDATION", "champs", List.of(Map.of("champ", champ, "code", code)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Honoraires professionnel", "Fournitures", "Entretien / Réparations", "Électricité / Internet",
+        "Impôts / Taxes", "Assurances", "Publicité", "Autres dépenses", "Frais de voyage", "Intérêts", "Administration"})
+    void ca15_chacunDesOnzeTypesEstAccepte(String type) {
+        Reponse reponse = validerAvec("typeDepense", type);
+
+        assertThat(reponse.statut()).isEqualTo(201);
+        assertThat(reponse.corps()).contains(type);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Autres", "fournitures", " Fournitures"})
+    void ca15_unTypeHorsListeEstRefuse(String type) throws IOException {
+        Etat avant = etat();
+
+        Reponse reponse = validerAvec("typeDepense", type);
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(erreurDeChamp("typeDepense", "HORS_LISTE"));
+        assertThat(etat()).isEqualTo(avant);
+    }
+
+    @Test
+    void ca16_uneDatePosterieureAAujourdhuiAMontrealEstRefuseeMemeSiElleEstAujourdhuiEnUtc() {
+        Instant maintenant = horloge.instant();
+        Instant deuxHeuresUtc = maintenant.atZone(ZoneOffset.UTC).toLocalDate().plusDays(1).atTime(2, 0).toInstant(ZoneOffset.UTC);
+        horloge.avancer(Duration.between(maintenant, deuxHeuresUtc));
+        LocalDate aujourdhuiUtc = deuxHeuresUtc.atZone(ZoneOffset.UTC).toLocalDate();
+        LocalDate aujourdhuiMontreal = aujourdhuiUtc.minusDays(1);
+
+        Reponse future = validerAvec("date", aujourdhuiUtc.toString());
+        Reponse aujourdhui = validerAvec("date", aujourdhuiMontreal.toString());
+
+        assertThat(future.statut()).isEqualTo(400);
+        assertThat(future.json()).isEqualTo(erreurDeChamp("date", "BORNE"));
+        assertThat(aujourdhui.statut()).isEqualTo(201);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"montantTotalCents, 0", "montantTotalCents, -1", "montantTotalCents, 100000001", "tpsCents, -1", "tvqCents, 100000001",
+        "montantAvantTaxesCents, -1", "montantAvantTaxesCents, 100000001"})
+    void ca16_unMontantHorsBornesEstRefuse(String champ, long cents) throws IOException {
+        Etat avant = etat();
+
+        Reponse reponse = validerAvec(champ, cents);
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(erreurDeChamp(champ, "BORNE"));
+        assertThat(etat()).isEqualTo(avant);
+    }
+
+    @Test
+    void ca16_leTotalLuHorsBornesEstRefuse() {
+        Map<String, Object> corps = RecuRequests.corps(RecuRequests.valeurs());
+        corps.put("montantTotalLuCents", 100000001);
+
+        Reponse reponse = RecuRequests.valider(client, corps, RecuRequests.png());
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(erreurDeChamp("montantTotalLuCents", "BORNE"));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"montantTotalCents, 1", "montantTotalCents, 100000000", "tpsCents, 0", "tvqCents, 100000000"})
+    void ca16_unMontantALaLimiteEstAccepte(String champ, long cents) {
+        assertThat(validerAvec(champ, cents).statut()).isEqualTo(201);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"35.5", "\"3500\"", "\"abc\"", "3.5e2"})
+    void ca16_unMontantDecimalOuTexteEstRefuse(String montant) throws IOException {
+        Etat avant = etat();
+        String corps = "{\"cleIdempotence\":\"" + UUID.randomUUID() + "\",\"valeurs\":{\"date\":\"2026-10-11\",\"fournisseur\":\"F\","
+                + "\"typeDepense\":\"Fournitures\",\"montantTotalCents\":" + montant + "}}";
+
+        Reponse reponse = RecuRequests.validerJson(client, corps, RecuRequests.png());
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "La requête est invalide.", "code", "REQUETE_INVALIDE"));
+        assertThat(etat()).isEqualTo(avant);
+    }
+
+    @Test
+    void ca16_lesTextesSontBornesEtSansCaractereDeControle() {
+        assertThat(validerAvec("fournisseur", "x".repeat(120)).statut()).isEqualTo(201);
+        assertThat(validerAvec("fournisseur", "x".repeat(121)).json()).isEqualTo(erreurDeChamp("fournisseur", "BORNE"));
+        assertThat(validerAvec("fournisseur", "a\nb").json()).isEqualTo(erreurDeChamp("fournisseur", "FORMAT"));
+        assertThat(validerAvec("objet", "x".repeat(200)).statut()).isEqualTo(201);
+        assertThat(validerAvec("objet", "x".repeat(201)).json()).isEqualTo(erreurDeChamp("objet", "BORNE"));
+        assertThat(validerAvec("objet", "a\u0007b").json()).isEqualTo(erreurDeChamp("objet", "FORMAT"));
+        assertThat(validerAvec("numeroInscriptionTps", "1".repeat(30)).statut()).isEqualTo(201);
+        assertThat(validerAvec("numeroInscriptionTps", "1".repeat(31)).json()).isEqualTo(erreurDeChamp("numeroInscriptionTps", "BORNE"));
+        assertThat(validerAvec("numeroInscriptionTvq", "12<3").json()).isEqualTo(erreurDeChamp("numeroInscriptionTvq", "FORMAT"));
     }
 
     @Test
