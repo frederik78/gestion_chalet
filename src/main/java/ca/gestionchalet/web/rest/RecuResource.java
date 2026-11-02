@@ -4,6 +4,7 @@ import ca.gestionchalet.service.RecuService;
 import ca.gestionchalet.service.dto.RecuDTO;
 import ca.gestionchalet.service.dto.RecuValidationDTO;
 import ca.gestionchalet.service.dto.RecuValidationResult;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -27,8 +28,8 @@ public class RecuResource {
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<RecuDTO> validate(
-            @RequestPart("recu") RecuValidationDTO recu,
-            @RequestPart("photos") List<MultipartFile> photos) {
+            @Valid @RequestPart("recu") RecuValidationDTO recu,
+            @RequestPart(name = "photos", required = false) List<MultipartFile> photos) {
         RecuValidationResult result = recuService.validate(recu, photos);
         return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK).body(result.recu());
     }

@@ -1,5 +1,6 @@
 package ca.gestionchalet.service;
 
+import ca.gestionchalet.domain.MissingPhotoException;
 import ca.gestionchalet.domain.Photo;
 import ca.gestionchalet.domain.PhotoFormat;
 import ca.gestionchalet.domain.Recu;
@@ -37,6 +38,9 @@ public class RecuService {
 
     @Transactional
     public RecuValidationResult validate(RecuValidationDTO validation, List<MultipartFile> files) {
+        if (files == null || files.isEmpty() || files.stream().anyMatch(MultipartFile::isEmpty)) {
+            throw new MissingPhotoException();
+        }
         List<Photo> photos = new ArrayList<>();
         for (MultipartFile file : files) {
             Photo photo = Photo.of(photos.size() + 1, formatOf(file), file.getSize());

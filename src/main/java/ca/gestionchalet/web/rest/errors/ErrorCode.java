@@ -4,6 +4,7 @@ package ca.gestionchalet.web.rest.errors;
 public enum ErrorCode {
     VALIDATION(400, "Certains champs sont invalides."),
     REQUETE_INVALIDE(400, "La requête est invalide."),
+    PHOTO_MANQUANTE(400, "Au moins une photo est requise."),
     NON_AUTHENTIFIE(401, "Authentification requise."),
     IDENTIFIANTS_INVALIDES(401, "Identifiants invalides."),
     CSRF_INVALIDE(403, "Jeton de sécurité absent ou invalide."),

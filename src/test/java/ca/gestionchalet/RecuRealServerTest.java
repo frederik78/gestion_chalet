@@ -18,8 +18,11 @@ import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 /** Validation d'un reçu de bout en bout : serveur réel, session, CSRF, multipart, base et dossier temporaires. */
 @RealServerTest
@@ -35,6 +38,9 @@ class RecuRealServerTest {
     @Autowired
     TestClock horloge;
 
+    @Autowired
+    JdbcTemplate base;
+
     private TestClient client;
 
     @BeforeEach
@@ -47,6 +53,67 @@ class RecuRealServerTest {
         try (Stream<Path> chemins = Files.walk(properties.dossierPhotos())) {
             return chemins.filter(Files::isRegularFile).toList();
         }
+    }
+
+    private long lignes(String table) {
+        return base.queryForObject("select count(*) from " + table, Long.class);
+    }
+
+    private record Etat(long recus, long photos, long fichiers) {
+    }
+
+    private Etat etat() throws IOException {
+        return new Etat(lignes("recu"), lignes("photo"), fichiers().size());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"date", "fournisseur", "montantTotalCents", "typeDepense"})
+    void ca14_unChampObligatoireManquantEstRefuseSansRienEnregistrer(String champ) throws IOException {
+        Etat avant = etat();
+        Map<String, Object> valeurs = RecuRequests.valeurs();
+        valeurs.remove(champ);
+
+        Reponse reponse = RecuRequests.valider(client, RecuRequests.corps(valeurs), RecuRequests.png());
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Certains champs sont invalides.", "code", "VALIDATION",
+                "champs", List.of(Map.of("champ", champ, "code", "OBLIGATOIRE"))));
+        assertThat(etat()).isEqualTo(avant);
+    }
+
+    @Test
+    void ca14_unFournisseurFaitDEspacesEstManquant() throws IOException {
+        Etat avant = etat();
+        Map<String, Object> valeurs = RecuRequests.valeurs();
+        valeurs.put("fournisseur", "   ");
+
+        Reponse reponse = RecuRequests.valider(client, RecuRequests.corps(valeurs), RecuRequests.png());
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json().get("champs")).isEqualTo(List.of(Map.of("champ", "fournisseur", "code", "OBLIGATOIRE")));
+        assertThat(etat()).isEqualTo(avant);
+    }
+
+    @Test
+    void ca14_uneValidationSansPhotoEstRefuseeSansRienEnregistrer() throws IOException {
+        Etat avant = etat();
+
+        Reponse reponse = RecuRequests.valider(client, RecuRequests.corps(RecuRequests.valeurs()));
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Au moins une photo est requise.", "code", "PHOTO_MANQUANTE"));
+        assertThat(etat()).isEqualTo(avant);
+    }
+
+    @Test
+    void ca14_unePhotoVideCompteCommeUnePhotoManquante() throws IOException {
+        Etat avant = etat();
+
+        Reponse reponse = RecuRequests.valider(client, RecuRequests.corps(RecuRequests.valeurs()), new byte[0]);
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json().get("code")).isEqualTo("PHOTO_MANQUANTE");
+        assertThat(etat()).isEqualTo(avant);
     }
 
     @Test

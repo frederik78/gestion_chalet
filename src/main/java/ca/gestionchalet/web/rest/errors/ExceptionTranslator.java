@@ -1,5 +1,6 @@
 package ca.gestionchalet.web.rest.errors;
 
+import ca.gestionchalet.domain.MissingPhotoException;
 import ca.gestionchalet.domain.UnsupportedPhotoFormatException;
 import ca.gestionchalet.web.rest.errors.ErrorDTO.InvalidFieldDTO;
 import jakarta.servlet.http.HttpServletResponse;
@@ -62,6 +63,11 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
         return handleExceptionInternal(ex, null, new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
     }
 
+    @ExceptionHandler(MissingPhotoException.class)
+    public ResponseEntity<Object> handleMissingPhoto(MissingPhotoException ex, WebRequest request) {
+        return handleExceptionInternal(ex, ErrorDTO.of(ErrorCode.PHOTO_MANQUANTE), new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
+    }
+
     @ExceptionHandler(UnsupportedPhotoFormatException.class)
     public ResponseEntity<Object> handleUnsupportedPhotoFormat(UnsupportedPhotoFormatException ex, WebRequest request) {
         return handleExceptionInternal(ex, null, new HttpHeaders(), HttpStatus.UNSUPPORTED_MEDIA_TYPE, request);
@@ -83,6 +89,8 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
             case "Size", "Min", "Max", "Positive", "PositiveOrZero" -> "BORNE";
             default -> "FORMAT";
         };
-        return new InvalidFieldDTO(error.getField(), code);
+        // Le contrat nomme le champ lui-même, sans l'objet qui le porte : « date » et non « valeurs.date ».
+        String field = error.getField();
+        return new InvalidFieldDTO(field.substring(field.lastIndexOf('.') + 1), code);
     }
 }
