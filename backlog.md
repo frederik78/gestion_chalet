@@ -66,6 +66,8 @@ Vue d'ensemble des besoins. Détail dans `docs/prd/`, suivi de la livraison dans
 | D-31 | 2026-11-02 | `archunit-junit5` et `@ArchTest` comme JHipster ; `@Component` conservé sur `DomainUserDetailsService` ; deux défenses de taille sur la connexion, avec une seule valeur | F-01 |
 | D-32 | 2026-11-02 | Essai réel validé : Spring AI et Claude Haiku 5.5 retenus | F-01 |
 | D-33 | 2026-11-02 | Connexion réussie : compteur d'échecs de la source remis à zéro ; méthode non permise sur une route existante : 404 sans `Allow`, `OPTIONS` excepté | F-01 |
+| D-34 | 2026-11-02 | `liquibase-core` 5.0.4, sous licence FSL-1.1-ALv2, conservé | F-01 |
+| D-35 | 2026-11-02 | Chrome installé dans la CI pour que les tests d'écran y tournent réellement ; pilote de test écrit avec le JDK conservé | F-01 |
 
 ## À trancher
 
