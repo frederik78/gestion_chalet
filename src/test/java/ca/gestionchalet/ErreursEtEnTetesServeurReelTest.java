@@ -154,6 +154,16 @@ class ErreursEtEnTetesServeurReelTest {
         assertThat(reponse.enTete("Allow")).isNull();
     }
 
+    /** La route existe, en POST seulement : le 405 de Spring MVC devient un 404 générique, sans révéler les méthodes permises. */
+    @Test
+    void cs08_uneMethodeNonPermiseSurUneRouteExistanteDonne404SansAllow() {
+        Reponse reponse = connecte().appelAvecJeton("PUT", "/api/essai/json", "{}");
+
+        assertThat(reponse.statut()).isEqualTo(404);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Ressource introuvable.", "code", "INTROUVABLE"));
+        assertThat(reponse.enTete("Allow")).isNull();
+    }
+
     @Test
     void cs08_corpsJsonAuDelaDeLaLimiteDonne413() {
         Reponse reponse = connecte().appelAvecJeton("POST", "/api/essai/json", "{\"valeur\":\"" + "x".repeat(70_000) + "\"}");
