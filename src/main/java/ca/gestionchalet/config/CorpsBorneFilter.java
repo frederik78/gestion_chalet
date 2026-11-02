@@ -21,10 +21,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * Borne le corps des requêtes hors multipart, que sa longueur soit déclarée ou non (envoi fragmenté) : il est lu en mémoire
- * jusqu'à la limite, puis rejoué. Le multipart a ses propres limites ({@code spring.servlet.multipart.*}), bien plus hautes :
- * il n'est donc accepté qu'avec une session, et refusé sans être lu sur les ressources publiques. {@code resolve-lazily} ne
- * suffit pas : retirer ce refus laisse un multipart de 56 Mo sans réponse en 5 s (cs08). La connexion a sa propre garde.
+ * Borne le corps des requêtes d'une session ouverte, hors multipart, que sa longueur soit déclarée ou non (envoi fragmenté) : il
+ * est lu en mémoire jusqu'à la limite, puis rejoué. Sans session, le corps n'est jamais lu : seules les ressources publiques
+ * arrivent ici, et aucune n'en a besoin. Le multipart a ses propres limites ({@code spring.servlet.multipart.*}), bien plus hautes :
+ * sans session, il est refusé, car {@code resolve-lazily} ne suffit pas : sans ce refus, un multipart de 56 Mo reste sans réponse
+ * en 5 s (cs08). La connexion a sa propre garde.
  */
 final class CorpsBorneFilter extends OncePerRequestFilter {
 
@@ -40,12 +41,16 @@ final class CorpsBorneFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest requete, HttpServletResponse reponse, FilterChain suite)
             throws IOException, ServletException {
-        if (estMultipart(requete)) {
-            if (sessionOuverte()) {
-                suite.doFilter(requete, reponse);
-            } else {
+        if (!sessionOuverte()) {
+            if (estMultipart(requete)) {
                 ReponsesErreur.ecrire(reponse, CodeErreur.FORMAT_NON_ACCEPTE);
+            } else {
+                suite.doFilter(requete, reponse);
             }
+            return;
+        }
+        if (estMultipart(requete)) {
+            suite.doFilter(requete, reponse);
             return;
         }
         if (requete.getContentLengthLong() > limite) {

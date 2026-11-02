@@ -22,7 +22,7 @@ public class ServeurWebConfiguration {
         return enregistrement;
     }
 
-    /** Après la chaîne de sécurité : une requête sans session ou sans jeton n'est jamais lue. */
+    /** Après la chaîne de sécurité, dont il consulte le résultat : seul le corps d'une session ouverte est lu. */
     @Bean
     FilterRegistrationBean<CorpsBorneFilter> corpsBorneFilter(SecuriteProperties proprietes) {
         FilterRegistrationBean<CorpsBorneFilter> enregistrement =

@@ -218,6 +218,27 @@ class ErreursEtEnTetesServeurReelTest {
         assertThat(reponse.json()).isEqualTo(Map.of("erreur", "La requête est trop volumineuse.", "code", "TAILLE_EXCESSIVE"));
     }
 
+    /** Le corps annoncé n'arrive jamais : sans session, personne ne doit l'attendre, y compris au-delà de la borne de 64 Ko. */
+    @ParameterizedTest
+    @CsvSource({"/, 1000", "/actuator/health, 1000", "/sw.js, 1000", "/, 400000000"})
+    void cs01_unCorpsAnnonceSurUneRessourcePubliqueNEstPasLu(String chemin, long longueur) {
+        ClientBrut.Reponse reponse = ClientBrut.envoyerSansLaFinDuCorps(port, "GET " + chemin + " HTTP/1.1\r\nHost: localhost\r\n"
+                + "Content-Length: " + longueur + "\r\n\r\n", 5_000);
+
+        assertThat(reponse.statut()).isEqualTo(200);
+    }
+
+    /** Une route refusée sans session répond aussi sans attendre le corps, formulaire ou non. */
+    @ParameterizedTest
+    @CsvSource({"/api/essai/session", "/inconnue", "/accueil.html"})
+    void cs01_unCorpsAnnonceSurUneRouteRefuseeNEstPasLu(String chemin) {
+        ClientBrut.Reponse reponse = ClientBrut.envoyerSansLaFinDuCorps(port, "GET " + chemin + " HTTP/1.1\r\nHost: localhost\r\n"
+                + "Content-Length: 1000\r\n\r\n", 5_000);
+
+        assertThat(reponse.statut()).isEqualTo(401);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Authentification requise.", "code", "NON_AUTHENTIFIE"));
+    }
+
     /** Un multipart annoncé sur une ressource publique : Tomcat le lirait dès qu'un composant demande les paramètres. */
     @ParameterizedTest
     @ValueSource(strings = {"/actuator/health", "/", "/style.css"})
