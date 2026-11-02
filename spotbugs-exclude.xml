@@ -31,7 +31,7 @@
   </Match>
   <!-- Seuls sont journalisés un nom de classe et une trame de pile, jamais une donnée de la requête ni le message de l'exception. -->
   <Match>
-    <Class name="ca.gestionchalet.web.rest.errors.GestionnaireErreurs"/>
+    <Class name="ca.gestionchalet.web.rest.errors.ExceptionTranslator"/>
     <Bug pattern="CRLF_INJECTION_LOGS"/>
   </Match>
 </FindBugsFilter>
