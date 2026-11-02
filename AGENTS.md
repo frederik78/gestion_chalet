@@ -43,6 +43,7 @@ Structure en services, inspirée de JHipster, sans générateur : `config`, `dom
 - **Modèle de branches** : `main` ne reçoit que les releases (états livrables, tags `vX.Y.Z`) ; personne n'y commite, seul l'utilisateur y fusionne `develop` (`git merge --no-ff develop`) puis tague. `develop` est la branche d'intégration : toute branche de travail (`feat/<prd>-<nn>-<slug>`, `fix/…`, `docs/…`, `refactor/…`, `test/…`, `build/…`) en part et y revient par PR (base = `develop`). Correctif urgent sur une release : `hotfix/<slug>` partant de `main`, fusionné dans `main` PUIS dans `develop` par l'utilisateur. Branches empilées : base = pointe de la branche dont l'issue dépend. Les agents ne travaillent jamais directement sur `main` ni sur `develop`.
 - **INTERDIT** : un test qui dépend d'un service externe réel ; toujours doubler la frontière externe.
 - Pas d'interface « au cas où » : une abstraction n'existe que pour une frontière externe à doubler ou s'il y a deux implémentations réelles.
+- **Langue du code** : les classes techniques sont impérativement en anglais.
 - Montants en cents entiers, en dollars canadiens, jamais en flottants.
 - Rien n'est enregistré avant la validation par l'utilisateur. Une taxe absente d'un reçu reste vide : elle n'est jamais calculée ni mise à 0.
 - La base fait référence, le Google Sheet en est une copie ; un envoi échoué est réessayé sans perdre le reçu.
