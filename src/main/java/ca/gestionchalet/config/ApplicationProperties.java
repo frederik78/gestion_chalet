@@ -29,6 +29,10 @@ public record ApplicationProperties(@Valid @NotNull Security securite, @NotNull 
         @Min(1) long montantMaxCents,
         @NotNull ZoneId fuseauHoraire) {
 
+    public ApplicationProperties {
+        typesDepense = typesDepense == null ? List.of() : List.copyOf(typesDepense);
+    }
+
     /**
      * Le condensé du mot de passe, lui, est lu par {@code DomainUserDetailsService}.
      *
