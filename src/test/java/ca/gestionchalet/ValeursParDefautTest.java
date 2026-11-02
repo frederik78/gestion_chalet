@@ -20,6 +20,8 @@ class ValeursParDefautTest {
         "recus.securite.inactivite-session, 8h",
         "recus.securite.cookie-securise, true",
         "server.forward-headers-strategy, none",
+        "spring.mvc.formcontent.filter.enabled, false",
+        "spring.mvc.hiddenmethod.filter.enabled, false",
         "spring.servlet.multipart.max-file-size, 15MB",
         "spring.servlet.multipart.max-request-size, 75MB",
     })

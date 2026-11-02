@@ -14,6 +14,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
 /** Corps d'erreur et en-têtes de sécurité sur serveur réel, y compris pour ce que le framework ou Tomcat rejette avant l'application. */
@@ -271,5 +272,50 @@ class ErreursEtEnTetesServeurReelTest {
 
         assertThat(reponse.statut()).isEqualTo(401);
         assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Authentification requise.", "code", "NON_AUTHENTIFIE"));
+    }
+
+    private static String debutSansLaFin(String methode, String chemin, String typeDeContenu, long longueur, String cookies, String jeton) {
+        return methode + " " + chemin + " HTTP/1.1\r\nHost: localhost\r\n"
+                + "Content-Type: " + typeDeContenu + "\r\nContent-Length: " + longueur + "\r\n"
+                + "X-XSRF-TOKEN: " + jeton + "\r\nCookie: " + cookies + "\r\n\r\na=1";
+    }
+
+    /**
+     * Le corps annoncé n'arrive jamais : si un filtre tentait de le lire avant la sécurité, le serveur ne répondrait pas à temps.
+     * 1,5 Mo reste sous la limite de 2 Mo que Tomcat applique aux formulaires quand un filtre appelle {@code getParameter}.
+     */
+    @ParameterizedTest(name = "{0} {1} octets")
+    @CsvSource({"PUT, 400000000", "PATCH, 400000000", "DELETE, 400000000", "POST, 400000000", "POST, 1500000", "PUT, 1500000"})
+    void cs01_unFormulaireSansSessionEstRefuseSansEtreLu(String methode, long longueur) {
+        String jeton = UUID.randomUUID().toString();
+        ClientBrut.Reponse reponse = ClientBrut.envoyerSansLaFinDuCorps(port, debutSansLaFin(methode, "/api/essai/mutation/1",
+                "application/x-www-form-urlencoded", longueur, "XSRF-TOKEN=" + jeton, jeton), 5_000);
+
+        assertThat(reponse.statut()).isEqualTo(401);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Authentification requise.", "code", "NON_AUTHENTIFIE"));
+    }
+
+    /** Sur la route publique : la sécurité laisse passer, la borne de 64 Ko refuse sans lire. */
+    @ParameterizedTest(name = "{0} {1}")
+    @CsvSource({"POST, /api/connexion, 400000000", "POST, /api/connexion, 1500000"})
+    void cs08_unFormulaireTropGrosSurLaRoutePubliqueEstRefuseSansEtreLu(String methode, String chemin, long longueur) {
+        String jeton = UUID.randomUUID().toString();
+        ClientBrut.Reponse reponse = ClientBrut.envoyerSansLaFinDuCorps(port, debutSansLaFin(methode, chemin,
+                "application/x-www-form-urlencoded", longueur, "XSRF-TOKEN=" + jeton, jeton), 5_000);
+
+        assertThat(reponse.statut()).isEqualTo(413);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "La requête est trop volumineuse.", "code", "TAILLE_EXCESSIVE"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"POST", "PUT", "PATCH", "DELETE"})
+    void cs08_unFormulaireTropGrosAvecSessionEstRefuseSansEtreLu(String methode) {
+        ClientEssai client = connecte();
+        String cookies = "JSESSIONID=" + client.cookie("JSESSIONID") + "; XSRF-TOKEN=" + client.cookie("XSRF-TOKEN");
+        ClientBrut.Reponse reponse = ClientBrut.envoyerSansLaFinDuCorps(port, debutSansLaFin(methode, "/api/essai/mutation/1",
+                "application/x-www-form-urlencoded", 400_000_000L, cookies, client.cookie("XSRF-TOKEN")), 5_000);
+
+        assertThat(reponse.statut()).isEqualTo(413);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "La requête est trop volumineuse.", "code", "TAILLE_EXCESSIVE"));
     }
 }

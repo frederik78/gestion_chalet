@@ -14,7 +14,7 @@ Produire le condensé, sans laisser le mot de passe dans l'historique du shell :
 bcrypt ne prend en compte que les 72 premiers octets du mot de passe : ce qui suit est ignoré, même si l'API en accepte 1 000 caractères. Choisir un mot de passe fort dans cette limite.
 
 ## Réglages (`recus.securite.*`, surchargeables par l'environnement)
-Blocage : 5 échecs par source, 15 minutes. Inactivité de session : 8 heures. Corps de requête hors multipart : 64 Ko. Multipart (`spring.servlet.multipart.*`) : 15 Mo par fichier, 75 Mo par requête.
+Blocage : 5 échecs par source, 15 minutes. Inactivité de session : 8 heures. Corps de requête hors multipart : 64 Ko. Multipart (`spring.servlet.multipart.*`) : 15 Mo par fichier, 75 Mo par requête, et refusé sans session. Filtres de formulaire de Spring désactivés (`spring.mvc.formcontent.filter.enabled`, `spring.mvc.hiddenmethod.filter.enabled`) : ils liraient le corps avant la sécurité.
 
 ## À reprendre avec NF-03
 - Derrière Cloudflare Tunnel, toutes les requêtes semblent venir de la même source : le blocage devra lire l'en-tête de confiance du tunnel, sans quoi il deviendrait global. Aucun en-tête `X-Forwarded-*` n'est lu aujourd'hui.

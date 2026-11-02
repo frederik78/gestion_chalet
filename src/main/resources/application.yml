@@ -8,6 +8,14 @@ spring:
     multipart:
       max-file-size: 15MB
       max-request-size: 75MB
+  # Ces filtres liraient le corps d'un formulaire avant la sécurité, sans la borne de CorpsBorneFilter. Aucune route n'en a besoin.
+  mvc:
+    formcontent:
+      filter:
+        enabled: false
+    hiddenmethod:
+      filter:
+        enabled: false
   # Modèle fixé par recus.modele ; aucun réglage temperature, top_p ni top_k (ADR 0001). La clé vient de ANTHROPIC_API_KEY, lue par le client.
   ai:
     anthropic:
