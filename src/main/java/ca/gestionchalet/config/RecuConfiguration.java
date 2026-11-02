@@ -19,7 +19,7 @@ public class RecuConfiguration {
 
     @Bean
     RecuRules recuRules(ApplicationProperties properties, MultipartProperties multipart) {
-        return new RecuRules(properties.typesDepense(), properties.montantMaxCents(), properties.photosParRecuMax(),
+        return new RecuRules(properties.typesDepense(), properties.photosParRecuMax(),
                 multipart.getMaxFileSize().toBytes(), properties.formats());
     }
 

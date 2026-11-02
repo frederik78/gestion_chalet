@@ -31,7 +31,6 @@ class DefaultValuesTest {
         "recus.photos-par-recu-max, 5",
         "'recus.formats[0]', image/jpeg",
         "'recus.formats[1]', image/png",
-        "recus.montant-max-cents, 100000000",
         "recus.fuseau-horaire, America/Montreal",
         "'recus.types-depense[0]', Honoraires professionnel",
         "'recus.types-depense[10]', Administration",

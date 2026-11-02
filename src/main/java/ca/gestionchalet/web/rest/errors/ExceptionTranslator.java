@@ -86,7 +86,7 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
     private static InvalidFieldDTO invalidField(FieldError error) {
         String code = switch (String.valueOf(error.getCode())) {
             case "NotNull", "NotBlank", "NotEmpty" -> "OBLIGATOIRE";
-            case "Size", "Min", "Max", "Positive", "PositiveOrZero", "PastOrPresent", "AmountCents" -> "BORNE";
+            case "Size", "Min", "Max", "Positive", "PositiveOrZero", "PastOrPresent" -> "BORNE";
             case "ExpenseType" -> "HORS_LISTE";
             default -> "FORMAT";
         };

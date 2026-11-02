@@ -88,8 +88,6 @@ recus:
   formats:
     - image/jpeg
     - image/png
-  # 1 000 000,00 $ (R-10).
-  montant-max-cents: 100000000
   # Liste fermée, dans l'orthographe du Sheet (R-09).
   types-depense:
     - Honoraires professionnel

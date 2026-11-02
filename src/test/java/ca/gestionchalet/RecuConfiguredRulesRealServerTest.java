@@ -15,9 +15,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.TestPropertySource;
 
-/** Une configuration modifiée suffit à changer les règles : la liste et les bornes ne sont pas des constantes. */
+/** Une configuration modifiée suffit à changer les règles : la liste n'est pas une constante. */
 @RealServerTest
-@TestPropertySource(properties = {"recus.types-depense[0]=Bois de chauffage", "recus.types-depense[1]=Déneigement", "recus.montant-max-cents=5000"})
+@TestPropertySource(properties = {"recus.types-depense[0]=Bois de chauffage", "recus.types-depense[1]=Déneigement"})
 class RecuConfiguredRulesRealServerTest {
 
     @LocalServerPort
@@ -49,13 +49,4 @@ class RecuConfiguredRulesRealServerTest {
         assertThat(refuse.json().get("champs")).isEqualTo(List.of(Map.of("champ", "typeDepense", "code", "HORS_LISTE")));
     }
 
-    @Test
-    void ca16_laBorneModifieeEstSuivie() {
-        assertThat(valider("montantTotalCents", 5000).statut()).isEqualTo(201);
-
-        Reponse refuse = valider("montantTotalCents", 5001);
-
-        assertThat(refuse.statut()).isEqualTo(400);
-        assertThat(refuse.json().get("champs")).isEqualTo(List.of(Map.of("champ", "montantTotalCents", "code", "BORNE")));
-    }
 }

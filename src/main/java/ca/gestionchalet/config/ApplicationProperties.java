@@ -19,7 +19,6 @@ import org.springframework.validation.annotation.Validated;
  * @param securite réglages de sécurité ({@code recus.securite.*})
  * @param dossierPhotos dossier des photos, hors de la base et de la racine web
  * @param typesDepense liste fermée des types de dépense, dans l'orthographe du Sheet
- * @param montantMaxCents montant le plus élevé accepté, en cents
  * @param photosParRecuMax nombre maximal de photos d'un reçu
  * @param formats types de média acceptés pour une photo
  * @param fuseauHoraire fuseau de la date du jour, à laquelle une date de reçu ne peut être postérieure
@@ -28,7 +27,6 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties("recus")
 public record ApplicationProperties(@Valid @NotNull Security securite, @NotNull Path dossierPhotos,
         @NotEmpty List<String> typesDepense,
-        @Min(1) long montantMaxCents,
         @Min(1) int photosParRecuMax,
         @NotEmpty List<String> formats,
         @NotNull ZoneId fuseauHoraire) {
