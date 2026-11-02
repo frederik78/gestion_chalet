@@ -15,25 +15,25 @@ import org.springframework.core.Ordered;
 public class WebConfigurer {
 
     @Bean
-    FilterRegistrationBean<EnTetesSecuriteFilter> enTetesSecuriteFilter() {
-        FilterRegistrationBean<EnTetesSecuriteFilter> enregistrement = new FilterRegistrationBean<>(new EnTetesSecuriteFilter());
-        enregistrement.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
-        enregistrement.setDispatcherTypes(EnumSet.allOf(DispatcherType.class));
-        return enregistrement;
+    FilterRegistrationBean<SecurityHeadersFilter> securityHeadersFilter() {
+        FilterRegistrationBean<SecurityHeadersFilter> registration = new FilterRegistrationBean<>(new SecurityHeadersFilter());
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
+        registration.setDispatcherTypes(EnumSet.allOf(DispatcherType.class));
+        return registration;
     }
 
     /** Après la chaîne de sécurité, dont il consulte le résultat : seul le corps d'une session ouverte est lu. */
     @Bean
-    FilterRegistrationBean<CorpsBorneFilter> corpsBorneFilter(SecuriteProperties proprietes) {
-        FilterRegistrationBean<CorpsBorneFilter> enregistrement =
-                new FilterRegistrationBean<>(new CorpsBorneFilter(Math.toIntExact(proprietes.corpsRequeteMax().toBytes())));
-        enregistrement.setOrder(0);
-        return enregistrement;
+    FilterRegistrationBean<RequestBodyLimitFilter> requestBodyLimitFilter(ApplicationProperties properties) {
+        FilterRegistrationBean<RequestBodyLimitFilter> registration =
+                new FilterRegistrationBean<>(new RequestBodyLimitFilter(Math.toIntExact(properties.corpsRequeteMax().toBytes())));
+        registration.setOrder(0);
+        return registration;
     }
 
     @Bean
-    WebServerFactoryCustomizer<TomcatServletWebServerFactory> valveErreurServeur() {
-        return usine -> usine.addContextCustomizers(contexte ->
-                ((StandardHost) contexte.getParent()).setErrorReportValveClass(ErreurServeurValve.class.getName()));
+    WebServerFactoryCustomizer<TomcatServletWebServerFactory> jsonErrorReportValve() {
+        return factory -> factory.addContextCustomizers(context ->
+                ((StandardHost) context.getParent()).setErrorReportValveClass(JsonErrorReportValve.class.getName()));
     }
 }

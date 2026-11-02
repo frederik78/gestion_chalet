@@ -21,45 +21,45 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * dans l'URL : seul un formulaire de longueur déclarée et bornée, sans paramètre d'URL, passe. Puis la tentative est comptée
  * en une seule opération : une source bloquée n'atteint jamais bcrypt, et des requêtes simultanées ne dépassent pas le seuil.
  */
-final class GardeConnexionFilter extends OncePerRequestFilter {
+final class LoginGuardFilter extends OncePerRequestFilter {
 
-    private final RequestMatcher connexion;
-    private final LoginRateLimiter limiteur;
-    private final long limite;
+    private final RequestMatcher loginMatcher;
+    private final LoginRateLimiter rateLimiter;
+    private final long limit;
 
-    GardeConnexionFilter(RequestMatcher connexion, LoginRateLimiter limiteur, long limite) {
-        this.connexion = connexion;
-        this.limiteur = limiteur;
-        this.limite = limite;
+    LoginGuardFilter(RequestMatcher loginMatcher, LoginRateLimiter rateLimiter, long limit) {
+        this.loginMatcher = loginMatcher;
+        this.rateLimiter = rateLimiter;
+        this.limit = limit;
     }
 
     @Override
-    protected boolean shouldNotFilter(HttpServletRequest requete) {
-        return !connexion.matches(requete);
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return !loginMatcher.matches(request);
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest requete, HttpServletResponse reponse, FilterChain suite)
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws IOException, ServletException {
-        long longueur = requete.getContentLengthLong();
-        if (requete.getQueryString() != null) {
-            ErrorResponses.write(reponse, ErrorCode.REQUETE_INVALIDE);
-        } else if (!estFormulaire(requete.getContentType())) {
-            ErrorResponses.write(reponse, ErrorCode.FORMAT_NON_ACCEPTE);
-        } else if (longueur < 0 || longueur > limite) {
-            ErrorResponses.write(reponse, ErrorCode.TAILLE_EXCESSIVE);
+        long length = request.getContentLengthLong();
+        if (request.getQueryString() != null) {
+            ErrorResponses.write(response, ErrorCode.REQUETE_INVALIDE);
+        } else if (!isForm(request.getContentType())) {
+            ErrorResponses.write(response, ErrorCode.FORMAT_NON_ACCEPTE);
+        } else if (length < 0 || length > limit) {
+            ErrorResponses.write(response, ErrorCode.TAILLE_EXCESSIVE);
         } else {
-            Optional<Duration> restant = limiteur.reserve(requete.getRemoteAddr());
-            if (restant.isPresent()) {
-                reponse.setHeader(HttpHeaders.RETRY_AFTER, Long.toString(restant.get().plusNanos(999_999_999L).toSeconds()));
-                ErrorResponses.write(reponse, ErrorCode.TROP_DE_TENTATIVES);
+            Optional<Duration> remaining = rateLimiter.reserve(request.getRemoteAddr());
+            if (remaining.isPresent()) {
+                response.setHeader(HttpHeaders.RETRY_AFTER, Long.toString(remaining.get().plusNanos(999_999_999L).toSeconds()));
+                ErrorResponses.write(response, ErrorCode.TROP_DE_TENTATIVES);
             } else {
-                suite.doFilter(requete, reponse);
+                chain.doFilter(request, response);
             }
         }
     }
 
-    private static boolean estFormulaire(String type) {
+    private static boolean isForm(String type) {
         try {
             return type != null && MediaType.APPLICATION_FORM_URLENCODED.equalsTypeAndSubtype(MediaType.parseMediaType(type));
         } catch (InvalidMediaTypeException e) {

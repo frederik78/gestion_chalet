@@ -13,23 +13,23 @@ import org.springframework.http.MediaType;
  * Remplace la page d'erreur HTML de Tomcat. Une requête que le serveur rejette avant l'application (chemin encodé, en-tête
  * démesuré...) reçoit le corps générique et les en-têtes de sécurité, sans version ni trace.
  */
-public class ErreurServeurValve extends ErrorReportValve {
+public class JsonErrorReportValve extends ErrorReportValve {
 
     @Override
-    protected void report(Request requete, Response reponse, Throwable cause) {
-        if (reponse.getStatus() < 400 || reponse.getContentWritten() > 0 || !reponse.setErrorReported()) {
+    protected void report(Request request, Response response, Throwable cause) {
+        if (response.getStatus() < 400 || response.getContentWritten() > 0 || !response.setErrorReported()) {
             return;
         }
-        ErrorCode code = ErrorCode.fromStatus(reponse.getStatus());
-        EnTetesSecurite.appliquer(reponse);
-        reponse.setStatus(code.status());
-        reponse.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        reponse.setCharacterEncoding("UTF-8");
+        ErrorCode code = ErrorCode.fromStatus(response.getStatus());
+        SecurityHeaders.apply(response);
+        response.setStatus(code.status());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding("UTF-8");
         try {
-            Writer sortie = reponse.getReporter();
-            if (sortie != null) {
-                sortie.write(ErrorResponses.json(code));
-                reponse.finishResponse();
+            Writer writer = response.getReporter();
+            if (writer != null) {
+                writer.write(ErrorResponses.json(code));
+                response.finishResponse();
             }
         } catch (IOException | IllegalStateException e) {
             container.getLogger().warn("Réponse d'erreur non écrite : " + e.getClass().getName());

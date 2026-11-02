@@ -27,79 +27,79 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * sans session, il est refusé, car {@code resolve-lazily} ne suffit pas : sans ce refus, un multipart de 56 Mo reste sans réponse
  * en 5 s (cs08). La connexion a sa propre garde.
  */
-final class CorpsBorneFilter extends OncePerRequestFilter {
+final class RequestBodyLimitFilter extends OncePerRequestFilter {
 
-    private static final String PREFIXE_MULTIPART = "multipart/";
+    private static final String MULTIPART_PREFIX = "multipart/";
 
-    private final AuthenticationTrustResolver authentifications = new AuthenticationTrustResolverImpl();
-    private final int limite;
+    private final AuthenticationTrustResolver trustResolver = new AuthenticationTrustResolverImpl();
+    private final int limit;
 
-    CorpsBorneFilter(int limite) {
-        this.limite = limite;
+    RequestBodyLimitFilter(int limit) {
+        this.limit = limit;
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest requete, HttpServletResponse reponse, FilterChain suite)
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws IOException, ServletException {
-        if (!sessionOuverte()) {
-            if (estMultipart(requete)) {
-                ErrorResponses.write(reponse, ErrorCode.FORMAT_NON_ACCEPTE);
+        if (!isSessionOpen()) {
+            if (isMultipart(request)) {
+                ErrorResponses.write(response, ErrorCode.FORMAT_NON_ACCEPTE);
             } else {
-                suite.doFilter(new CorpsRejoue(requete, new byte[0]), reponse);
+                chain.doFilter(new ReplayedBodyRequest(request, new byte[0]), response);
             }
             return;
         }
-        if (estMultipart(requete)) {
-            suite.doFilter(requete, reponse);
+        if (isMultipart(request)) {
+            chain.doFilter(request, response);
             return;
         }
-        if (requete.getContentLengthLong() > limite) {
-            ErrorResponses.write(reponse, ErrorCode.TAILLE_EXCESSIVE);
+        if (request.getContentLengthLong() > limit) {
+            ErrorResponses.write(response, ErrorCode.TAILLE_EXCESSIVE);
             return;
         }
-        byte[] corps = requete.getInputStream().readNBytes(limite + 1);
-        if (corps.length > limite) {
-            ErrorResponses.write(reponse, ErrorCode.TAILLE_EXCESSIVE);
+        byte[] body = request.getInputStream().readNBytes(limit + 1);
+        if (body.length > limit) {
+            ErrorResponses.write(response, ErrorCode.TAILLE_EXCESSIVE);
             return;
         }
-        suite.doFilter(new CorpsRejoue(requete, corps), reponse);
+        chain.doFilter(new ReplayedBodyRequest(request, body), response);
     }
 
-    private boolean sessionOuverte() {
-        return authentifications.isAuthenticated(SecurityContextHolder.getContext().getAuthentication());
+    private boolean isSessionOpen() {
+        return trustResolver.isAuthenticated(SecurityContextHolder.getContext().getAuthentication());
     }
 
-    private static boolean estMultipart(HttpServletRequest requete) {
-        String type = requete.getContentType();
-        return type != null && type.regionMatches(true, 0, PREFIXE_MULTIPART, 0, PREFIXE_MULTIPART.length());
+    private static boolean isMultipart(HttpServletRequest request) {
+        String type = request.getContentType();
+        return type != null && type.regionMatches(true, 0, MULTIPART_PREFIX, 0, MULTIPART_PREFIX.length());
     }
 
-    private static final class CorpsRejoue extends HttpServletRequestWrapper {
+    private static final class ReplayedBodyRequest extends HttpServletRequestWrapper {
 
-        private final byte[] corps;
+        private final byte[] body;
 
-        CorpsRejoue(HttpServletRequest requete, byte[] corps) {
-            super(requete);
-            this.corps = corps;
+        ReplayedBodyRequest(HttpServletRequest request, byte[] body) {
+            super(request);
+            this.body = body;
         }
 
         @Override
         public ServletInputStream getInputStream() {
-            ByteArrayInputStream flux = new ByteArrayInputStream(corps);
+            ByteArrayInputStream stream = new ByteArrayInputStream(body);
             return new ServletInputStream() {
                 @Override
                 public int read() {
-                    return flux.read();
+                    return stream.read();
                 }
 
                 @Override
-                public int read(byte[] tampon, int debut, int longueur) {
-                    return flux.read(tampon, debut, longueur);
+                public int read(byte[] buffer, int offset, int length) {
+                    return stream.read(buffer, offset, length);
                 }
 
                 @Override
                 public boolean isFinished() {
-                    return flux.available() == 0;
+                    return stream.available() == 0;
                 }
 
                 @Override
@@ -108,7 +108,7 @@ final class CorpsBorneFilter extends OncePerRequestFilter {
                 }
 
                 @Override
-                public void setReadListener(ReadListener ecouteur) {
+                public void setReadListener(ReadListener listener) {
                     throw new UnsupportedOperationException("Lecture asynchrone non prise en charge");
                 }
             };
@@ -116,9 +116,9 @@ final class CorpsBorneFilter extends OncePerRequestFilter {
 
         @Override
         public BufferedReader getReader() {
-            String encodage = getCharacterEncoding();
+            String encoding = getCharacterEncoding();
             return new BufferedReader(new InputStreamReader(getInputStream(),
-                    encodage == null ? StandardCharsets.UTF_8 : Charset.forName(encodage)));
+                    encoding == null ? StandardCharsets.UTF_8 : Charset.forName(encoding)));
         }
     }
 }

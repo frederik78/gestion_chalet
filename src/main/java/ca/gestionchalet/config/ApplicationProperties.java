@@ -18,7 +18,7 @@ import org.springframework.validation.annotation.Validated;
  */
 @Validated
 @ConfigurationProperties("recus.securite")
-public record SecuriteProperties(
+public record ApplicationProperties(
         @Min(1) int echecsAvantBlocage,
         @NotNull Duration dureeBlocage,
         @Min(1) int sourcesSuiviesMax,

@@ -30,22 +30,22 @@ import org.springframework.util.StringUtils;
 
 /** Chaîne de sécurité explicite, refus par défaut (ADR 0001). */
 @Configuration
-@EnableConfigurationProperties(SecuriteProperties.class)
+@EnableConfigurationProperties(ApplicationProperties.class)
 public class SecurityConfiguration {
 
-    private static final String ROUTE_CONNEXION = "/api/connexion";
+    private static final String LOGIN_ROUTE = "/api/connexion";
     private static final String SAME_SITE = "Lax";
 
     /** La santé et les seules ressources nécessaires à la page de connexion, listées une à une. */
-    private static final String[] RESSOURCES_PUBLIQUES = {
+    private static final String[] PUBLIC_RESOURCES = {
         "/actuator/health", "/", "/index.html", "/connexion.js", "/commun.js", "/style.css",
         "/manifest.webmanifest", "/sw.js", "/icones/icone-192.png", "/icones/icone-512.png"
     };
 
-    private final SecuriteProperties securiteProperties;
+    private final ApplicationProperties applicationProperties;
 
-    public SecurityConfiguration(SecuriteProperties securiteProperties) {
-        this.securiteProperties = securiteProperties;
+    public SecurityConfiguration(ApplicationProperties applicationProperties) {
+        this.applicationProperties = applicationProperties;
     }
 
     @Bean
@@ -54,48 +54,48 @@ public class SecurityConfiguration {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, LoginRateLimiter limiteur) {
-        RequestMatcher connexion = PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, ROUTE_CONNEXION);
-        SecurityErrorHandler erreurs = new SecurityErrorHandler(connexion);
-        CookieCsrfTokenRepository jetons = CookieCsrfTokenRepository.withHttpOnlyFalse();
-        jetons.setCookieCustomizer(cookie -> cookie.secure(securiteProperties.cookieSecurise()).sameSite(SAME_SITE).path("/"));
+    public SecurityFilterChain filterChain(HttpSecurity http, LoginRateLimiter rateLimiter) {
+        RequestMatcher loginMatcher = PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, LOGIN_ROUTE);
+        SecurityErrorHandler errorHandler = new SecurityErrorHandler(loginMatcher);
+        CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        csrfTokenRepository.setCookieCustomizer(cookie -> cookie.secure(applicationProperties.cookieSecurise()).sameSite(SAME_SITE).path("/"));
         http
-            .csrf(csrf -> csrf.csrfTokenRepository(jetons).csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler()))
+            .csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository).csrfTokenRequestHandler(new SpaCsrfTokenRequestHandler()))
             .authorizeHttpRequests(authz -> authz
                 .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-                .requestMatchers(HttpMethod.GET, RESSOURCES_PUBLIQUES).permitAll()
+                .requestMatchers(HttpMethod.GET, PUBLIC_RESOURCES).permitAll()
                 .anyRequest().authenticated())
-            .exceptionHandling(exceptionHandling -> exceptionHandling.authenticationEntryPoint(erreurs).accessDeniedHandler(erreurs))
+            .exceptionHandling(exceptionHandling -> exceptionHandling.authenticationEntryPoint(errorHandler).accessDeniedHandler(errorHandler))
             .formLogin(formLogin -> formLogin
                 .loginPage("/") // alignement JHipster, sans effet mesuré
-                .loginProcessingUrl(ROUTE_CONNEXION)
+                .loginProcessingUrl(LOGIN_ROUTE)
                 .passwordParameter("motDePasse")
                 .successHandler((request, response, authentication) -> {
-                    limiteur.reset(request.getRemoteAddr());
+                    rateLimiter.reset(request.getRemoteAddr());
                     response.setStatus(HttpStatus.NO_CONTENT.value());
                 })
-                .failureHandler(erreurs)) // sans permitAll : il ouvrirait toutes les méthodes sur "/" et la connexion, contre le refus par défaut (ADR 0001)
+                .failureHandler(errorHandler)) // sans permitAll : il ouvrirait toutes les méthodes sur "/" et la connexion, contre le refus par défaut (ADR 0001)
             .logout(logout -> logout
                 .logoutUrl("/api/deconnexion")
                 .deleteCookies("JSESSIONID")
                 .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT))
                 .permitAll()) // alignement JHipster, sans effet mesuré
             .addFilterBefore(
-                new GardeConnexionFilter(connexion, limiteur, securiteProperties.corpsRequeteMax().toBytes()),
+                new LoginGuardFilter(loginMatcher, rateLimiter, applicationProperties.corpsRequeteMax().toBytes()),
                 UsernamePasswordAuthenticationFilter.class)
-            .headers(AbstractHttpConfigurer::disable) // posés par EnTetesSecuriteFilter, avant le pare-feu HTTP
+            .headers(AbstractHttpConfigurer::disable) // posés par SecurityHeadersFilter, avant le pare-feu HTTP
             .requestCache(AbstractHttpConfigurer::disable);
         return http.build();
     }
 
     @Bean
-    Clock horloge() {
+    Clock clock() {
         return Clock.systemUTC();
     }
 
     @Bean
-    LoginRateLimiter limiteurConnexion(Clock horloge) {
-        return new LoginRateLimiter(securiteProperties.echecsAvantBlocage(), securiteProperties.dureeBlocage(), securiteProperties.sourcesSuiviesMax(), horloge);
+    LoginRateLimiter loginRateLimiter(Clock clock) {
+        return new LoginRateLimiter(applicationProperties.echecsAvantBlocage(), applicationProperties.dureeBlocage(), applicationProperties.sourcesSuiviesMax(), clock);
     }
 
     /**

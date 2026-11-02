@@ -18,12 +18,12 @@
   </Match>
   <!-- Le type de contenu choisit seulement la limite applicable : un type mensonger sans session est refusé sans lecture, et avec session mène au multipart, borné par ses propres limites (cs08). -->
   <Match>
-    <Class name="ca.gestionchalet.config.CorpsBorneFilter"/>
+    <Class name="ca.gestionchalet.config.RequestBodyLimitFilter"/>
     <Bug pattern="SERVLET_CONTENT_TYPE"/>
   </Match>
   <!-- Le type et l'absence de paramètres d'URL servent seulement à refuser la requête avant formLogin ; aucune valeur n'est recopiée. -->
   <Match>
-    <Class name="ca.gestionchalet.config.GardeConnexionFilter"/>
+    <Class name="ca.gestionchalet.config.LoginGuardFilter"/>
     <Or>
       <Bug pattern="SERVLET_CONTENT_TYPE"/>
       <Bug pattern="SERVLET_QUERY_STRING"/>
