@@ -67,7 +67,7 @@ public class SecurityConfiguration {
                 .anyRequest().authenticated())
             .exceptionHandling(exceptionHandling -> exceptionHandling.authenticationEntryPoint(erreurs).accessDeniedHandler(erreurs))
             .formLogin(formLogin -> formLogin
-                .loginPage("/")
+                .loginPage("/") // alignement JHipster, sans effet mesuré
                 .loginProcessingUrl(ROUTE_CONNEXION)
                 .passwordParameter("motDePasse")
                 .successHandler((request, response, authentication) -> {
@@ -79,7 +79,7 @@ public class SecurityConfiguration {
                 .logoutUrl("/api/deconnexion")
                 .deleteCookies("JSESSIONID")
                 .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT))
-                .permitAll())
+                .permitAll()) // alignement JHipster, sans effet mesuré
             .addFilterBefore(
                 new GardeConnexionFilter(connexion, limiteur, securiteProperties.corpsRequeteMax().toBytes()),
                 UsernamePasswordAuthenticationFilter.class)
