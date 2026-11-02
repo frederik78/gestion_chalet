@@ -122,6 +122,22 @@ class GardeConnexionServeurReelTest {
         assertThat(journal.getAll()).doesNotContain(TEMOIN, ConfigurationEssai.MOT_DE_PASSE);
     }
 
+    /** Juste au-delà de la borne de 64 Ko, et bien au-delà : le corps n'arrive jamais, le refus précède la lecture et bcrypt. */
+    @ParameterizedTest
+    @ValueSource(longs = {65_537L, 400_000_000L})
+    void cs08_unFormulaireAnnonceAuDelaDeLaBorneEstRefuseSansEtreLu(long longueur) {
+        String jeton = UUID.randomUUID().toString();
+        clearInvocations(encodeur);
+
+        ClientBrut.Reponse reponse = ClientBrut.envoyerSansLaFinDuCorps(port, "POST /api/connexion HTTP/1.1\r\nHost: localhost\r\n"
+                + "Content-Type: application/x-www-form-urlencoded\r\nContent-Length: " + longueur + "\r\n"
+                + "X-XSRF-TOKEN: " + jeton + "\r\nCookie: XSRF-TOKEN=" + jeton + "\r\n\r\nmotDePasse=", 5_000);
+
+        assertThat(reponse.statut()).isEqualTo(413);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "La requête est trop volumineuse.", "code", "TAILLE_EXCESSIVE"));
+        verify(encodeur, never()).matches(any(), anyString());
+    }
+
     /** Le corps annoncé n'arrive jamais : un refus qui tarderait trahirait une lecture. Refusé avant le compte des tentatives et avant bcrypt. */
     @ParameterizedTest
     @ValueSource(strings = {"multipart/form-data; boundary=x", "MULTIPART/FORM-DATA; boundary=x", "Multipart/Mixed; boundary=x", "text/plain", "*/*"})
