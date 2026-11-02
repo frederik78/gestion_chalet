@@ -32,7 +32,7 @@ server:
     webmanifest: application/manifest+json
   tomcat:
     # Le formulaire de connexion est lu par Tomcat, avant CorpsBorneFilter (2 Mo par défaut).
-    max-http-form-post-size: 64KB
+    max-http-form-post-size: ${recus.securite.corps-requete-max}
   servlet:
     session:
       timeout: 8h
