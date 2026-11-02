@@ -35,43 +35,50 @@ public class SecurityConfiguration {
         "/manifest.webmanifest", "/sw.js", "/icones/icone-192.png", "/icones/icone-512.png"
     };
 
-    @Bean
-    SecurityFilterChain chaineDeSecurite(HttpSecurity http, SecuriteProperties proprietes, LimiteurConnexion limiteur) {
-        RequestMatcher connexion = PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, ROUTE_CONNEXION);
-        ErreursSecurite erreurs = new ErreursSecurite(connexion);
-        CookieCsrfTokenRepository jetons = CookieCsrfTokenRepository.withHttpOnlyFalse();
-        jetons.setCookieCustomizer(cookie -> cookie.secure(proprietes.cookieSecurise()).sameSite(SAME_SITE).path("/"));
-        return http
-                .authorizeHttpRequests(acces -> acces
-                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-                        .requestMatchers(HttpMethod.GET, RESSOURCES_PUBLIQUES).permitAll()
-                        .anyRequest().authenticated())
-                .csrf(csrf -> csrf.csrfTokenRepository(jetons).csrfTokenRequestHandler(new JetonCsrfParEnTete()))
-                .formLogin(formulaire -> formulaire
-                        .loginPage("/")
-                        .loginProcessingUrl(ROUTE_CONNEXION)
-                        .passwordParameter("motDePasse")
-                        .successHandler((requete, reponse, authentification) -> {
-                            limiteur.reinitialiser(requete.getRemoteAddr());
-                            reponse.setStatus(HttpStatus.NO_CONTENT.value());
-                        })
-                        .failureHandler(erreurs))
-                .logout(deconnexion -> deconnexion
-                        .logoutUrl("/api/deconnexion")
-                        .deleteCookies("JSESSIONID")
-                        .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
-                .addFilterBefore(
-                        new GardeConnexionFilter(connexion, limiteur, proprietes.corpsRequeteMax().toBytes()),
-                        UsernamePasswordAuthenticationFilter.class)
-                .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(erreurs).accessDeniedHandler(erreurs))
-                .headers(AbstractHttpConfigurer::disable) // posés par EnTetesSecuriteFilter, avant le pare-feu HTTP
-                .requestCache(AbstractHttpConfigurer::disable)
-                .build();
+    private final SecuriteProperties securiteProperties;
+
+    public SecurityConfiguration(SecuriteProperties securiteProperties) {
+        this.securiteProperties = securiteProperties;
     }
 
     @Bean
-    PasswordEncoder encodeurMotDePasse() {
+    public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http, LimiteurConnexion limiteur) {
+        RequestMatcher connexion = PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, ROUTE_CONNEXION);
+        ErreursSecurite erreurs = new ErreursSecurite(connexion);
+        CookieCsrfTokenRepository jetons = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        jetons.setCookieCustomizer(cookie -> cookie.secure(securiteProperties.cookieSecurise()).sameSite(SAME_SITE).path("/"));
+        http
+            .csrf(csrf -> csrf.csrfTokenRepository(jetons).csrfTokenRequestHandler(new JetonCsrfParEnTete()))
+            .authorizeHttpRequests(authz -> authz
+                .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                .requestMatchers(HttpMethod.GET, RESSOURCES_PUBLIQUES).permitAll()
+                .anyRequest().authenticated())
+            .exceptionHandling(exceptionHandling -> exceptionHandling.authenticationEntryPoint(erreurs).accessDeniedHandler(erreurs))
+            .formLogin(formLogin -> formLogin
+                .loginPage("/")
+                .loginProcessingUrl(ROUTE_CONNEXION)
+                .passwordParameter("motDePasse")
+                .successHandler((request, response, authentication) -> {
+                    limiteur.reinitialiser(request.getRemoteAddr());
+                    response.setStatus(HttpStatus.NO_CONTENT.value());
+                })
+                .failureHandler(erreurs)) // sans permitAll : il ouvrirait toutes les méthodes sur "/" et la connexion (404 au lieu de 401, cs01)
+            .logout(logout -> logout
+                .logoutUrl("/api/deconnexion")
+                .deleteCookies("JSESSIONID")
+                .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT))
+                .permitAll())
+            .addFilterBefore(
+                new GardeConnexionFilter(connexion, limiteur, securiteProperties.corpsRequeteMax().toBytes()),
+                UsernamePasswordAuthenticationFilter.class)
+            .headers(AbstractHttpConfigurer::disable) // posés par EnTetesSecuriteFilter, avant le pare-feu HTTP
+            .requestCache(AbstractHttpConfigurer::disable);
+        return http.build();
     }
 
     @Bean
@@ -80,13 +87,13 @@ public class SecurityConfiguration {
     }
 
     @Bean
-    LimiteurConnexion limiteurConnexion(SecuriteProperties proprietes, Clock horloge) {
-        return new LimiteurConnexion(proprietes.echecsAvantBlocage(), proprietes.dureeBlocage(), proprietes.sourcesSuiviesMax(), horloge);
+    LimiteurConnexion limiteurConnexion(Clock horloge) {
+        return new LimiteurConnexion(securiteProperties.echecsAvantBlocage(), securiteProperties.dureeBlocage(), securiteProperties.sourcesSuiviesMax(), horloge);
     }
 
     /** Déclaré ici et non annoté {@code @Service} : la couche {@code security} n'a pas accès à {@code config} (ADR 0001). */
     @Bean
-    CompteLocal compteLocal(SecuriteProperties proprietes) {
-        return new CompteLocal(proprietes.condenseMotDePasse());
+    CompteLocal compteLocal() {
+        return new CompteLocal(securiteProperties.condenseMotDePasse());
     }
 }
