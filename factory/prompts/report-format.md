@@ -38,6 +38,16 @@ Règles
 - Écarts avec le PRD ou l'issue.
 - Dépendances ajoutées : nom, version, origine, licence (A06).
 
+## Code écrit à la place du framework
+| Classe | Ce que le framework ou la référence de l'ADR fournit | Raison de ne pas l'utiliser (critère du PRD ou mesure) |
+|---|---|---|
+Une ligne par mécanisme transversal écrit à la main. « aucun » si rien.
+
+## Alignement sur la référence
+| Fichier de la référence (version) | Fichier du projet | Identique, adapté ou absent | Raison de l'écart |
+|---|---|---|---|
+Une ligne par fichier ajouté ou modifié qui joue un rôle couvert par la référence de l'ADR. « sans objet » si l'ADR n'en nomme aucune.
+
 ## À trancher par l'utilisateur
 - Comportements non fixés par le PRD que tu as choisis seul (valeur, raison, alternative), à inscrire au PRD. « aucun » si rien.
 
@@ -56,6 +66,10 @@ APPROUVÉ | CHANGEMENTS DEMANDÉS (+ une phrase)
 
 ## Preuve
 La preuve avant / après du développeur est-elle présente, vérifiable (tu as relancé la commande) et suffisante pour chaque critère ? Sinon, constat IMPORTANT.
+
+## Framework
+Mécanismes transversaux écrits à la main : équivalent cherché dans le framework et la référence de l'ADR, verdict pour chacun. « aucun » si rien.
+Écarts à la référence : fichiers comparés et verdict pour chaque écart. « sans objet » si l'ADR n'en nomme aucune.
 
 ## Constats
 BLOQUANT / IMPORTANT / MINEUR : une ligne chacun, `fichier:ligne`, la catégorie OWASP entre crochets si sécurité ([A05]),

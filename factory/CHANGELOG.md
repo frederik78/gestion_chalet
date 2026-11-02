@@ -1,5 +1,32 @@
 # Historique des versions
 
+## 1.13.0
+- Règle « Langue du code » : les classes techniques sont impérativement en anglais. Dans `AGENTS.md`, `developer.md` et le guide java ; en revue, une classe technique dans une autre langue est un constat IMPORTANT.
+- `LESSONS.md` : leçon n° 28.
+- Migration : remplacer `factory/`, relancer `./factory/init-projet.sh`, puis reprendre la ligne « Langue du code » dans `AGENTS.md`.
+
+## 1.12.0
+- Applications Spring Boot : dépendances Spring d'abord, JHipster comme modèle pour l'emplacement, les noms et la forme du code. `stacks/java-maven/README.md` dit quel exemple et quels fichiers lire selon l'authentification et le frontend (aucun, Angular, React, Vue), un fichier à la fois, sans générateur ni clone.
+- Règle générale « La référence de code » : l'ADR fixe un projet et sa version ; chaque écart a une raison. Section « Alignement sur la référence » du rapport, contrôlée par `/deliver` ; écart sans raison = constat IMPORTANT en revue ; champ dans les briefs et le modèle d'ADR.
+- `LESSONS.md` : leçon n° 27.
+- Migration : remplacer `factory/`, relancer `./factory/init-projet.sh`, reprendre la ligne « La référence de code » dans `AGENTS.md` et fixer la référence dans l'ADR d'architecture.
+
+## 1.11.0
+- Règle « Le framework d'abord » : avant d'écrire un mécanisme transversal, chercher ce que fournit le framework dans la version utilisée et lire le code de la référence nommée par l'ADR. Un équivalent à la main se justifie par un critère du PRD ou une mesure.
+- Contrôle à chaque étape : section « Code écrit à la place du framework » du rapport du développeur, vérifiée par `/deliver` ; section « Framework » de la revue, où un équivalent injustifié est un constat IMPORTANT ; champ dans les briefs ; rubrique dans le modèle d'ADR.
+- `stacks/java-maven/README.md` : table des mécanismes Spring et de la référence JHipster à consulter.
+- `LESSONS.md` : leçon n° 26.
+- Tests : 273 vérifications.
+- Migration : remplacer `factory/`, relancer `./factory/init-projet.sh`, puis reprendre la ligne « Le framework d'abord » dans `AGENTS.md` (`diff factory/templates/AGENTS.md AGENTS.md`), qui n'est pas écrasé.
+
+## 1.10.0
+- Modèle et effort des agents configurables : `AGENT_MODELE` (`opus` par défaut) et `AGENT_EFFORT` (`low` par défaut), aux trois niveaux habituels (`.factory.conf`, `.factory.local.conf`, `FACTORY_*`). `sync-claude.sh` les écrit dans les enveloppes `.claude/agents/`. Valeur vide : l'agent hérite de la session. L'en-tête d'un prompt l'emporte pour son rôle.
+- Sécurité : une valeur hors format est refusée (code 64), sans modifier les enveloppes, pour qu'elle n'ajoute aucun champ à l'en-tête YAML.
+- **Changement de comportement** : sans configuration, les agents ne suivent plus le modèle de la session, ils passent en Opus avec un effort faible. Pour garder l'ancien comportement : `AGENT_MODELE=` et `AGENT_EFFORT=`.
+- `LESSONS.md` : leçon n° 25.
+- Tests : 263 vérifications.
+- Migration : remplacer `factory/`, relancer `./factory/init-projet.sh`, puis ajouter si besoin les deux clés à `.factory.conf` ; il n'est pas écrasé.
+
 ## 1.9.2
 - Correctif : `factory/scripts/tests/run.sh` passe dans un projet. Les 5 vérifications de la racine (CI, `.factory-verify`, Dependabot) ne s'exécutent que dans le dépôt de la factory, repéré par le fichier `.factory-depot`, qui n'est jamais copié dans un projet.
 - `LESSONS.md` : leçon n° 24.
