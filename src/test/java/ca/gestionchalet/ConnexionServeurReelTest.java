@@ -98,8 +98,24 @@ class ConnexionServeurReelTest {
     }
 
     @Test
-    void cs04_unLongMotDePasseEstRefuseSansErreur() {
-        assertThat(client().connecter("x".repeat(1001)).statut()).isEqualTo(401);
+    void cs04_unMotDePasseFauxDeDeuxMilleCaracteresDonne401SansErreurInterne() {
+        Reponse reponse = client().connecter("x".repeat(2000));
+
+        assertThat(reponse.statut()).isEqualTo(401);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Identifiants invalides.", "code", "IDENTIFIANTS_INVALIDES"));
+    }
+
+    @Test
+    void cs05_unMotDePasseVideOuAbsentCompteUneTentative() {
+        ClientEssai client = client();
+        client.get("/actuator/health");
+        for (int essai = 0; essai < ECHECS_PAR_DEFAUT; essai++) {
+            String corps = essai % 2 == 0 ? "motDePasse=" : "autre=1";
+            Reponse reponse = client.envoyer(client.requeteConnexion("x").POST(HttpRequest.BodyPublishers.ofString(corps)).build());
+            assertThat(reponse.statut()).as(corps).isEqualTo(401);
+        }
+
+        assertThat(client.connecter(ConfigurationEssai.MOT_DE_PASSE).statut()).isEqualTo(429);
     }
 
     private ClientEssai clientBloque() {
