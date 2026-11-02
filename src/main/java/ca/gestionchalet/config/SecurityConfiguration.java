@@ -4,7 +4,6 @@ import ca.gestionchalet.security.CompteLocal;
 import ca.gestionchalet.security.LimiteurConnexion;
 import ca.gestionchalet.web.rest.errors.ErreursSecurite;
 import jakarta.servlet.DispatcherType;
-import jakarta.servlet.http.Cookie;
 import java.time.Clock;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -17,7 +16,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.web.authentication.logout.CookieClearingLogoutHandler;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
@@ -57,7 +55,7 @@ public class SecurityConfiguration {
                         .failureHandler(erreurs))
                 .logout(deconnexion -> deconnexion
                         .logoutUrl("/api/deconnexion")
-                        .addLogoutHandler(new CookieClearingLogoutHandler(cookieSessionExpire(proprietes.cookieSecurise())))
+                        .deleteCookies("JSESSIONID")
                         .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
                 .addFilterBefore(
                         new GardeConnexionFilter(PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, ErreursSecurite.ROUTE_CONNEXION),
@@ -67,16 +65,6 @@ public class SecurityConfiguration {
                 .headers(AbstractHttpConfigurer::disable) // posés par EnTetesSecuriteFilter, avant le pare-feu HTTP
                 .requestCache(AbstractHttpConfigurer::disable)
                 .build();
-    }
-
-    private static Cookie cookieSessionExpire(boolean securise) {
-        Cookie cookie = new Cookie("JSESSIONID", "");
-        cookie.setPath("/");
-        cookie.setMaxAge(0);
-        cookie.setHttpOnly(true);
-        cookie.setSecure(securise);
-        cookie.setAttribute("SameSite", SAME_SITE);
-        return cookie;
     }
 
     @Bean

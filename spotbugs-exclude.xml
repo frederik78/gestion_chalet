@@ -29,12 +29,6 @@
       <Bug pattern="SERVLET_QUERY_STRING"/>
     </Or>
   </Match>
-  <!-- Cookie vide et expiré, qui efface celui de la session : Secure suit recus.securite.cookie-securise, vrai hors poste local (cs04, cs06). -->
-  <Match>
-    <Class name="ca.gestionchalet.config.SecurityConfiguration"/>
-    <Method name="cookieSessionExpire"/>
-    <Bug pattern="INSECURE_COOKIE"/>
-  </Match>
   <!-- Seuls sont journalisés un nom de classe et une trame de pile, jamais une donnée de la requête ni le message de l'exception. -->
   <Match>
     <Class name="ca.gestionchalet.web.rest.errors.GestionnaireErreurs"/>

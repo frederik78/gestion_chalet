@@ -165,7 +165,7 @@ class ConnexionServeurReelTest {
         Reponse deconnexion = client.deconnecter();
 
         assertThat(deconnexion.statut()).isEqualTo(204);
-        assertThat(deconnexion.setCookie("JSESSIONID")).containsExactly("JSESSIONID=; Expires=Thu, 01 Jan 1970 00:00:10 GMT; Path=/; Secure; HttpOnly; SameSite=Lax");
+        assertThat(deconnexion.setCookie("JSESSIONID")).containsExactly("JSESSIONID=; Expires=Thu, 01 Jan 1970 00:00:10 GMT; Path=/; SameSite=Lax");
         assertThat(client.cookie("JSESSIONID")).isNull();
         Reponse rejeu = ancien.get("/api/essai/session");
         assertThat(rejeu.statut()).isEqualTo(401);
