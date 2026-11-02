@@ -13,7 +13,7 @@
   </Match>
   <!-- L'en-tête est le jeton CSRF lui-même : Spring Security le compare au cookie, c'est précisément son rôle. -->
   <Match>
-    <Class name="ca.gestionchalet.config.JetonCsrfParEnTete"/>
+    <Class name="ca.gestionchalet.config.SecurityConfiguration$SpaCsrfTokenRequestHandler"/>
     <Bug pattern="SERVLET_HEADER"/>
   </Match>
   <!-- Le type de contenu choisit seulement la limite applicable : un type mensonger sans session est refusé sans lecture, et avec session mène au multipart, borné par ses propres limites (cs08). -->
