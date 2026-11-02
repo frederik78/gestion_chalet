@@ -19,6 +19,7 @@ class ValeursParDefautTest {
         "recus.securite.duree-blocage, 15m",
         "server.servlet.session.timeout, 8h",
         "server.tomcat.max-http-form-post-size, 64KB",
+        "spring.servlet.multipart.resolve-lazily, true",
         "recus.securite.cookie-securise, true",
         "server.forward-headers-strategy, none",
         "spring.mvc.formcontent.filter.enabled, false",

@@ -5,6 +5,8 @@ spring:
     multipart:
       max-file-size: 15MB
       max-request-size: 75MB
+      # Analysé seulement par une route qui lit un multipart, jamais par le seul passage dans Spring MVC.
+      resolve-lazily: true
   # Ces filtres liraient le corps d'un formulaire avant la sécurité, sans la borne de CorpsBorneFilter. Aucune route n'en a besoin.
   mvc:
     formcontent:
