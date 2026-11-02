@@ -1,7 +1,7 @@
 package ca.gestionchalet.config;
 
-import ca.gestionchalet.web.rest.errors.CodeErreur;
-import ca.gestionchalet.web.rest.errors.ReponsesErreur;
+import ca.gestionchalet.web.rest.errors.ErrorCode;
+import ca.gestionchalet.web.rest.errors.ErrorResponses;
 import java.io.IOException;
 import java.io.Writer;
 import org.apache.catalina.connector.Request;
@@ -20,15 +20,15 @@ public class ErreurServeurValve extends ErrorReportValve {
         if (reponse.getStatus() < 400 || reponse.getContentWritten() > 0 || !reponse.setErrorReported()) {
             return;
         }
-        CodeErreur code = CodeErreur.pourStatut(reponse.getStatus());
+        ErrorCode code = ErrorCode.fromStatus(reponse.getStatus());
         EnTetesSecurite.appliquer(reponse);
-        reponse.setStatus(code.statut());
+        reponse.setStatus(code.status());
         reponse.setContentType(MediaType.APPLICATION_JSON_VALUE);
         reponse.setCharacterEncoding("UTF-8");
         try {
             Writer sortie = reponse.getReporter();
             if (sortie != null) {
-                sortie.write(ReponsesErreur.json(code));
+                sortie.write(ErrorResponses.json(code));
                 reponse.finishResponse();
             }
         } catch (IOException | IllegalStateException e) {

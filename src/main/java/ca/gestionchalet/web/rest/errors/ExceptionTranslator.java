@@ -1,6 +1,6 @@
 package ca.gestionchalet.web.rest.errors;
 
-import ca.gestionchalet.web.rest.errors.ErreurDTO.ChampInvalideDTO;
+import ca.gestionchalet.web.rest.errors.ErrorDTO.InvalidFieldDTO;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import org.slf4j.Logger;
@@ -31,29 +31,29 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
     /** Point de sortie unique : seul le statut compte, aucun en-tête d'exception ({@code Allow}) n'est repris, et une panne est journalisée sans son message. */
     @Override
     protected ResponseEntity<Object> handleExceptionInternal(Exception ex, Object body, HttpHeaders headers, HttpStatusCode statusCode, WebRequest request) {
-        CodeErreur code = CodeErreur.pourStatut(statusCode.value());
-        if (code == CodeErreur.ERREUR_INTERNE) {
-            LOG.error("Erreur interne : {} en {}", ex.getClass().getName(), premiereTrame(ex));
+        ErrorCode code = ErrorCode.fromStatus(statusCode.value());
+        if (code == ErrorCode.ERREUR_INTERNE) {
+            LOG.error("Erreur interne : {} en {}", ex.getClass().getName(), firstFrame(ex));
         }
         // Même test que super, qui journaliserait ici le message de l'exception : il peut porter un contenu de reçu.
-        if (request instanceof ServletWebRequest requeteServlet) {
-            HttpServletResponse reponse = requeteServlet.getResponse();
-            if (reponse != null && reponse.isCommitted()) {
+        if (request instanceof ServletWebRequest servletRequest) {
+            HttpServletResponse response = servletRequest.getResponse();
+            if (response != null && response.isCommitted()) {
                 return null;
             }
         }
         HttpHeaders json = new HttpHeaders();
         json.setContentType(MediaType.APPLICATION_JSON);
-        Object corps = body instanceof ErreurDTO ? body : ErreurDTO.de(code);
-        return super.handleExceptionInternal(ex, corps, json, HttpStatusCode.valueOf(code.statut()), request);
+        Object errorBody = body instanceof ErrorDTO ? body : ErrorDTO.of(code);
+        return super.handleExceptionInternal(ex, errorBody, json, HttpStatusCode.valueOf(code.status()), request);
     }
 
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(MethodArgumentNotValidException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
-        List<ChampInvalideDTO> champs = ex.getBindingResult().getFieldErrors().stream()
-                .map(ExceptionTranslator::champInvalide)
+        List<InvalidFieldDTO> fields = ex.getBindingResult().getFieldErrors().stream()
+                .map(ExceptionTranslator::invalidField)
                 .toList();
-        return handleExceptionInternal(ex, ErreurDTO.validation(champs), headers, status, request);
+        return handleExceptionInternal(ex, ErrorDTO.validation(fields), headers, status, request);
     }
 
     @ExceptionHandler(MultipartException.class)
@@ -66,17 +66,17 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
         return handleExceptionInternal(ex, null, new HttpHeaders(), HttpStatus.INTERNAL_SERVER_ERROR, request);
     }
 
-    private static String premiereTrame(Exception ex) {
-        StackTraceElement[] trames = ex.getStackTrace();
-        return trames.length == 0 ? "inconnu" : trames[0].toString();
+    private static String firstFrame(Exception ex) {
+        StackTraceElement[] frames = ex.getStackTrace();
+        return frames.length == 0 ? "inconnu" : frames[0].toString();
     }
 
-    private static ChampInvalideDTO champInvalide(FieldError erreur) {
-        String code = switch (String.valueOf(erreur.getCode())) {
+    private static InvalidFieldDTO invalidField(FieldError error) {
+        String code = switch (String.valueOf(error.getCode())) {
             case "NotNull", "NotBlank", "NotEmpty" -> "OBLIGATOIRE";
             case "Size", "Min", "Max", "Positive", "PositiveOrZero" -> "BORNE";
             default -> "FORMAT";
         };
-        return new ChampInvalideDTO(erreur.getField(), code);
+        return new InvalidFieldDTO(error.getField(), code);
     }
 }

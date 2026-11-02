@@ -1,7 +1,7 @@
 package ca.gestionchalet.config;
 
-import ca.gestionchalet.web.rest.errors.CodeErreur;
-import ca.gestionchalet.web.rest.errors.ReponsesErreur;
+import ca.gestionchalet.web.rest.errors.ErrorCode;
+import ca.gestionchalet.web.rest.errors.ErrorResponses;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ReadListener;
 import jakarta.servlet.ServletException;
@@ -43,7 +43,7 @@ final class CorpsBorneFilter extends OncePerRequestFilter {
             throws IOException, ServletException {
         if (!sessionOuverte()) {
             if (estMultipart(requete)) {
-                ReponsesErreur.ecrire(reponse, CodeErreur.FORMAT_NON_ACCEPTE);
+                ErrorResponses.write(reponse, ErrorCode.FORMAT_NON_ACCEPTE);
             } else {
                 suite.doFilter(new CorpsRejoue(requete, new byte[0]), reponse);
             }
@@ -54,12 +54,12 @@ final class CorpsBorneFilter extends OncePerRequestFilter {
             return;
         }
         if (requete.getContentLengthLong() > limite) {
-            ReponsesErreur.ecrire(reponse, CodeErreur.TAILLE_EXCESSIVE);
+            ErrorResponses.write(reponse, ErrorCode.TAILLE_EXCESSIVE);
             return;
         }
         byte[] corps = requete.getInputStream().readNBytes(limite + 1);
         if (corps.length > limite) {
-            ReponsesErreur.ecrire(reponse, CodeErreur.TAILLE_EXCESSIVE);
+            ErrorResponses.write(reponse, ErrorCode.TAILLE_EXCESSIVE);
             return;
         }
         suite.doFilter(new CorpsRejoue(requete, corps), reponse);

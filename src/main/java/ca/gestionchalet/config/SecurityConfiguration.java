@@ -1,7 +1,7 @@
 package ca.gestionchalet.config;
 
 import ca.gestionchalet.security.LimiteurConnexion;
-import ca.gestionchalet.web.rest.errors.ErreursSecurite;
+import ca.gestionchalet.web.rest.errors.SecurityErrorHandler;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -56,7 +56,7 @@ public class SecurityConfiguration {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, LimiteurConnexion limiteur) {
         RequestMatcher connexion = PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, ROUTE_CONNEXION);
-        ErreursSecurite erreurs = new ErreursSecurite(connexion);
+        SecurityErrorHandler erreurs = new SecurityErrorHandler(connexion);
         CookieCsrfTokenRepository jetons = CookieCsrfTokenRepository.withHttpOnlyFalse();
         jetons.setCookieCustomizer(cookie -> cookie.secure(securiteProperties.cookieSecurise()).sameSite(SAME_SITE).path("/"));
         http

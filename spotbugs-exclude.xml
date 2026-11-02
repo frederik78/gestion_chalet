@@ -8,7 +8,7 @@
   </Match>
   <!-- /error reçoit le renvoi d'erreur du serveur quelle que soit la méthode d'origine : il ne change aucun état et le CSRF reste actif sur les vraies routes. -->
   <Match>
-    <Class name="ca.gestionchalet.web.rest.errors.ErreurResource"/>
+    <Class name="ca.gestionchalet.web.rest.errors.ErrorResource"/>
     <Bug pattern="SPRING_CSRF_UNRESTRICTED_REQUEST_MAPPING"/>
   </Match>
   <!-- L'en-tête est le jeton CSRF lui-même : Spring Security le compare au cookie, c'est précisément son rôle. -->

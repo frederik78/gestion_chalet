@@ -1,7 +1,7 @@
 package ca.gestionchalet.web.rest.errors;
 
 /** Codes d'erreur de l'API : statut HTTP et message générique, sans aucun détail technique. */
-public enum CodeErreur {
+public enum ErrorCode {
     VALIDATION(400, "Certains champs sont invalides."),
     REQUETE_INVALIDE(400, "La requête est invalide."),
     NON_AUTHENTIFIE(401, "Authentification requise."),
@@ -13,16 +13,16 @@ public enum CodeErreur {
     TROP_DE_TENTATIVES(429, "Trop de tentatives. Réessayez plus tard."),
     ERREUR_INTERNE(500, "Une erreur interne est survenue.");
 
-    private final int statut;
+    private final int status;
     private final String message;
 
-    CodeErreur(int statut, String message) {
-        this.statut = statut;
+    ErrorCode(int status, String message) {
+        this.status = status;
         this.message = message;
     }
 
-    public int statut() {
-        return statut;
+    public int status() {
+        return status;
     }
 
     public String message() {
@@ -30,15 +30,15 @@ public enum CodeErreur {
     }
 
     /** Le code d'une réponse d'erreur dont seul le statut est connu (framework, serveur). */
-    public static CodeErreur pourStatut(int statut) {
-        return switch (statut) {
+    public static ErrorCode fromStatus(int status) {
+        return switch (status) {
             case 401 -> NON_AUTHENTIFIE;
             case 403 -> CSRF_INVALIDE;
             case 404, 405 -> INTROUVABLE;
             case 413 -> TAILLE_EXCESSIVE;
             case 415 -> FORMAT_NON_ACCEPTE;
             case 429 -> TROP_DE_TENTATIVES;
-            default -> statut >= 400 && statut < 500 ? REQUETE_INVALIDE : ERREUR_INTERNE;
+            default -> status >= 400 && status < 500 ? REQUETE_INVALIDE : ERREUR_INTERNE;
         };
     }
 }

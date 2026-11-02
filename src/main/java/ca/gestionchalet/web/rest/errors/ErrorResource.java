@@ -11,12 +11,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** Remplace la page d'erreur de Spring Boot : tout renvoi d'erreur du serveur rend le corps générique, sans chemin ni horodatage. */
 @RestController
-public class ErreurResource implements ErrorController {
+public class ErrorResource implements ErrorController {
 
     @RequestMapping("/error")
-    ResponseEntity<ErreurDTO> erreur(HttpServletRequest requete) {
-        Object statut = requete.getAttribute(RequestDispatcher.ERROR_STATUS_CODE);
-        CodeErreur code = statut instanceof Integer valeur ? CodeErreur.pourStatut(valeur) : CodeErreur.INTROUVABLE;
-        return ResponseEntity.status(HttpStatus.valueOf(code.statut())).contentType(MediaType.APPLICATION_JSON).body(ErreurDTO.de(code));
+    ResponseEntity<ErrorDTO> error(HttpServletRequest request) {
+        Object status = request.getAttribute(RequestDispatcher.ERROR_STATUS_CODE);
+        ErrorCode code = status instanceof Integer value ? ErrorCode.fromStatus(value) : ErrorCode.INTROUVABLE;
+        return ResponseEntity.status(HttpStatus.valueOf(code.status())).contentType(MediaType.APPLICATION_JSON).body(ErrorDTO.of(code));
     }
 }

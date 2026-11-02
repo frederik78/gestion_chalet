@@ -1,8 +1,8 @@
 package ca.gestionchalet.config;
 
 import ca.gestionchalet.security.LimiteurConnexion;
-import ca.gestionchalet.web.rest.errors.CodeErreur;
-import ca.gestionchalet.web.rest.errors.ReponsesErreur;
+import ca.gestionchalet.web.rest.errors.ErrorCode;
+import ca.gestionchalet.web.rest.errors.ErrorResponses;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -43,16 +43,16 @@ final class GardeConnexionFilter extends OncePerRequestFilter {
             throws IOException, ServletException {
         long longueur = requete.getContentLengthLong();
         if (requete.getQueryString() != null) {
-            ReponsesErreur.ecrire(reponse, CodeErreur.REQUETE_INVALIDE);
+            ErrorResponses.write(reponse, ErrorCode.REQUETE_INVALIDE);
         } else if (!estFormulaire(requete.getContentType())) {
-            ReponsesErreur.ecrire(reponse, CodeErreur.FORMAT_NON_ACCEPTE);
+            ErrorResponses.write(reponse, ErrorCode.FORMAT_NON_ACCEPTE);
         } else if (longueur < 0 || longueur > limite) {
-            ReponsesErreur.ecrire(reponse, CodeErreur.TAILLE_EXCESSIVE);
+            ErrorResponses.write(reponse, ErrorCode.TAILLE_EXCESSIVE);
         } else {
             Optional<Duration> restant = limiteur.reserver(requete.getRemoteAddr());
             if (restant.isPresent()) {
                 reponse.setHeader(HttpHeaders.RETRY_AFTER, Long.toString(restant.get().plusNanos(999_999_999L).toSeconds()));
-                ReponsesErreur.ecrire(reponse, CodeErreur.TROP_DE_TENTATIVES);
+                ErrorResponses.write(reponse, ErrorCode.TROP_DE_TENTATIVES);
             } else {
                 suite.doFilter(requete, reponse);
             }
