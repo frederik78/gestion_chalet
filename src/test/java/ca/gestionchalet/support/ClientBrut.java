@@ -69,6 +69,26 @@ public final class ClientBrut {
         }
     }
 
+    /** Comme {@link #envoyerSansLaFinDuCorps}, pour une réponse fragmentée : Tomcat n'en écrit la fin qu'après avoir purgé le corps. Lit jusqu'au texte attendu. */
+    public static String lireJusqua(int port, String debut, String attendu, int delaiMs) {
+        try (Socket socket = new Socket("localhost", port)) {
+            socket.setSoTimeout(delaiMs);
+            socket.getOutputStream().write(debut.getBytes(StandardCharsets.ISO_8859_1));
+            StringBuilder recu = new StringBuilder();
+            byte[] tampon = new byte[1024];
+            while (!recu.toString().contains(attendu)) {
+                int lus = socket.getInputStream().read(tampon);
+                if (lus < 0) {
+                    break;
+                }
+                recu.append(new String(tampon, 0, lus, StandardCharsets.UTF_8));
+            }
+            return recu.toString();
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     private static boolean estComplete(String recu) {
         int finEnTetes = recu.indexOf("\r\n\r\n");
         if (finEnTetes < 0) {

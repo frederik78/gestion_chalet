@@ -220,12 +220,22 @@ class ErreursEtEnTetesServeurReelTest {
 
     /** Le corps annoncé n'arrive jamais : sans session, personne ne doit l'attendre, y compris au-delà de la borne de 64 Ko. */
     @ParameterizedTest
-    @CsvSource({"/, 1000", "/actuator/health, 1000", "/sw.js, 1000", "/, 400000000"})
+    @CsvSource({"/, 1000", "/sw.js, 1000", "/, 400000000"})
     void cs01_unCorpsAnnonceSurUneRessourcePubliqueNEstPasLu(String chemin, long longueur) {
         ClientBrut.Reponse reponse = ClientBrut.envoyerSansLaFinDuCorps(port, "GET " + chemin + " HTTP/1.1\r\nHost: localhost\r\n"
                 + "Content-Length: " + longueur + "\r\n\r\n", 5_000);
 
         assertThat(reponse.statut()).isEqualTo(200);
+    }
+
+    /** Sans ce corps vide, Actuator lit lui-même un corps déclaré, même en GET : du JSON y serait chargé sans borne. */
+    @ParameterizedTest
+    @CsvSource({"text/plain, 1000", "application/json, 400000000"})
+    void cs01_laSanteRepondSansLireUnCorpsAnnonce(String type, long longueur) {
+        String recu = ClientBrut.lireJusqua(port, "GET /actuator/health HTTP/1.1\r\nHost: localhost\r\nContent-Type: " + type
+                + "\r\nContent-Length: " + longueur + "\r\n\r\n", "\"UP\"", 5_000);
+
+        assertThat(recu).startsWith("HTTP/1.1 200");
     }
 
     /** Une route refusée sans session répond aussi sans attendre le corps, formulaire ou non. */

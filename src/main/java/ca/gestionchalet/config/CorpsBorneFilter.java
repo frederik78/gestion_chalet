@@ -22,8 +22,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
  * Borne le corps des requêtes d'une session ouverte, hors multipart, que sa longueur soit déclarée ou non (envoi fragmenté) : il
- * est lu en mémoire jusqu'à la limite, puis rejoué. Sans session, le corps n'est jamais lu : seules les ressources publiques
- * arrivent ici, et aucune n'en a besoin. Le multipart a ses propres limites ({@code spring.servlet.multipart.*}), bien plus hautes :
+ * est lu en mémoire jusqu'à la limite, puis rejoué. Sans session, seules les ressources publiques arrivent ici : leur corps
+ * n'est pas lu et elles voient un corps vide, car la santé d'Actuator lirait sinon, sans borne, un corps déclaré même en GET. Le multipart a ses propres limites ({@code spring.servlet.multipart.*}), bien plus hautes :
  * sans session, il est refusé, car {@code resolve-lazily} ne suffit pas : sans ce refus, un multipart de 56 Mo reste sans réponse
  * en 5 s (cs08). La connexion a sa propre garde.
  */
@@ -45,7 +45,7 @@ final class CorpsBorneFilter extends OncePerRequestFilter {
             if (estMultipart(requete)) {
                 ReponsesErreur.ecrire(reponse, CodeErreur.FORMAT_NON_ACCEPTE);
             } else {
-                suite.doFilter(requete, reponse);
+                suite.doFilter(new CorpsRejoue(requete, new byte[0]), reponse);
             }
             return;
         }
