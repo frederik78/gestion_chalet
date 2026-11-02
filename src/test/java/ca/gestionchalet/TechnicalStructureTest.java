@@ -1,5 +1,7 @@
 package ca.gestionchalet;
 
+import static com.tngtech.archunit.base.DescribedPredicate.alwaysTrue;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.belongToAnyOf;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -35,7 +37,7 @@ class TechnicalStructureTest {
 
     private static ArchRule couches(String racine) {
         return layeredArchitecture()
-                .consideringOnlyDependenciesInLayers()
+                .consideringAllDependencies()
                 .withOptionalLayers(true)
                 .layer("Config").definedBy(racine + ".config..")
                 .layer("Web").definedBy(racine + ".web..")
@@ -50,7 +52,8 @@ class TechnicalStructureTest {
                 .whereLayer("Security").mayOnlyBeAccessedByLayers("Config", "Service", "Web")
                 .whereLayer("Repository").mayOnlyBeAccessedByLayers("Service", "Security", "Config")
                 .whereLayer("Client").mayOnlyBeAccessedByLayers("Service", "Config")
-                .whereLayer("Domain").mayOnlyBeAccessedByLayers("Config", "Web", "Service", "Security", "Repository", "Client");
+                .whereLayer("Domain").mayOnlyBeAccessedByLayers("Config", "Web", "Service", "Security", "Repository", "Client")
+                .ignoreDependency(belongToAnyOf(GestionChaletApplication.class), alwaysTrue());
     }
 
     private static JavaClasses fixtures(Class<?> source) throws ClassNotFoundException {
@@ -59,7 +62,7 @@ class TechnicalStructureTest {
     }
 
     @Test
-    void leProjetRespecteLesCouchesDeLAdr() {
+    void respectsTechnicalArchitectureLayers() {
         JavaClasses projet = new ClassFileImporter()
                 .withImportOption(new ImportOption.DoNotIncludeTests())
                 .importPackages("ca.gestionchalet");
