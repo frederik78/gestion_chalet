@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 /** Enregistre un reçu et ses photos à la validation. */
@@ -48,14 +50,27 @@ public class RecuService {
             return new RecuValidationResult(recuMapper.toDto(known.get()), false);
         }
         List<Photo> photos = new ArrayList<>();
+        discardFilesUnlessCommitted(photos);
         for (MultipartFile file : files) {
             Photo photo = Photo.of(photos.size() + 1, formatOf(file), file.getSize());
-            store(photo, file);
             photos.add(photo);
+            store(photo, file);
         }
         Recu recu = Recu.valider(validation.cleIdempotence(), recuMapper.toValeurs(validation.valeurs()),
                 validation.montantTotalLuCents(), clock.instant(), photos);
         return new RecuValidationResult(recuMapper.toDto(recuRepository.saveAndFlush(recu)), true);
+    }
+
+    /** R-12 : quelle que soit la panne, jusqu'à celle du commit, une validation sans reçu ne laisse aucun fichier. */
+    private void discardFilesUnlessCommitted(List<Photo> photos) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != STATUS_COMMITTED) {
+                    photos.forEach(photoStorage::discard);
+                }
+            }
+        });
     }
 
     private static PhotoFormat formatOf(MultipartFile file) {

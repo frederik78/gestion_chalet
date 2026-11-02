@@ -42,6 +42,11 @@ spring:
     properties:
       hibernate.type.preferred_uuid_jdbc_type: CHAR
 
+logging:
+  level:
+    # Il recopierait le message de la base, qui peut citer une valeur de reçu ; ExceptionTranslator journalise la panne sans son message.
+    org.hibernate.orm.jdbc.error: "OFF"
+
 server:
   # Aucun en-tête de proxy n'est cru : la source du blocage de connexion est l'adresse de la connexion (à revoir avec NF-03).
   forward-headers-strategy: none

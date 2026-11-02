@@ -34,6 +34,11 @@
     <Class name="ca.gestionchalet.web.rest.errors.ExceptionTranslator"/>
     <Bug pattern="CRLF_INJECTION_LOGS"/>
   </Match>
+  <!-- Seuls sont journalisés un UUID généré par le serveur et un nom de classe, sans retour à la ligne possible. -->
+  <Match>
+    <Class name="ca.gestionchalet.repository.PhotoStorage"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
   <!-- Un service garde les collaborateurs que Spring lui injecte : c'est le principe même de l'injection. -->
   <Match>
     <Class name="~ca\.gestionchalet\.service\.[A-Za-z]+Service"/>
