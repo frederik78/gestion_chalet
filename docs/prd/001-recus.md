@@ -265,8 +265,8 @@ Valeurs fictives pour les numéros et le type.
 
 | Méthode et chemin | Entrée | Réponse |
 |---|---|---|
-| `POST /api/connexion` | `{ "motDePasse": "…" }` | 204 et nouvelle session ; 401 ; 429 |
-| `POST /api/deconnexion` | | 204 |
+| `POST /api/connexion` | formulaire `application/x-www-form-urlencoded`, paramètre `motDePasse` | 204 et nouvelle session ; 401 ; 429 |
+| `POST /api/deconnexion` | | 204, avec ou sans session |
 | `GET /api/configuration` | | 200 : `{ "typesDepense": […], "photosParRecuMax": 5, "tailleParPhotoMaxOctets": …, "formats": ["image/jpeg", "image/png"] }` |
 | `POST /api/lectures` | multipart, parties `photos` | 200 : objet lecture ; 400, 413, 415, 429 |
 | `POST /api/recus/controles` | JSON : `valeurs`, `montantTotalLuCents` (facultatif), `recuId` (facultatif, en correction) | 200 : `{ "alertes": [ … ] }` ; 400. N'enregistre rien |
@@ -552,7 +552,7 @@ Point transmis à NF-03 : derrière Cloudflare Tunnel, toutes les requêtes semb
 
 ### 11.5 Critères de sécurité
 
-- **CS01** Given aucune session When chaque route de `/api` et de `/actuator` (hors santé) et chaque route inconnue est appelée Then la réponse est 401 `NON_AUTHENTIFIE` ou 404, sans donnée ; seuls `GET /actuator/health`, sans détail, et les ressources de la page de connexion répondent 200 [A01].
+- **CS01** Given aucune session When chaque route de `/api` (hors `POST /api/deconnexion` avec un jeton CSRF, qui répond 204) et de `/actuator` (hors santé) et chaque route inconnue est appelée Then la réponse est 401 `NON_AUTHENTIFIE` ou 404, sans donnée ; seuls `GET /actuator/health`, sans détail, et les ressources de la page de connexion répondent 200 [A01].
 - **CS02** Given une session valide et aucun jeton CSRF, ou un jeton faux When chaque route `POST` et `PUT` est appelée, `POST /api/connexion` compris Then la réponse est 403 `CSRF_INVALIDE` et rien ne change [A01, A07].
 - **CS03** Given un UUID inconnu, un identifiant non UUID, ou un rang inexistant ou sans rapport avec le reçu When il est demandé Then la réponse est 404 `INTROUVABLE`, de corps identique dans tous les cas (y compris une valeur de type `..%2F..%2Fetc%2Fpasswd`), et aucun fichier hors du dossier des photos n'est lu [A01].
 - **CS04** Given un mauvais mot de passe When `POST /api/connexion` est appelé Then la réponse est 401 `IDENTIFIANTS_INVALIDES` ; given le bon Then l'identifiant de session change, et le cookie porte `HttpOnly`, `SameSite`, et `Secure` en configuration hors poste local [A07].
@@ -639,3 +639,4 @@ L'utilisateur a validé le PRD et accepté toutes les recommandations.
 | Q-12 Autorisation Google une seule fois | Projet Google publié en production sans vérification ; à confirmer dans la documentation de Google | section 7.6, section 13 |
 | Q-13 Métadonnées des photos | Retirées pour Anthropic ; originaux intacts en local et dans Drive | R-36, section 7.3, CA07, CA71 |
 | Q-14 Valeurs par défaut | Acceptées | section 9 |
+| Connexion façon JHipster | `formLogin` et `logout` de Spring Security (option A, 2026-11-01) : connexion par formulaire, déconnexion 204 même sans session | section 7, CS01 |
