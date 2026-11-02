@@ -12,7 +12,7 @@ import org.springframework.core.Ordered;
 
 /** Ce qui s'applique à toute réponse, y compris avant la chaîne de sécurité et avant l'application. */
 @Configuration
-public class ServeurWebConfiguration {
+public class WebConfigurer {
 
     @Bean
     FilterRegistrationBean<EnTetesSecuriteFilter> enTetesSecuriteFilter() {
