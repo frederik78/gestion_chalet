@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="20261102120000-1" author="gestion-chalet">
+        <createTable tableName="recu">
+            <column name="id" type="char(36)"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="cle_idempotence" type="char(36)"><constraints nullable="false" unique="true" uniqueConstraintName="ux_recu_cle_idempotence"/></column>
+            <column name="date_recu" type="varchar(10)"><constraints nullable="false"/></column>
+            <column name="fournisseur" type="varchar(120)"><constraints nullable="false"/></column>
+            <column name="objet" type="varchar(200)"/>
+            <column name="type_depense" type="varchar(255)"><constraints nullable="false"/></column>
+            <column name="montant_avant_taxes_cents" type="bigint"/>
+            <column name="tps_cents" type="bigint"/>
+            <column name="tvq_cents" type="bigint"/>
+            <column name="montant_total_cents" type="bigint"><constraints nullable="false"/></column>
+            <column name="numero_inscription_tps" type="varchar(30)"/>
+            <column name="numero_inscription_tvq" type="varchar(30)"/>
+            <column name="montant_total_lu_cents" type="bigint"/>
+            <column name="etat_copie" type="varchar(20)"><constraints nullable="false"/></column>
+            <column name="version" type="int"><constraints nullable="false"/></column>
+            <column name="valide_le" type="varchar(40)"><constraints nullable="false"/></column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="20261102120000-2" author="gestion-chalet">
+        <createTable tableName="photo">
+            <column name="id" type="char(36)"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="recu_id" type="char(36)">
+                <constraints nullable="false" foreignKeyName="fk_photo_recu_id" references="recu(id)"/>
+            </column>
+            <column name="rang" type="int"><constraints nullable="false"/></column>
+            <column name="format" type="varchar(10)"><constraints nullable="false"/></column>
+            <column name="taille" type="bigint"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="photo" indexName="ux_photo_recu_rang" unique="true">
+            <column name="recu_id"/>
+            <column name="rang"/>
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

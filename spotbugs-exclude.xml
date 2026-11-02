@@ -34,4 +34,14 @@
     <Class name="ca.gestionchalet.web.rest.errors.ExceptionTranslator"/>
     <Bug pattern="CRLF_INJECTION_LOGS"/>
   </Match>
+  <!-- Un service garde les collaborateurs que Spring lui injecte : c'est le principe même de l'injection. -->
+  <Match>
+    <Class name="~ca\.gestionchalet\.service\.[A-Za-z]+Service"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <!-- Code généré par MapStruct : les champs de sortie ignorés y sont passés à null, comme le contrat le veut. -->
+  <Match>
+    <Class name="~ca\.gestionchalet\.service\.mapper\.[A-Za-z]+MapperImpl"/>
+    <Bug pattern="NP_LOAD_OF_KNOWN_NULL_VALUE"/>
+  </Match>
 </FindBugsFilter>

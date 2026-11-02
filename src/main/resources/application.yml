@@ -20,10 +20,21 @@ spring:
     anthropic:
       chat:
         model: ${recus.modele}
-  # Liquibase seul gère le schéma (ADR 0001) ; Hibernate ne fait que valider. Sans effet tant que la persistance n'est pas ajoutée.
+  # Un seul lien vers SQLite : les écritures passent l'une après l'autre, sans « database is locked ». Les clés étrangères, désactivées par défaut par SQLite, sont activées.
+  datasource:
+    url: jdbc:sqlite:${recus.dossier-donnees}/gestion-chalet.db?foreign_keys=true
+    hikari:
+      maximum-pool-size: 1
+  liquibase:
+    change-log: classpath:config/liquibase/master.xml
+  # Liquibase seul gère le schéma (ADR 0001) ; Hibernate ne fait que valider.
   jpa:
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    open-in-view: false
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate.type.preferred_uuid_jdbc_type: CHAR
 
 server:
   # Aucun en-tête de proxy n'est cru : la source du blocage de connexion est l'adresse de la connexion (à revoir avec NF-03).
@@ -58,6 +69,9 @@ management:
 
 recus:
   modele: claude-haiku-5-5
+  # Hors de la racine web (ADR 0001) ; à placer sur un volume conservé.
+  dossier-donnees: ${RECUS_DOSSIER_DONNEES:data}
+  dossier-photos: ${recus.dossier-donnees}/photos
   securite:
     # Aucun condensé par défaut : à fournir par l'environnement (RECUS_SECURITE_CONDENSE_MOT_DE_PASSE), sinon l'application refuse de démarrer.
     echecs-avant-blocage: 5

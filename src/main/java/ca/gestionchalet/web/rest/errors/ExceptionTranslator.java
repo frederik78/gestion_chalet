@@ -1,5 +1,6 @@
 package ca.gestionchalet.web.rest.errors;
 
+import ca.gestionchalet.domain.UnsupportedPhotoFormatException;
 import ca.gestionchalet.web.rest.errors.ErrorDTO.InvalidFieldDTO;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
@@ -59,6 +60,11 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<Object> handleMultipartException(MultipartException ex, WebRequest request) {
         return handleExceptionInternal(ex, null, new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
+    }
+
+    @ExceptionHandler(UnsupportedPhotoFormatException.class)
+    public ResponseEntity<Object> handleUnsupportedPhotoFormat(UnsupportedPhotoFormatException ex, WebRequest request) {
+        return handleExceptionInternal(ex, null, new HttpHeaders(), HttpStatus.UNSUPPORTED_MEDIA_TYPE, request);
     }
 
     @ExceptionHandler

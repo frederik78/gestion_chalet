@@ -3,6 +3,7 @@ package ca.gestionchalet.config;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import java.nio.file.Path;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.unit.DataSize;
@@ -13,10 +14,11 @@ import org.springframework.validation.annotation.Validated;
  * inconnues restent permises, car {@code recus.modele} et le condensé du mot de passe sont lus ailleurs.
  *
  * @param securite réglages de sécurité ({@code recus.securite.*})
+ * @param dossierPhotos dossier des photos, hors de la base et de la racine web
  */
 @Validated
 @ConfigurationProperties("recus")
-public record ApplicationProperties(@Valid @NotNull Security securite) {
+public record ApplicationProperties(@Valid @NotNull Security securite, @NotNull Path dossierPhotos) {
 
     /**
      * Le condensé du mot de passe, lui, est lu par {@code DomainUserDetailsService}.
