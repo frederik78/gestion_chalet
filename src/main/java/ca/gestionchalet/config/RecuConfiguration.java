@@ -3,6 +3,7 @@ package ca.gestionchalet.config;
 import ca.gestionchalet.domain.RecuRules;
 import ca.gestionchalet.repository.PhotoStorage;
 import java.time.Clock;
+import org.springframework.boot.servlet.autoconfigure.MultipartProperties;
 import org.springframework.boot.validation.autoconfigure.ValidationConfigurationCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,8 +18,9 @@ public class RecuConfiguration {
     }
 
     @Bean
-    RecuRules recuRules(ApplicationProperties properties) {
-        return new RecuRules(properties.typesDepense(), properties.montantMaxCents());
+    RecuRules recuRules(ApplicationProperties properties, MultipartProperties multipart) {
+        return new RecuRules(properties.typesDepense(), properties.montantMaxCents(), properties.photosParRecuMax(),
+                multipart.getMaxFileSize().toBytes(), properties.formats());
     }
 
     /** {@code @PastOrPresent} compare à la date du jour dans ce fuseau, et non dans celui de la machine. */

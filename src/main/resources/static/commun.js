@@ -15,3 +15,13 @@ function ecrireApi(chemin, corps) {
     body: corps === undefined ? '' : JSON.stringify(corps),
   });
 }
+
+/** Envoi multipart : le navigateur pose lui-même le type de contenu et sa limite. */
+function envoyerFormulaire(chemin, formulaire) {
+  return fetch(chemin, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'X-XSRF-TOKEN': lireCookie('XSRF-TOKEN') },
+    body: formulaire,
+  });
+}

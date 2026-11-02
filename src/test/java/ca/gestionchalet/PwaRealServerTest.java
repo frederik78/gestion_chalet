@@ -82,7 +82,7 @@ class PwaRealServerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/accueil.html", "/accueil.js"})
+    @ValueSource(strings = {"/accueil.html", "/accueil.js", "/recu.js"})
     void cs01_leResteDeLaPwaExigeUneSession(String chemin) {
         TestClient client = client();
         Reponse sansSession = client.get(chemin);

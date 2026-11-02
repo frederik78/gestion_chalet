@@ -174,6 +174,19 @@ class RecuRealServerTest {
         assertThat(aujourdhui.statut()).isEqualTo(201);
     }
 
+    @Test
+    void ca15_laConfigurationAnnonceLaListeEtLesLimitesAuxEcrans() {
+        Reponse reponse = client.get("/api/configuration");
+
+        assertThat(reponse.statut()).isEqualTo(200);
+        assertThat(reponse.json()).isEqualTo(Map.of(
+                "typesDepense", List.of("Honoraires professionnel", "Fournitures", "Entretien / Réparations", "Électricité / Internet",
+                        "Impôts / Taxes", "Assurances", "Publicité", "Autres dépenses", "Frais de voyage", "Intérêts", "Administration"),
+                "photosParRecuMax", 5,
+                "tailleParPhotoMaxOctets", 15728640,
+                "formats", List.of("image/jpeg", "image/png")));
+    }
+
     @ParameterizedTest
     @CsvSource({"montantTotalCents, 0", "montantTotalCents, -1", "montantTotalCents, 100000001", "tpsCents, -1", "tvqCents, 100000001",
         "montantAvantTaxesCents, -1", "montantAvantTaxesCents, 100000001"})

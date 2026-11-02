@@ -84,6 +84,10 @@ recus:
   dossier-donnees: ${RECUS_DOSSIER_DONNEES:data}
   dossier-photos: ${recus.dossier-donnees}/photos
   fuseau-horaire: America/Montreal
+  photos-par-recu-max: 5
+  formats:
+    - image/jpeg
+    - image/png
   # 1 000 000,00 $ (R-10).
   montant-max-cents: 100000000
   # Liste fermée, dans l'orthographe du Sheet (R-09).

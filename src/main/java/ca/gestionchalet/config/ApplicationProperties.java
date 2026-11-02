@@ -20,6 +20,8 @@ import org.springframework.validation.annotation.Validated;
  * @param dossierPhotos dossier des photos, hors de la base et de la racine web
  * @param typesDepense liste fermée des types de dépense, dans l'orthographe du Sheet
  * @param montantMaxCents montant le plus élevé accepté, en cents
+ * @param photosParRecuMax nombre maximal de photos d'un reçu
+ * @param formats types de média acceptés pour une photo
  * @param fuseauHoraire fuseau de la date du jour, à laquelle une date de reçu ne peut être postérieure
  */
 @Validated
@@ -27,10 +29,13 @@ import org.springframework.validation.annotation.Validated;
 public record ApplicationProperties(@Valid @NotNull Security securite, @NotNull Path dossierPhotos,
         @NotEmpty List<String> typesDepense,
         @Min(1) long montantMaxCents,
+        @Min(1) int photosParRecuMax,
+        @NotEmpty List<String> formats,
         @NotNull ZoneId fuseauHoraire) {
 
     public ApplicationProperties {
         typesDepense = typesDepense == null ? List.of() : List.copyOf(typesDepense);
+        formats = formats == null ? List.of() : List.copyOf(formats);
     }
 
     /**
