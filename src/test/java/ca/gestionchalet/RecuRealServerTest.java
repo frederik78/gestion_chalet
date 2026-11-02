@@ -231,6 +231,14 @@ class RecuRealServerTest {
         assertThat(etat()).isEqualTo(avant);
     }
 
+    @ParameterizedTest
+    @CsvSource({"fournisseur, 0085", "fournisseur, 009B", "objet, 0085", "objet, 009B"})
+    void ca16_unCaractereDeControleHorsAsciiEstRefuse(String champ, String pointDeCode) {
+        String texte = "a" + (char) Integer.parseInt(pointDeCode, 16) + "b";
+
+        assertThat(validerAvec(champ, texte).json()).isEqualTo(erreurDeChamp(champ, "FORMAT"));
+    }
+
     @Test
     void ca16_lesTextesSontBornesEtSansCaractereDeControle() {
         assertThat(validerAvec("fournisseur", "x".repeat(120)).statut()).isEqualTo(201);

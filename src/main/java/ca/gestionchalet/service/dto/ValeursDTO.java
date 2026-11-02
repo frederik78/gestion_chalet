@@ -22,7 +22,7 @@ public record ValeursDTO(
         @Size(max = 30) @Pattern(regexp = REGISTRATION_NUMBER) String numeroInscriptionTps,
         @Size(max = 30) @Pattern(regexp = REGISTRATION_NUMBER) String numeroInscriptionTvq) {
 
-    private static final String NO_CONTROL_CHARACTER = "\\P{Cntrl}*";
+    private static final String NO_CONTROL_CHARACTER = "\\P{Cc}*";
     private static final String REGISTRATION_NUMBER = "[\\p{L}\\p{N} -]*";
 
     public ValeursDTO {
