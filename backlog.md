@@ -19,7 +19,7 @@ Vue d'ensemble des besoins. Détail dans `docs/prd/`, suivi de la livraison dans
 
 | ID | Besoin | Priorité | Statut | PRD | Décisions |
 |----|--------|----------|--------|-----|-----------|
-| F-01 | Photographier un reçu avec le téléphone pour que ses valeurs (date, fournisseur, TPS et TVQ s'il y en a, montant avant taxes, montant total) et sa photo soient reportées en BD et dans le Google Sheet | P1 | Spécifié | `docs/prd/001-recus.md` | D-01 à D-13, D-16 à D-25 |
+| F-01 | Photographier un reçu avec le téléphone pour que ses valeurs (date, fournisseur, TPS et TVQ s'il y en a, montant avant taxes, montant total) et sa photo soient reportées en BD et dans le Google Sheet | P1 | En cours | `docs/prd/001-recus.md` | D-01 à D-13, D-16 à D-25 |
 
 ## Besoins non fonctionnels
 
@@ -59,6 +59,12 @@ Vue d'ensemble des besoins. Détail dans `docs/prd/`, suivi de la livraison dans
 | D-24 | 2026-11-01 | Section d'un mois créée à l'arrivée de son premier reçu, à sa place parmi les mois ; nouvelle ligne insérée selon sa date dans la section ; lignes existantes jamais déplacées | F-01 |
 | D-25 | 2026-11-01 | Montants stockés en cents entiers ; photos stockées en fichiers, hors de la base | F-01 |
 | D-26 | 2026-11-01 | ADR 0001 accepté : structure JHipster à plat sans générateur, Spring AI 2.0.x pour appeler Claude, à confirmer par un essai réel en première issue, SDK officiel en repli | tous |
+| D-27 | 2026-11-01 | Issues indépendantes livrées en parallèle, jusqu'à 3 à la fois | F-01 |
+| D-28 | 2026-11-01 | Connexion façon JHipster : `formLogin` et `logout` de Spring Security, formulaire au lieu de JSON, déconnexion 204 même sans session | F-01 |
+| D-29 | 2026-11-02 | Connexion : pas de limite de 1 000 caractères sur le mot de passe ; cas limites acceptés (vide ou absent 401, JSON 415, paramètre d'URL 400, sans longueur déclarée 413, corps jamais terminé fermé à 60 s) | F-01 |
+| D-30 | 2026-11-02 | Les classes techniques sont impérativement en anglais | F-01 |
+| D-31 | 2026-11-02 | `archunit-junit5` et `@ArchTest` comme JHipster ; `@Component` conservé sur `DomainUserDetailsService` ; deux défenses de taille sur la connexion, avec une seule valeur | F-01 |
+| D-32 | 2026-11-02 | Essai réel validé : Spring AI et Claude Haiku 5.5 retenus | F-01 |
 
 ## À trancher
 
