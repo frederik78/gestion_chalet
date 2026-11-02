@@ -23,7 +23,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /**
  * Borne le corps des requêtes hors multipart, que sa longueur soit déclarée ou non (envoi fragmenté) : il est lu en mémoire
  * jusqu'à la limite, puis rejoué. Le multipart a ses propres limites ({@code spring.servlet.multipart.*}), bien plus hautes :
- * il n'est donc accepté qu'avec une session, et refusé sans être lu sur la seule route ouverte sans session.
+ * il n'est donc accepté qu'avec une session, et refusé sans être lu sur les ressources publiques. {@code resolve-lazily} ne
+ * suffit pas : retirer ce refus laisse un multipart de 56 Mo sans réponse en 5 s (cs08). La connexion a sa propre garde.
  */
 final class CorpsBorneFilter extends OncePerRequestFilter {
 
