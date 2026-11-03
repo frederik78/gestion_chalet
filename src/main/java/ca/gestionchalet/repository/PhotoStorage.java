@@ -4,9 +4,11 @@ import ca.gestionchalet.domain.Photo;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,18 +28,35 @@ public final class PhotoStorage {
         }
     }
 
-    /** Écrit d'abord un fichier temporaire : une écriture interrompue ne laisse jamais de photo tronquée. */
+    /**
+     * Écrit d'abord un fichier temporaire, forcé sur disque avant de prendre son nom, puis force le dossier : une écriture interrompue
+     * ne laisse pas de photo tronquée, et une coupure de courant après le retour de cette méthode ne perd pas la photo, dans la limite
+     * de ce que le système et le disque garantissent pour {@code fsync}.
+     */
     public void write(Photo photo, InputStream content) {
         try {
             Path temporary = Files.createTempFile(root, "ecriture-", ".tmp");
             try {
                 Files.copy(content, temporary, StandardCopyOption.REPLACE_EXISTING);
+                try (FileChannel file = FileChannel.open(temporary, StandardOpenOption.WRITE)) {
+                    file.force(true);
+                }
                 Files.move(temporary, pathOf(photo), StandardCopyOption.ATOMIC_MOVE);
+                forceDirectory();
             } finally {
                 Files.deleteIfExists(temporary);
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        }
+    }
+
+    /** Un système peut refuser d'ouvrir un dossier : la photo est écrite, l'envoi n'échoue pas pour autant. */
+    private void forceDirectory() {
+        try (FileChannel directory = FileChannel.open(root, StandardOpenOption.READ)) {
+            directory.force(true);
+        } catch (IOException e) {
+            LOG.warn("Dossier des photos non forcé sur disque : {}", e.getClass().getName());
         }
     }
 
