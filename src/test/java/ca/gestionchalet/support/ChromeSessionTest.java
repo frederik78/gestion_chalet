@@ -18,7 +18,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-/** Le pilote des tests d'écran (CA76, CA79, CA81), avec un faux navigateur : aucun Chrome requis. */
+/** Le pilote des tests d'écran, avec un faux navigateur : aucun Chrome requis. */
 class ChromeSessionTest {
 
     private static final String FAUX_CHROME = """
