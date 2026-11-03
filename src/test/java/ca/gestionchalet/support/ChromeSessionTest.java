@@ -66,7 +66,7 @@ class ChromeSessionTest {
     }
 
     @Test
-    void ca76_chromeEstArreteQuandLaConnexionEchoueDansLeConstructeur() throws IOException {
+    void chromeEstArreteQuandLaConnexionEchoueDansLeConstructeur() throws IOException {
         Path binaire = fauxChrome(portFerme());
         Path profil = Files.createDirectory(dossier.resolve("profil"));
 
