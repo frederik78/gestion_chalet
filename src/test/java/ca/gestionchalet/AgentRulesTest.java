@@ -4,6 +4,7 @@ import static com.tngtech.archunit.base.DescribedPredicate.not;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.assignableTo;
 import static com.tngtech.archunit.core.domain.properties.CanBeAnnotated.Predicates.annotatedWith;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,7 +21,13 @@ import archfixtures.rules.domain.CompliantEntity;
 import archfixtures.rules.domain.EntityWithPublicConstructor;
 import archfixtures.rules.domain.OutsidePackageDTO;
 import archfixtures.rules.domain.FloatingAmount;
+import archfixtures.rules.repository.CrudOfferingRepository;
+import archfixtures.rules.repository.DerivedDeleteRepository;
+import archfixtures.rules.repository.NativePurgingRepository;
+import archfixtures.rules.repository.QueryPurgingRepository;
 import archfixtures.rules.service.DirectProviderCallService;
+import archfixtures.rules.service.LegacyFileDeletingService;
+import archfixtures.rules.service.ScheduledDiscardingService;
 import archfixtures.rules.service.FileDeletingService;
 import archfixtures.rules.service.PhotoDiscardingService;
 import archfixtures.rules.service.FloatingCalculationService;
@@ -45,6 +52,7 @@ import com.tngtech.archunit.core.domain.JavaCall;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.domain.JavaField;
+import com.tngtech.archunit.core.domain.JavaMethod;
 import com.tngtech.archunit.core.domain.JavaModifier;
 import com.tngtech.archunit.core.domain.JavaParameter;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
@@ -61,6 +69,7 @@ import java.nio.file.Files;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -226,6 +235,71 @@ class AgentRulesTest {
                 .should().callMethod(PhotoStorage.class, methode, Photo.class);
     }
 
+    private static final Pattern REQUETE_DE_SUPPRESSION = Pattern.compile("(?i)\\b(delete|truncate|drop)\\b");
+
+    private static boolean retireUnFichier(String proprietaire, String methode) {
+        return switch (proprietaire) {
+            case "java.io.File" -> methode.equals("delete") || methode.equals("deleteOnExit");
+            case "java.nio.file.Files" -> methode.startsWith("delete");
+            case "org.springframework.util.FileSystemUtils" -> methode.startsWith("delete");
+            default -> false;
+        };
+    }
+
+    /** CA72 : seuls le retrait d'une validation en échec et le fichier temporaire d'une écriture retirent un fichier. */
+    private static ArchRule aucuneSuppressionDeFichierAilleurs(String racine) {
+        String stockage = racine + ".repository.PhotoStorage";
+        ArchCondition<JavaClass> sansSuppression = new ArchCondition<>("ne retirer aucun fichier") {
+            @Override
+            public void check(JavaClass classe, ConditionEvents evenements) {
+                classe.getAccessesFromSelf().stream()
+                        .filter(acces -> retireUnFichier(acces.getTargetOwner().getName(), acces.getName()))
+                        .filter(acces -> !(classe.getName().equals(stockage) && Set.of("discard", "write").contains(acces.getOrigin().getName())))
+                        .forEach(acces -> evenements.add(SimpleConditionEvent.violated(classe, acces.getDescription())));
+            }
+        };
+        return classes().should(sansSuppression).allowEmptyShould(true);
+    }
+
+    /** CA72 : ni héritage qui offre la suppression, ni méthode dérivée, ni requête, quel que soit son nom. */
+    private static ArchRule depotsSansSuppression() {
+        ArchCondition<JavaClass> sansSuppression = new ArchCondition<>("n'offrir aucune suppression") {
+            private static final String REQUETE = "org.springframework.data.jpa.repository.Query";
+
+            @Override
+            public void check(JavaClass depot, ConditionEvents evenements) {
+                if (depot.isAssignableTo("org.springframework.data.repository.CrudRepository")
+                        || depot.isAssignableTo("org.springframework.data.repository.ListCrudRepository")) {
+                    evenements.add(SimpleConditionEvent.violated(depot, depot.getName() + " hérite de la suppression"));
+                }
+                depot.getMethods().stream().filter(methode -> methode.getName().matches("(delete|remove).*")
+                        || methode.isAnnotatedWith("org.springframework.data.jpa.repository.Modifying")
+                        || (methode.isAnnotatedWith(REQUETE)
+                                && REQUETE_DE_SUPPRESSION.matcher(String.valueOf(methode.getAnnotationOfType(REQUETE).get("value").orElse(""))).find()))
+                        .forEach(methode -> evenements.add(SimpleConditionEvent.violated(depot, depot.getName() + "." + methode.getName() + " supprime")));
+            }
+        };
+        return classes().that().areAssignableTo("org.springframework.data.repository.Repository")
+                .should(sansSuppression).allowEmptyShould(true);
+    }
+
+    /**
+     * CA72 : la planification reste permise, car 001-08 (« nouveaux essais et rythme », reprise de la copie) peut en avoir besoin ;
+     * la règle porte donc sur la suppression : une tâche planifiée n'appelle pas le retrait d'une photo.
+     */
+    private static ArchRule tachePlanifieeSansRetrait() {
+        ArchCondition<JavaMethod> sansRetrait = new ArchCondition<>("ne retirer aucune photo") {
+            @Override
+            public void check(JavaMethod tache, ConditionEvents evenements) {
+                tache.getAccessesFromSelf().stream()
+                        .filter(acces -> acces.getTargetOwner().isEquivalentTo(PhotoStorage.class) && acces.getName().equals(RETRAIT_DE_PHOTO))
+                        .forEach(acces -> evenements.add(SimpleConditionEvent.violated(tache, tache.getOwner().getName() + " : " + acces.getDescription())));
+            }
+        };
+        return methods().that().areAnnotatedWith("org.springframework.scheduling.annotation.Scheduled")
+                .should(sansRetrait).allowEmptyShould(true);
+    }
+
     private static final JavaClasses PROJET = new ClassFileImporter()
             .withImportOption(new ImportOption.DoNotIncludeTests())
             .importPackages("ca.gestionchalet");
@@ -259,6 +333,21 @@ class AgentRulesTest {
                 .hasMessageContaining("methodeRenommee");
     }
 
+    @Test
+    void ca72_aucuneSuppressionDeFichierHorsDuRetraitDUneValidationEnEchec() {
+        aucuneSuppressionDeFichierAilleurs("ca.gestionchalet").check(PROJET);
+    }
+
+    @Test
+    void ca72_aucunDepotNOffreDeSuppressionSousAucunNom() {
+        depotsSansSuppression().check(PROJET);
+    }
+
+    @Test
+    void ca72_aucuneTachePlanifieeNeRetireDePhoto() {
+        tachePlanifieeSansRetrait().check(PROJET);
+    }
+
     @ParameterizedTest
     @MethodSource("reglesSurLeProjet")
     void leProjetRespecteLaRegle(ArchRule regle) {
@@ -288,7 +377,15 @@ class AgentRulesTest {
                 Arguments.of(servicesNommesDansService(racine), List.of(ServiceOutsideLayerService.class)),
                 Arguments.of(servicesNommesDansService(racine), List.of(BadlyNamed.class)),
                 Arguments.of(fichiersRetiresSeulementParLeStockage(racine), List.of(FileDeletingService.class)),
-                Arguments.of(seulLeServiceRetireUnePhoto(RETRAIT_DE_PHOTO), List.of(PhotoDiscardingService.class)));
+                Arguments.of(seulLeServiceRetireUnePhoto(RETRAIT_DE_PHOTO), List.of(PhotoDiscardingService.class)),
+                Arguments.of(aucuneSuppressionDeFichierAilleurs(racine), List.of(LegacyFileDeletingService.class)),
+                Arguments.of(aucuneSuppressionDeFichierAilleurs(racine), List.of(FileDeletingService.class)),
+                Arguments.of(aucuneSuppressionDeFichierAilleurs(racine), List.of(archfixtures.rules.repository.PhotoStorage.class)),
+                Arguments.of(depotsSansSuppression(), List.of(QueryPurgingRepository.class)),
+                Arguments.of(depotsSansSuppression(), List.of(NativePurgingRepository.class)),
+                Arguments.of(depotsSansSuppression(), List.of(DerivedDeleteRepository.class)),
+                Arguments.of(depotsSansSuppression(), List.of(CrudOfferingRepository.class)),
+                Arguments.of(tachePlanifieeSansRetrait(), List.of(ScheduledDiscardingService.class)));
     }
 
     @ParameterizedTest(name = "{1}")
