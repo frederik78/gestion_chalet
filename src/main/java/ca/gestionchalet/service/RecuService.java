@@ -46,7 +46,8 @@ public class RecuService {
         if (files == null || files.isEmpty() || files.stream().anyMatch(MultipartFile::isEmpty)) {
             throw new MissingPhotoException();
         }
-        // Le lien unique vers la base (hikari.maximum-pool-size) fait attendre un envoi simultané ici : il voit le reçu du premier.
+        // Le lien unique vers la base (hikari.maximum-pool-size) est pris à l'ouverture de la transaction et tenu jusqu'au commit, hachage et
+        // écriture compris (mesuré) : un envoi simultané attend avant d'entrer dans cette méthode, puis voit le reçu du premier.
         Optional<Recu> known = recuRepository.findByCleIdempotence(validation.cleIdempotence());
         Valeurs valeurs = recuMapper.toValeurs(validation.valeurs());
         String fingerprint = ContentFingerprint.of(valeurs, files);
