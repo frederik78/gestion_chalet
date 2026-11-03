@@ -1,0 +1,7 @@
+# Chargé après l'application.yml principal, qu'il complète : base et photos de chaque contexte de test sous target/, jamais sous data/.
+spring:
+  datasource:
+    url: jdbc:sqlite:target/test-data/${random.uuid}.db?foreign_keys=true
+recus:
+  dossier-donnees: target/test-data
+  dossier-photos: target/test-data/photos-${random.uuid}

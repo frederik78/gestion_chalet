@@ -12,8 +12,9 @@ Package racine : `ca.gestionchalet`, à plat.
 
 ## Commandes (toujours via le wrapper du build)
 - `./mvnw test` : tests
-- `./mvnw -B verify` : tests (dont tests d'architecture) + analyse statique de sécurité ; c'est exactement ce que lance la CI
+- `./mvnw -B verify` : tests (dont tests d'architecture) + analyse statique de sécurité ; le job `verify` de la CI y ajoute `-Dessai.chrome` et le contrôle du rapport ; sans cette propriété, les tests d'écran sont ignorés
 - `scripts/verify-clean.sh` : la même vérification dans une copie propre du dépôt, hors IDE (à utiliser par les agents et chaque fois qu'un IDE est ouvert)
+- `scripts/verify-clean.sh -- "-Dessai.chrome=<chemin de Chrome>"` : la même vérification avec les tests d'écran dans un vrai Chrome, comme le job `verify`, sans son contrôle du rapport (sous macOS : `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`) ; sans cette propriété, ils sont ignorés ; avec un binaire absent ou inutilisable, ils échouent
 - `scripts/criteres-sans-test.sh <issue>` : critères CA/CS d'une issue qu'aucun test ne mentionne
 - `scripts/couverture-prd.sh <prd>` : chaque critère du PRD est couvert par exactement une issue
 - `scripts/etat-issues.sh [--prochaine]` : état des issues (lu dans leurs en-têtes)

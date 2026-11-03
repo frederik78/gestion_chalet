@@ -29,3 +29,4 @@ Tests rouges puis verts avec un double du modèle, `scripts/verify-clean.sh` à 
 
 ## Notes
 - 2026-11-01 : Parallélisable avec 001-04 et 001-05 ; conflit probable avec 001-04 sur l'écran de validation.
+- 2026-11-03 : Reporté de la revue de 001-02 pour CA69 et CA70 : une photo trop lourde reçoit 400 `REQUETE_INVALIDE` au lieu de 413 `TAILLE_EXCESSIVE` (`ExceptionTranslator`, `MultipartException`), et au-delà de 40 Mo la connexion est coupée, à essayer depuis un navigateur. `PhotoFormat` et `recus.formats` portent la même liste : un format ajouté en configuration est annoncé à l'écran, puis refusé en 415.

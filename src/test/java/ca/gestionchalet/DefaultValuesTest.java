@@ -27,6 +27,13 @@ class DefaultValuesTest {
         "spring.mvc.hiddenmethod.filter.enabled, false",
         "spring.servlet.multipart.max-file-size, 15MB",
         "spring.servlet.multipart.max-request-size, 75MB",
+        "logging.level.org.hibernate.orm.jdbc.error, OFF",
+        "recus.photos-par-recu-max, 5",
+        "'recus.formats[0]', image/jpeg",
+        "'recus.formats[1]', image/png",
+        "recus.fuseau-horaire, America/Montreal",
+        "'recus.types-depense[0]', Honoraires professionnel",
+        "'recus.types-depense[10]', Administration",
     })
     void cs06_lesValeursParDefautSontCellesDuPrd(String cle, String attendu) throws IOException {
         List<PropertySource<?>> sources = new YamlPropertySourceLoader().load("application", new ClassPathResource("application.yml"));

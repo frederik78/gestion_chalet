@@ -6,7 +6,7 @@ body {
 }
 
 main {
-  max-width: 24rem;
+  max-width: 60rem;
   margin: 3rem auto;
   padding: 0 1rem;
 }
@@ -16,7 +16,11 @@ form {
   gap: 0.75rem;
 }
 
-input, button {
+[hidden] {
+  display: none !important;
+}
+
+input, select, button {
   font: inherit;
   padding: 0.6rem;
 }
@@ -30,4 +34,62 @@ button {
 
 #message {
   color: #a32020;
+}
+
+#connexion {
+  max-width: 24rem;
+}
+
+button.secondaire {
+  color: #2f6b4f;
+  background: #fff;
+  border: 1px solid #2f6b4f;
+}
+
+button:disabled {
+  opacity: 0.5;
+}
+
+#message-depart, #message-validation {
+  color: #a32020;
+}
+
+#message-succes {
+  color: #2f6b4f;
+}
+
+.photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.photos figure {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+}
+
+.photos canvas {
+  max-width: 100%;
+  background: #fff;
+  border: 1px solid #c8d0ca;
+}
+
+.a-cote {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+@media (min-width: 40rem) {
+  .a-cote {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
 }

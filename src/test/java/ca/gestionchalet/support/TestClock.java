@@ -20,9 +20,26 @@ public final class TestClock extends Clock {
         return ZoneOffset.UTC;
     }
 
+    /** Une vue dans ce fuseau, qui suit cette horloge : la date du jour y est celle du fuseau demandé. */
     @Override
     public Clock withZone(ZoneId zone) {
-        return this;
+        TestClock source = this;
+        return new Clock() {
+            @Override
+            public ZoneId getZone() {
+                return zone;
+            }
+
+            @Override
+            public Clock withZone(ZoneId autre) {
+                return source.withZone(autre);
+            }
+
+            @Override
+            public Instant instant() {
+                return source.instant();
+            }
+        };
     }
 
     @Override

@@ -1,5 +1,8 @@
 package ca.gestionchalet.web.rest.errors;
 
+import ca.gestionchalet.domain.IdempotencyKeyConflictException;
+import ca.gestionchalet.domain.MissingPhotoException;
+import ca.gestionchalet.domain.UnsupportedPhotoFormatException;
 import ca.gestionchalet.web.rest.errors.ErrorDTO.InvalidFieldDTO;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
@@ -45,7 +48,9 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
         HttpHeaders json = new HttpHeaders();
         json.setContentType(MediaType.APPLICATION_JSON);
         Object errorBody = body instanceof ErrorDTO ? body : ErrorDTO.of(code);
-        return super.handleExceptionInternal(ex, errorBody, json, HttpStatusCode.valueOf(code.status()), request);
+        // Un corps déjà construit garde son statut ; sinon le statut est celui du code déduit, pour tout statut du framework.
+        int status = body instanceof ErrorDTO ? statusCode.value() : code.status();
+        return super.handleExceptionInternal(ex, errorBody, json, HttpStatusCode.valueOf(status), request);
     }
 
     @Override
@@ -61,6 +66,21 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
         return handleExceptionInternal(ex, null, new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
     }
 
+    @ExceptionHandler(IdempotencyKeyConflictException.class)
+    public ResponseEntity<Object> handleIdempotencyKeyConflict(IdempotencyKeyConflictException ex, WebRequest request) {
+        return handleExceptionInternal(ex, ErrorDTO.of(ErrorCode.CLE_DEJA_UTILISEE), new HttpHeaders(), HttpStatus.CONFLICT, request);
+    }
+
+    @ExceptionHandler(MissingPhotoException.class)
+    public ResponseEntity<Object> handleMissingPhoto(MissingPhotoException ex, WebRequest request) {
+        return handleExceptionInternal(ex, ErrorDTO.of(ErrorCode.PHOTO_MANQUANTE), new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
+    }
+
+    @ExceptionHandler(UnsupportedPhotoFormatException.class)
+    public ResponseEntity<Object> handleUnsupportedPhotoFormat(UnsupportedPhotoFormatException ex, WebRequest request) {
+        return handleExceptionInternal(ex, null, new HttpHeaders(), HttpStatus.UNSUPPORTED_MEDIA_TYPE, request);
+    }
+
     @ExceptionHandler
     public ResponseEntity<Object> handleAnyException(Exception ex, WebRequest request) {
         return handleExceptionInternal(ex, null, new HttpHeaders(), HttpStatus.INTERNAL_SERVER_ERROR, request);
@@ -74,9 +94,12 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
     private static InvalidFieldDTO invalidField(FieldError error) {
         String code = switch (String.valueOf(error.getCode())) {
             case "NotNull", "NotBlank", "NotEmpty" -> "OBLIGATOIRE";
-            case "Size", "Min", "Max", "Positive", "PositiveOrZero" -> "BORNE";
+            case "Size", "Min", "Max", "Positive", "PositiveOrZero", "PastOrPresent" -> "BORNE";
+            case "ExpenseType" -> "HORS_LISTE";
             default -> "FORMAT";
         };
-        return new InvalidFieldDTO(error.getField(), code);
+        // Le contrat nomme le champ lui-même, sans l'objet qui le porte : « date » et non « valeurs.date ».
+        String field = error.getField();
+        return new InvalidFieldDTO(field.substring(field.lastIndexOf('.') + 1), code);
     }
 }

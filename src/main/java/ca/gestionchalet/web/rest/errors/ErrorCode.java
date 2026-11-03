@@ -4,10 +4,12 @@ package ca.gestionchalet.web.rest.errors;
 public enum ErrorCode {
     VALIDATION(400, "Certains champs sont invalides."),
     REQUETE_INVALIDE(400, "La requête est invalide."),
+    PHOTO_MANQUANTE(400, "Au moins une photo est requise."),
     NON_AUTHENTIFIE(401, "Authentification requise."),
     IDENTIFIANTS_INVALIDES(401, "Identifiants invalides."),
     CSRF_INVALIDE(403, "Jeton de sécurité absent ou invalide."),
     INTROUVABLE(404, "Ressource introuvable."),
+    CLE_DEJA_UTILISEE(409, "Ce reçu est déjà enregistré avec un autre contenu."),
     TAILLE_EXCESSIVE(413, "La requête est trop volumineuse."),
     FORMAT_NON_ACCEPTE(415, "Format non accepté."),
     TROP_DE_TENTATIVES(429, "Trop de tentatives. Réessayez plus tard."),
