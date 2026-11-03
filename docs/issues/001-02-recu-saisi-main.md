@@ -29,3 +29,5 @@ Tests rouges puis verts, capture de l'écran de validation, `scripts/verify-clea
 
 ## Notes
 - 2026-11-01 : Le reçu naît à l'état `A_COPIER` sans copie réelle. Les images ne sont pas encore contrôlées : sans risque tant que rien n'est déployé, et traité par 001-03.
+- 2026-11-03 : Mineurs ouverts, détaillés dans `docs/reviews/001-02.md` : M1 à M7, M9, M10 (itération 1), M14, M15, M16 (itération 2). M15 est à reprendre dans 001-03 : le format d'une photo n'est contrôlé qu'à la création.
+- 2026-11-03 : À prouver au premier passage sur GitHub : Chrome de l'image du runner, `sysctl`, 6 tests d'écran sous Ubuntu, contrôle du rapport, durées réelles (D-37).

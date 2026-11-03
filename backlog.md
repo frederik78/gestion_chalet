@@ -69,6 +69,7 @@ Vue d'ensemble des besoins. Détail dans `docs/prd/`, suivi de la livraison dans
 | D-34 | 2026-11-02 | `liquibase-core` 5.0.4, sous licence FSL-1.1-ALv2, conservé | F-01 |
 | D-35 | 2026-11-02 | Chrome installé dans la CI pour que les tests d'écran y tournent réellement ; pilote de test écrit avec le JDK conservé | F-01 |
 | D-36 | 2026-11-02 | Renvoi d'une clé connue avec un contenu différent : 409 `CLE_DEJA_UTILISEE`, reçu inchangé, utilisateur averti | F-01 |
+| D-37 | 2026-11-03 | Tests d'écran en CI avec le Chrome de l'image du runner, sans téléchargement ; sa version suit l'image ; `sysctl` AppArmor gardé tant qu'un passage réel n'a pas montré qu'il est inutile | F-01 |
 
 ## À trancher
 
