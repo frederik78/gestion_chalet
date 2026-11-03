@@ -21,14 +21,15 @@ import org.springframework.test.context.TestPropertySource;
 import tools.jackson.databind.JsonNode;
 
 /**
- * Écrans dans un vrai navigateur, serveur et base réels. Ces tests sont IGNORÉS sans Chrome, donc dans la CI et dans un
- * {@code verify} ordinaire. Pour les lancer :
+ * Écrans dans un vrai navigateur, serveur et base réels. Ces tests sont IGNORÉS dans un {@code verify} sans {@code essai.chrome} ;
+ * dès que la propriété existe, même vide, un binaire absent ou inutilisable les fait échouer. La CI la fournit et contrôle qu'ils ont tourné.
+ * Pour les lancer :
  * {@code scripts/verify-clean.sh -- "-Dessai.chrome=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"},
  * avec {@code -Dessai.captures=<dossier>} pour garder les captures.
  */
 @RealServerTest
 @TestPropertySource(properties = "recus.securite.cookie-securise=false")
-@EnabledIfSystemProperty(named = "essai.chrome", matches = ".+")
+@EnabledIfSystemProperty(named = "essai.chrome", matches = ".*")
 class RecuScreensChromeTest {
 
     /** Retient ce que la page envoie vraiment à POST /api/recus, puis laisse passer la requête. */

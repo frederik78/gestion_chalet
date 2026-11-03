@@ -27,8 +27,26 @@ jobs:
           distribution: temurin
           java-version: 25
           cache: maven
+      # Tests d'écran (D-35) : Chrome stable officiel, sans action tierce. Google ne publie pas d'empreinte de ce paquet, sa version n'est donc pas épinglée ; elle est affichée.
+      # Le bac à sable de Chrome reste actif : Ubuntu 24.04 restreint les user namespaces par AppArmor, on lève cette restriction sur ce runner jetable, sans --no-sandbox.
+      - name: Installer Chrome
+        if: hashFiles('pom.xml') != ''
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --output "$RUNNER_TEMP/chrome.deb" https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get update
+          sudo apt-get install --yes "$RUNNER_TEMP/chrome.deb"
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          /usr/bin/google-chrome --version
       - if: hashFiles('pom.xml') != ''
-        run: ./mvnw -B verify
+        run: ./mvnw -B verify -Dessai.chrome=/usr/bin/google-chrome
+      - name: Controler que les tests d'ecran ont tourne
+        if: hashFiles('pom.xml') != ''
+        run: |
+          rapport=target/surefire-reports/TEST-ca.gestionchalet.RecuScreensChromeTest.xml
+          if ! grep -Eq '<testsuite .* tests="[1-9][0-9]*" .* skipped="0" ' "$rapport"; then
+            echo "::error::Les tests d'ecran n'ont pas tourne : rapport absent, vide ou tests ignores."
+            exit 1
+          fi
   secrets:
     # Détection de secrets dans tout l'historique. gitleaks-action est gratuit pour un dépôt personnel ; pour une organisation, il faut
     # la licence GITLEAKS_LICENSE (sinon remplacer ce job par le binaire gitleaks lancé à la main).
