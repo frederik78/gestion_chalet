@@ -44,8 +44,9 @@ class RecuPhotoReadFailureRealServerTest {
 
     private static final String TEMOIN_FOURNISSEUR = "Fournisseur-temoin-lecture";
     private static final String TEMOIN_PANNE = "valeur-temoin-lecture-photo";
-    /** Nombre de lectures de photo encore à faire échouer. */
-    private static final AtomicInteger READS_TO_FAIL = new AtomicInteger();
+    private static final int NO_FAILURE = -1;
+    /** Lectures de photo encore permises avant la seule qui échoue ; une valeur négative n'en fait échouer aucune. */
+    private static final AtomicInteger READS_BEFORE_FAILURE = new AtomicInteger(NO_FAILURE);
 
     @LocalServerPort
     int port;
@@ -80,7 +81,7 @@ class RecuPhotoReadFailureRealServerTest {
         MultipartFile wrapped = mock(MultipartFile.class, AdditionalAnswers.delegatesTo(file));
         try {
             doAnswer(invocation -> {
-                if (READS_TO_FAIL.getAndUpdate(reads -> Math.max(0, reads - 1)) > 0) {
+                if (READS_BEFORE_FAILURE.getAndDecrement() == 0) {
                     throw new IOException(TEMOIN_PANNE);
                 }
                 return file.getInputStream();
@@ -93,7 +94,7 @@ class RecuPhotoReadFailureRealServerTest {
 
     @AfterEach
     void retirerLaPanne() {
-        READS_TO_FAIL.set(0);
+        READS_BEFORE_FAILURE.set(NO_FAILURE);
     }
 
     private List<Path> fichiers() throws IOException {
@@ -108,6 +109,16 @@ class RecuPhotoReadFailureRealServerTest {
 
     @Test
     void ca19_lEchecDeLectureDUnePhotoNeLaisseNiRecuNiFichierEtLaMemeCleReussitEnsuite(CapturedOutput journaux) throws IOException {
+        verifierQuUneLectureEnEchecNeLaisseRien(0, journaux);
+    }
+
+    @Test
+    void ca19_lEchecDeLaSecondeLectureAuStockageNeLaisseNiRecuNiFichierEtLaMemeCleReussitEnsuite(CapturedOutput journaux) throws IOException {
+        verifierQuUneLectureEnEchecNeLaisseRien(1, journaux);
+    }
+
+    /** La première lecture d'une photo calcule l'empreinte, la seconde l'écrit. */
+    private void verifierQuUneLectureEnEchecNeLaisseRien(int readsBeforeFailure, CapturedOutput journaux) throws IOException {
         TestClient client = new TestClient(port, "source-" + UUID.randomUUID());
         assertThat(client.connecter(TestDoublesConfiguration.MOT_DE_PASSE).statut()).isEqualTo(204);
         Map<String, Object> valeurs = RecuRequests.valeurs();
@@ -116,10 +127,11 @@ class RecuPhotoReadFailureRealServerTest {
         byte[] photo = RecuRequests.png();
         List<Path> fichiersAvant = fichiers();
         long recusAvant = recus();
-        READS_TO_FAIL.set(1);
+        READS_BEFORE_FAILURE.set(readsBeforeFailure);
 
         Reponse panne = RecuRequests.valider(client, corps, photo);
 
+        assertThat(READS_BEFORE_FAILURE.get()).isNegative();
         assertThat(panne.statut()).isEqualTo(500);
         assertThat(panne.json()).isEqualTo(Map.of("erreur", "Une erreur interne est survenue.", "code", "ERREUR_INTERNE"));
         assertThat(recus()).isEqualTo(recusAvant);
