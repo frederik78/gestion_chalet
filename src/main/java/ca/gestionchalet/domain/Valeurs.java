@@ -5,6 +5,8 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Embeddable;
 import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.List;
 
 /** Valeurs d'un reçu, telles que l'utilisateur les a validées ; une taxe absente reste {@code null}, distincte de 0. */
 @Embeddable
@@ -19,4 +21,10 @@ public record Valeurs(
         Long montantTotalCents,
         String numeroInscriptionTps,
         String numeroInscriptionTvq) {
+
+    /** Tous les champs, dans un ordre fixe : c'est le contenu que compare un renvoi (R-11). Une taxe absente y reste {@code null}. */
+    public List<Object> contentFields() {
+        return Arrays.asList(date, fournisseur, objet, typeDepense, montantAvantTaxesCents, tpsCents, tvqCents, montantTotalCents,
+                numeroInscriptionTps, numeroInscriptionTvq);
+    }
 }

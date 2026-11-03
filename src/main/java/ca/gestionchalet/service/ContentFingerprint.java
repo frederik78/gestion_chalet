@@ -10,7 +10,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
 import org.springframework.web.multipart.MultipartFile;
@@ -29,9 +28,7 @@ final class ContentFingerprint {
 
     static String of(Valeurs valeurs, List<MultipartFile> files) {
         MessageDigest digest = newDigest();
-        for (Object field : Arrays.asList(valeurs.date(), valeurs.fournisseur(), valeurs.objet(), valeurs.typeDepense(),
-                valeurs.montantAvantTaxesCents(), valeurs.tpsCents(), valeurs.tvqCents(), valeurs.montantTotalCents(),
-                valeurs.numeroInscriptionTps(), valeurs.numeroInscriptionTvq())) {
+        for (Object field : valeurs.contentFields()) {
             addField(digest, field);
         }
         for (MultipartFile file : files) {
