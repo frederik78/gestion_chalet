@@ -238,6 +238,34 @@ class RecuScreensChromeTest {
     }
 
     @Test
+    void ca18_uneCorrectionApresUneReponsePerdueAvertitQuElleNEstPasAppliquee() throws InterruptedException, IOException {
+        long avant = recus();
+        chrome.eval(ENREGISTRER_LES_ENVOIS);
+        chrome.eval(PERDRE_LA_PREMIERE_REPONSE);
+        allerALaValidationAvecDeuxPhotos();
+        saisirLesValeurs("Fournisseur corrigé");
+        cliquer("valider");
+        chrome.waitUntil("window.envois.length === 1 && document.getElementById('message-validation').textContent !== ''");
+
+        saisir("montantTotal", "300,00");
+        cliquer("valider");
+        chrome.waitUntil("window.envois.length === 2 && document.getElementById('message-validation').textContent.includes('pas été appliquée')");
+        capturer("validation-conflit.png");
+
+        assertThat(chrome.eval("document.getElementById('message-validation').textContent").asString())
+                .isEqualTo("Ce reçu était déjà enregistré : votre modification n'a pas été appliquée. Abandonnez pour revenir au départ.");
+        assertThat(chrome.eval("document.getElementById('message-succes').textContent").asString()).isEmpty();
+        assertThat(visible("validation")).isTrue();
+        assertThat(valeur("montantTotal")).isEqualTo("300,00");
+        assertThat(recus()).isEqualTo(avant + 1);
+        assertThat(base.queryForObject("select count(*) from recu where fournisseur = 'Fournisseur corrigé' and montant_total_cents = 30468", Long.class)).isEqualTo(1);
+
+        cliquer("abandonner");
+        chrome.waitUntil("document.getElementById('prise-de-vue').offsetParent !== null");
+        assertThat(nombre(NOMBRE_DE_PHOTOS_AU_DEPART)).isZero();
+    }
+
+    @Test
     void ca81_uneNouvelleValidationApresUnSuccesPrendUneAutreCle() throws InterruptedException {
         chrome.eval(ENREGISTRER_LES_ENVOIS);
         allerALaValidationAvecDeuxPhotos();

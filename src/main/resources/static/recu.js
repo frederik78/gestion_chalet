@@ -173,6 +173,9 @@ function messageDeLErreur(statut, corps) {
   if (statut === 401) {
     return 'Votre session a expiré. Reconnectez-vous dans un autre onglet, puis validez à nouveau : la saisie et les photos sont conservées.';
   }
+  if (corps && corps.code === 'CLE_DEJA_UTILISEE') {
+    return "Ce reçu était déjà enregistré : votre modification n'a pas été appliquée. Abandonnez pour revenir au départ.";
+  }
   if (corps && corps.code === 'VALIDATION' && corps.champs) {
     return 'À corriger : ' + corps.champs.map((erreur) => CHAMPS[erreur.champ] || erreur.champ).join(', ') + '.';
   }
