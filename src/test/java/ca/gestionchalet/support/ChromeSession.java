@@ -18,7 +18,9 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -38,13 +40,17 @@ public final class ChromeSession implements AutoCloseable {
     private final Map<Integer, CompletableFuture<JsonNode>> pending = new ConcurrentHashMap<>();
 
     public ChromeSession(String binary, Path profile) throws IOException, InterruptedException {
+        this(binary, profile, TIMEOUT);
+    }
+
+    ChromeSession(String binary, Path profile, Duration connectTimeout) throws IOException, InterruptedException {
         process = new ProcessBuilder(binary, "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
                 "--remote-debugging-port=0", "--user-data-dir=" + profile, "about:blank")
                 .redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                 .start();
         try {
-            socket = connect(profile);
+            socket = connect(profile, connectTimeout);
             call("Page.enable", Map.of());
             call("Network.enable", Map.of());
             call("Emulation.setDeviceMetricsOverride", Map.of("width", 1000, "height", 900, "deviceScaleFactor", 1, "mobile", false));
@@ -54,18 +60,22 @@ public final class ChromeSession implements AutoCloseable {
         }
     }
 
-    private WebSocket connect(Path profile) throws IOException, InterruptedException {
+    private WebSocket connect(Path profile, Duration timeout) throws IOException, InterruptedException {
         HttpClient http = HttpClient.newHttpClient();
         String port = readDebugPort(profile.resolve("DevToolsActivePort"));
         HttpResponse<String> targets = http.send(
-                HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/json/list")).build(), HttpResponse.BodyHandlers.ofString());
+                HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/json/list")).timeout(timeout).build(), HttpResponse.BodyHandlers.ofString());
         String url = null;
         for (JsonNode target : JSON.readTree(targets.body())) {
             if ("page".equals(target.get("type").asString())) {
                 url = target.get("webSocketDebuggerUrl").asString();
             }
         }
-        return http.newWebSocketBuilder().buildAsync(URI.create(url), new Listener()).join();
+        try {
+            return http.newWebSocketBuilder().buildAsync(URI.create(url), new Listener()).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (ExecutionException | TimeoutException e) {
+            throw new IOException("Chrome n'a pas ouvert son WebSocket de débogage", e);
+        }
     }
 
     private static String readDebugPort(Path file) throws IOException, InterruptedException {

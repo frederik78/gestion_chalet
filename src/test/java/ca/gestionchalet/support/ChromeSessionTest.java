@@ -2,13 +2,18 @@ package ca.gestionchalet.support;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
+import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.ConnectException;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.time.Duration;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -35,18 +40,66 @@ class ChromeSessionTest {
         }
     }
 
-    @Test
-    void ca76_chromeEstArreteQuandLaConnexionEchoueDansLeConstructeur() throws IOException {
+    private Path fauxChrome(int port) throws IOException {
         Path binaire = dossier.resolve("faux-chrome");
-        Files.writeString(binaire, FAUX_CHROME.formatted(portFerme()));
+        Files.writeString(binaire, FAUX_CHROME.formatted(port));
         Files.setPosixFilePermissions(binaire, PosixFilePermissions.fromString("rwx------"));
-        Path profil = Files.createDirectory(dossier.resolve("profil"));
+        return binaire;
+    }
 
-        assertThatThrownBy(() -> new ChromeSession(binaire.toString(), profil)).isInstanceOf(ConnectException.class);
-
+    private static void verifierQueChromeEstArrete(Path profil) throws IOException {
         long pid = Long.parseLong(Files.readString(profil.resolve("pid")).strip());
         Optional<ProcessHandle> processus = ProcessHandle.of(pid).filter(ProcessHandle::isAlive);
         processus.ifPresent(ProcessHandle::destroyForcibly);
         assertThat(processus).isEmpty();
+    }
+
+    /** Délai d'une seconde au lieu des 20 s du pilote, pour un test court ; au-delà de la borne du test, le constructeur est bloqué. */
+    private void verifierQueLeConstructeurEchoueSansBloquer(int port) throws IOException {
+        Path binaire = fauxChrome(port);
+        Path profil = Files.createDirectory(dossier.resolve("profil"));
+
+        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> assertThatThrownBy(
+                () -> new ChromeSession(binaire.toString(), profil, Duration.ofSeconds(1))).isInstanceOf(IOException.class));
+
+        verifierQueChromeEstArrete(profil);
+    }
+
+    @Test
+    void ca76_chromeEstArreteQuandLaConnexionEchoueDansLeConstructeur() throws IOException {
+        Path binaire = fauxChrome(portFerme());
+        Path profil = Files.createDirectory(dossier.resolve("profil"));
+
+        assertThatThrownBy(() -> new ChromeSession(binaire.toString(), profil)).isInstanceOf(ConnectException.class);
+
+        verifierQueChromeEstArrete(profil);
+    }
+
+    @Test
+    void unPortQuiAccepteSansRepondreNeBloquePasLeConstructeur() throws IOException {
+        // Sans accept() : le système accepte la connexion, personne ne répond.
+        try (ServerSocket muet = new ServerSocket(0)) {
+            verifierQueLeConstructeurEchoueSansBloquer(muet.getLocalPort());
+        }
+    }
+
+    @Test
+    void uneOuvertureDeWebSocketSansReponseNeBloquePasLeConstructeur() throws IOException {
+        try (ServerSocket muet = new ServerSocket(0)) {
+            String cibles = "[{\"type\":\"page\",\"webSocketDebuggerUrl\":\"ws://127.0.0.1:" + muet.getLocalPort() + "/\"}]";
+            HttpServer devTools = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            devTools.createContext("/json/list", echange -> {
+                byte[] corps = cibles.getBytes(StandardCharsets.UTF_8);
+                echange.sendResponseHeaders(200, corps.length);
+                echange.getResponseBody().write(corps);
+                echange.close();
+            });
+            devTools.start();
+            try {
+                verifierQueLeConstructeurEchoueSansBloquer(devTools.getAddress().getPort());
+            } finally {
+                devTools.stop(0);
+            }
+        }
     }
 }
