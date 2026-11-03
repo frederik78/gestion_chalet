@@ -13,6 +13,8 @@ permissions:
   contents: read
 jobs:
   verify:
+    # Build mesuré en local à moins de 2 min, Chrome compris ; la marge couvre un cache Maven vide.
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -62,6 +64,8 @@ jobs:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
   securite:
     # Analyse des dépendances (OWASP Dependency-Check) : active seulement si le secret NVD_API_KEY existe.
+    # Dependency-Check non mesuré (sans NVD_API_KEY en local) : marge large pour le téléchargement de la base NVD.
+    timeout-minutes: 90
     runs-on: ubuntu-latest
     env:
       NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
