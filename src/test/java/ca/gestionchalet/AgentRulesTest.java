@@ -22,6 +22,7 @@ import archfixtures.rules.domain.OutsidePackageDTO;
 import archfixtures.rules.domain.FloatingAmount;
 import archfixtures.rules.service.DirectProviderCallService;
 import archfixtures.rules.service.FileDeletingService;
+import archfixtures.rules.service.PhotoDiscardingService;
 import archfixtures.rules.service.FloatingCalculationService;
 import archfixtures.rules.service.ControllerOutsideWebResource;
 import archfixtures.rules.service.EntityOutsideDomain;
@@ -209,6 +210,22 @@ class AgentRulesTest {
                 .allowEmptyShould(true);
     }
 
+    private static final String RETRAIT_DE_PHOTO = "discard";
+
+    /** La méthode est nommée par une chaîne : si elle n'existe plus, la règle échoue au lieu de devenir muette. */
+    private static ArchRule seulLeServiceRetireUnePhoto(String methode) {
+        try {
+            PhotoStorage.class.getMethod(methode, Photo.class);
+        } catch (NoSuchMethodException e) {
+            throw new AssertionError("PhotoStorage." + methode + " n'existe plus : la règle serait muette", e);
+        }
+        return noClasses().that().resideOutsideOfPackage("ca.gestionchalet.repository..")
+                .and().doNotHaveFullyQualifiedName(RecuService.class.getName())
+                .and(DescribedPredicate.describe("hors classes internes de RecuService",
+                        classe -> !classe.getName().startsWith(RecuService.class.getName() + "$")))
+                .should().callMethod(PhotoStorage.class, methode, Photo.class);
+    }
+
     private static final JavaClasses PROJET = new ClassFileImporter()
             .withImportOption(new ImportOption.DoNotIncludeTests())
             .importPackages("ca.gestionchalet");
@@ -232,12 +249,14 @@ class AgentRulesTest {
 
     @Test
     void ca72_seulLaValidationEnEchecRetireUnFichierDePhoto() {
-        noClasses().that().resideOutsideOfPackage("ca.gestionchalet.repository..")
-                .and().doNotHaveFullyQualifiedName(RecuService.class.getName())
-                .and(DescribedPredicate.describe("hors classes internes de RecuService",
-                        classe -> !classe.getName().startsWith(RecuService.class.getName() + "$")))
-                .should().callMethod(PhotoStorage.class, "discard", Photo.class)
-                .check(PROJET);
+        seulLeServiceRetireUnePhoto(RETRAIT_DE_PHOTO).check(PROJET);
+    }
+
+    @Test
+    void ca72_uneMethodeDeRetraitRenommeeFaitEchouerLaRegle() {
+        assertThatThrownBy(() -> seulLeServiceRetireUnePhoto("methodeRenommee"))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("methodeRenommee");
     }
 
     @ParameterizedTest
@@ -268,7 +287,8 @@ class AgentRulesTest {
                 Arguments.of(fournisseursDerriereClient(racine), List.of(DirectProviderCallService.class)),
                 Arguments.of(servicesNommesDansService(racine), List.of(ServiceOutsideLayerService.class)),
                 Arguments.of(servicesNommesDansService(racine), List.of(BadlyNamed.class)),
-                Arguments.of(fichiersRetiresSeulementParLeStockage(racine), List.of(FileDeletingService.class)));
+                Arguments.of(fichiersRetiresSeulementParLeStockage(racine), List.of(FileDeletingService.class)),
+                Arguments.of(seulLeServiceRetireUnePhoto(RETRAIT_DE_PHOTO), List.of(PhotoDiscardingService.class)));
     }
 
     @ParameterizedTest(name = "{1}")
