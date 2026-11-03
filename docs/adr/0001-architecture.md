@@ -31,7 +31,7 @@ src/main/java/ca/gestionchalet/
 ├── config/       configuration Spring, sécurité, propriétés `recus.*`
 ├── domain/       entités JPA, types métier, règles et erreurs métier, converter/
 ├── repository/   dépôts Spring Data, stockage local des photos
-├── service/      cas d'utilisation et reprise des envois ; service/dto, service/mapper
+├── service/      cas d'utilisation et reprise des envois ; service/dto, service/mapper, service/validation
 ├── client/       ExtracteurRecu, ClasseurDepenses, DepotPhotos et leurs implémentations
 ├── security/     compte local, limitation des échecs de connexion
 └── web/rest/     XxxResource ; web/rest/errors
