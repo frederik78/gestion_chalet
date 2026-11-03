@@ -1,5 +1,6 @@
 package ca.gestionchalet.web.rest.errors;
 
+import ca.gestionchalet.domain.IdempotencyKeyConflictException;
 import ca.gestionchalet.domain.MissingPhotoException;
 import ca.gestionchalet.domain.UnsupportedPhotoFormatException;
 import ca.gestionchalet.web.rest.errors.ErrorDTO.InvalidFieldDTO;
@@ -47,7 +48,9 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
         HttpHeaders json = new HttpHeaders();
         json.setContentType(MediaType.APPLICATION_JSON);
         Object errorBody = body instanceof ErrorDTO ? body : ErrorDTO.of(code);
-        return super.handleExceptionInternal(ex, errorBody, json, HttpStatusCode.valueOf(code.status()), request);
+        // Un corps déjà construit garde son statut ; sinon le statut est celui du code déduit, pour tout statut du framework.
+        int status = body instanceof ErrorDTO ? statusCode.value() : code.status();
+        return super.handleExceptionInternal(ex, errorBody, json, HttpStatusCode.valueOf(status), request);
     }
 
     @Override
@@ -61,6 +64,11 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<Object> handleMultipartException(MultipartException ex, WebRequest request) {
         return handleExceptionInternal(ex, null, new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
+    }
+
+    @ExceptionHandler(IdempotencyKeyConflictException.class)
+    public ResponseEntity<Object> handleIdempotencyKeyConflict(IdempotencyKeyConflictException ex, WebRequest request) {
+        return handleExceptionInternal(ex, ErrorDTO.of(ErrorCode.CLE_DEJA_UTILISEE), new HttpHeaders(), HttpStatus.CONFLICT, request);
     }
 
     @ExceptionHandler(MissingPhotoException.class)

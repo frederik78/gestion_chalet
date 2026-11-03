@@ -1,10 +1,12 @@
 package ca.gestionchalet.service;
 
+import ca.gestionchalet.domain.IdempotencyKeyConflictException;
 import ca.gestionchalet.domain.MissingPhotoException;
 import ca.gestionchalet.domain.Photo;
 import ca.gestionchalet.domain.PhotoFormat;
 import ca.gestionchalet.domain.Recu;
 import ca.gestionchalet.domain.UnsupportedPhotoFormatException;
+import ca.gestionchalet.domain.Valeurs;
 import ca.gestionchalet.repository.PhotoStorage;
 import ca.gestionchalet.repository.RecuRepository;
 import ca.gestionchalet.service.dto.RecuValidationDTO;
@@ -46,7 +48,12 @@ public class RecuService {
         }
         // Le lien unique vers la base (hikari.maximum-pool-size) fait attendre un envoi simultané ici : il voit le reçu du premier.
         Optional<Recu> known = recuRepository.findByCleIdempotence(validation.cleIdempotence());
+        Valeurs valeurs = recuMapper.toValeurs(validation.valeurs());
+        String fingerprint = ContentFingerprint.of(valeurs, files);
         if (known.isPresent()) {
+            if (!known.get().hasContent(fingerprint)) {
+                throw new IdempotencyKeyConflictException();
+            }
             return new RecuValidationResult(recuMapper.toDto(known.get()), false);
         }
         List<Photo> photos = new ArrayList<>();
@@ -56,7 +63,7 @@ public class RecuService {
             photos.add(photo);
             store(photo, file);
         }
-        Recu recu = Recu.valider(validation.cleIdempotence(), recuMapper.toValeurs(validation.valeurs()),
+        Recu recu = Recu.valider(validation.cleIdempotence(), valeurs, fingerprint,
                 validation.montantTotalLuCents(), clock.instant(), photos);
         return new RecuValidationResult(recuMapper.toDto(recuRepository.saveAndFlush(recu)), true);
     }

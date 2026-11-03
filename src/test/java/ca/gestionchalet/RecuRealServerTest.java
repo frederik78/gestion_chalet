@@ -16,6 +16,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.HashMap;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -260,6 +263,100 @@ class RecuRealServerTest {
         Etat apres = etat();
 
         Reponse second = RecuRequests.valider(client, corps, RecuRequests.png());
+
+        assertThat(second.statut()).isEqualTo(200);
+        assertThat(second.json()).isEqualTo(premier.json());
+        assertThat(etat()).isEqualTo(apres);
+    }
+
+    private static final Map<String, Object> CLE_DEJA_UTILISEE = Map.of(
+            "erreur", "Ce reçu est déjà enregistré avec un autre contenu.", "code", "CLE_DEJA_UTILISEE");
+
+    private Map<Path, String> empreintesDesFichiers() throws IOException {
+        Map<Path, String> empreintes = new HashMap<>();
+        for (Path fichier : fichiers()) {
+            empreintes.put(fichier, HexFormat.of().formatHex(Files.readAllBytes(fichier)));
+        }
+        return empreintes;
+    }
+
+    private void verifierConflit(Map<String, Object> corps, byte[]... photos) throws IOException {
+        Etat etatAvant = etat();
+        Map<Path, String> fichiersAvant = empreintesDesFichiers();
+        List<Map<String, Object>> lignesAvant = base.queryForList("select * from recu order by id");
+
+        Reponse reponse = RecuRequests.valider(client, corps, photos);
+
+        assertThat(reponse.statut()).isEqualTo(409);
+        assertThat(reponse.json()).isEqualTo(CLE_DEJA_UTILISEE);
+        assertThat(etat()).isEqualTo(etatAvant);
+        assertThat(empreintesDesFichiers()).isEqualTo(fichiersAvant);
+        assertThat(base.queryForList("select * from recu order by id")).isEqualTo(lignesAvant);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"montantTotalCents, 9999", "fournisseur, Autre fournisseur", "date, 2026-10-10", "objet, Ajouté"})
+    void ca18_unRenvoiAuxValeursDifferentesDonne409EtLeRecuResteInchange(String champ, String valeur) throws IOException {
+        Map<String, Object> corps = RecuRequests.corps(RecuRequests.valeurs());
+        byte[] photo = RecuRequests.png();
+        assertThat(RecuRequests.valider(client, corps, photo).statut()).isEqualTo(201);
+
+        Map<String, Object> valeurs = RecuRequests.valeurs();
+        valeurs.put(champ, champ.endsWith("Cents") ? (Object) Long.valueOf(valeur) : valeur);
+        Map<String, Object> corrige = new LinkedHashMap<>(corps);
+        corrige.put("valeurs", valeurs);
+
+        verifierConflit(corrige, photo);
+    }
+
+    @Test
+    void ca18_uneTaxeVideDevenueZeroEstUnContenuDifferent() throws IOException {
+        Map<String, Object> corps = RecuRequests.corps(RecuRequests.valeurs());
+        byte[] photo = RecuRequests.png();
+        RecuRequests.valider(client, corps, photo);
+        Map<String, Object> valeurs = RecuRequests.valeurs();
+        valeurs.put("tpsCents", 0);
+        Map<String, Object> corrige = new LinkedHashMap<>(corps);
+        corrige.put("valeurs", valeurs);
+
+        verifierConflit(corrige, photo);
+    }
+
+    @Test
+    void ca18_unRenvoiAvecUnePhotoDifferenteDeMemeTailleDonne409() throws IOException {
+        Map<String, Object> corps = RecuRequests.corps(RecuRequests.valeurs());
+        byte[] photo = RecuRequests.png();
+        assertThat(RecuRequests.valider(client, corps, photo).statut()).isEqualTo(201);
+        byte[] memeTaille = photo.clone();
+        memeTaille[memeTaille.length - 1] ^= 1;
+
+        verifierConflit(corps, memeTaille);
+    }
+
+    @Test
+    void ca18_desPhotosDansUnAutreOrdreOuEnNombreDifferentDonnent409() throws IOException {
+        Map<String, Object> corps = RecuRequests.corps(RecuRequests.valeurs());
+        byte[] a = RecuRequests.png(4);
+        byte[] b = RecuRequests.png(8);
+        assertThat(RecuRequests.valider(client, corps, a, b).statut()).isEqualTo(201);
+
+        verifierConflit(corps, b, a);
+        verifierConflit(corps, a);
+    }
+
+    @Test
+    void ca18_lesMemesValeursApresNormalisationEtUnAutreTotalLuDonnent200() throws IOException {
+        Map<String, Object> corps = RecuRequests.corps(RecuRequests.valeurs());
+        byte[] photo = RecuRequests.png();
+        Reponse premier = RecuRequests.valider(client, corps, photo);
+        Etat apres = etat();
+        Map<String, Object> valeurs = RecuRequests.valeurs();
+        valeurs.put("fournisseur", "  " + valeurs.get("fournisseur") + "  ");
+        Map<String, Object> renvoi = new LinkedHashMap<>(corps);
+        renvoi.put("valeurs", valeurs);
+        renvoi.put("montantTotalLuCents", 1234);
+
+        Reponse second = RecuRequests.valider(client, renvoi, photo);
 
         assertThat(second.statut()).isEqualTo(200);
         assertThat(second.json()).isEqualTo(premier.json());

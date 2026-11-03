@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -91,6 +92,22 @@ class RecuFailureRealServerTest {
 
     private static void verifierLesJournaux(CapturedOutput journaux) {
         assertThat(journaux.getAll()).doesNotContain(TEMOIN_FOURNISSEUR, TEMOIN_OBJET, TEMOIN_PANNE, "recu.png");
+    }
+
+    @Test
+    void ca18_unConflitDeCleNEcritAucuneValeurDuRecuDansLesJournaux(CapturedOutput journaux) {
+        Map<String, Object> corps = corps();
+        byte[] photo = RecuRequests.png();
+        assertThat(RecuRequests.valider(client, corps, photo).statut()).isEqualTo(201);
+        Map<String, Object> corrige = new HashMap<>(corps);
+        Map<String, Object> valeurs = new HashMap<>(RecuRequests.valeurs());
+        valeurs.put("fournisseur", TEMOIN_FOURNISSEUR + "-corrige");
+        valeurs.put("objet", TEMOIN_OBJET);
+        corrige.put("valeurs", valeurs);
+
+        assertThat(RecuRequests.valider(client, corrige, photo).statut()).isEqualTo(409);
+
+        verifierLesJournaux(journaux);
     }
 
     @Test

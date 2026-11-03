@@ -34,6 +34,10 @@ public class Recu {
     @Embedded
     private Valeurs valeurs;
 
+    /** Empreinte du contenu validé : valeurs et photos, sans le total lu, qui n'est pas saisi par l'utilisateur (R-11). */
+    @Column(nullable = false)
+    private String empreinteContenu;
+
     private Long montantTotalLuCents;
 
     @Enumerated(EnumType.STRING)
@@ -55,10 +59,11 @@ public class Recu {
     protected Recu() {
     }
 
-    private Recu(UUID cleIdempotence, Valeurs valeurs, Long montantTotalLuCents, Instant valideLe, List<Photo> photos) {
+    private Recu(UUID cleIdempotence, Valeurs valeurs, String empreinteContenu, Long montantTotalLuCents, Instant valideLe, List<Photo> photos) {
         this.id = UUID.randomUUID();
         this.cleIdempotence = cleIdempotence;
         this.valeurs = valeurs;
+        this.empreinteContenu = empreinteContenu;
         this.montantTotalLuCents = montantTotalLuCents;
         this.etatCopie = EtatCopie.A_COPIER;
         this.version = FIRST_VERSION;
@@ -66,8 +71,12 @@ public class Recu {
         this.photos.addAll(photos);
     }
 
-    public static Recu valider(UUID cleIdempotence, Valeurs valeurs, Long montantTotalLuCents, Instant valideLe, List<Photo> photos) {
-        return new Recu(cleIdempotence, valeurs, montantTotalLuCents, valideLe, photos);
+    public static Recu valider(UUID cleIdempotence, Valeurs valeurs, String empreinteContenu, Long montantTotalLuCents, Instant valideLe, List<Photo> photos) {
+        return new Recu(cleIdempotence, valeurs, empreinteContenu, montantTotalLuCents, valideLe, photos);
+    }
+
+    public boolean hasContent(String empreinte) {
+        return empreinteContenu.equals(empreinte);
     }
 
     public UUID getId() {
