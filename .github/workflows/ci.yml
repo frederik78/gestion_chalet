@@ -29,14 +29,11 @@ jobs:
           distribution: temurin
           java-version: 25
           cache: maven
-      # Tests d'écran (D-35) : Chrome stable officiel, sans action tierce. Google ne publie pas d'empreinte de ce paquet, sa version n'est donc pas épinglée ; elle est affichée.
-      # Le bac à sable de Chrome reste actif : Ubuntu 24.04 restreint les user namespaces par AppArmor, on lève cette restriction sur ce runner jetable, sans --no-sandbox.
-      - name: Installer Chrome
+      # Tests d'écran (D-35) : le Chrome de l'image du runner (actions/runner-images, images/ubuntu/scripts/build/install-google-chrome.sh : CHROME_BIN=/usr/bin/google-chrome). Sa version suit l'image ; l'affichage fait échouer l'étape tôt si Chrome manque.
+      # Le bac à sable de Chrome reste actif : Ubuntu 24.04 restreint les user namespaces par AppArmor, on lève cette restriction sur ce runner jetable, sans --no-sandbox ; à garder tant qu'un passage réel n'a pas montré qu'elle est inutile.
+      - name: Preparer Chrome
         if: hashFiles('pom.xml') != ''
         run: |
-          curl --fail --silent --show-error --location --proto '=https' --output "$RUNNER_TEMP/chrome.deb" https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-          sudo apt-get update
-          sudo apt-get install --yes "$RUNNER_TEMP/chrome.deb"
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           /usr/bin/google-chrome --version
       - if: hashFiles('pom.xml') != ''
