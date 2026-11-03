@@ -199,6 +199,8 @@ async function valider(evenement) {
 
   message.textContent = '';
   elements.valider.disabled = true;
+  // L'envoi ne s'annule pas : le serveur créerait un reçu indélébile (R-35) après un abandon accepté par l'écran.
+  elements.abandonner.disabled = true;
   try {
     const reponse = await envoyerFormulaire('/api/recus', formulaire);
     if (reponse.ok) {
@@ -212,6 +214,7 @@ async function valider(evenement) {
     message.textContent = 'Le réseau est indisponible. Vos valeurs et vos photos sont conservées : validez à nouveau.';
   } finally {
     elements.valider.disabled = false;
+    elements.abandonner.disabled = false;
   }
 }
 

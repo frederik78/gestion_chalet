@@ -184,6 +184,44 @@ class RecuScreensChromeTest {
         assertThat(valeur("fournisseur")).isEmpty();
     }
 
+    /** La réponse de POST /api/recus attend {@code window.libererLEnvoi()}, puis l'envoi échoue. */
+    private static final String RETENIR_L_ENVOI_PUIS_ECHOUER = """
+            window.fetchAvantRetenue = window.fetch;
+            window.fetch = async (chemin, options) => {
+              if (String(chemin) !== '/api/recus') {
+                return window.fetchAvantRetenue(chemin, options);
+              }
+              window.fetch = window.fetchAvantRetenue;
+              await new Promise((liberer) => { window.libererLEnvoi = liberer; });
+              throw new TypeError('Failed to fetch');
+            };
+            true""";
+
+    @Test
+    void ca79_abandonnerEstInactifPendantLEnvoiEtRevientApresUneErreurOuUnSucces() throws InterruptedException {
+        long avant = recus();
+        chrome.eval(RETENIR_L_ENVOI_PUIS_ECHOUER);
+        allerALaValidationAvecDeuxPhotos();
+        saisirLesValeurs("Fournisseur en cours");
+        cliquer("valider");
+        chrome.waitUntil("!!window.libererLEnvoi");
+
+        assertThat(chrome.eval("document.getElementById('abandonner').disabled").asBoolean()).isTrue();
+        cliquer("abandonner");
+        assertThat(visible("validation")).isTrue();
+        assertThat(nombre(NOMBRE_DE_PHOTOS_A_VALIDER)).isEqualTo(2);
+
+        chrome.eval("window.libererLEnvoi(); true");
+        chrome.waitUntil("document.getElementById('message-validation').textContent !== ''");
+        assertThat(chrome.eval("document.getElementById('abandonner').disabled").asBoolean()).isFalse();
+        assertThat(recus()).isEqualTo(avant);
+
+        cliquer("valider");
+        chrome.waitUntil("document.getElementById('prise-de-vue').offsetParent !== null");
+        assertThat(chrome.eval("document.getElementById('abandonner').disabled").asBoolean()).isFalse();
+        assertThat(recus()).isEqualTo(avant + 1);
+    }
+
     @Test
     void ca81_apresUnePanneReseauLeRenvoiGardeValeursPhotosEtCle() throws InterruptedException, IOException {
         long avant = recus();
