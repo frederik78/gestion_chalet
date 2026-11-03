@@ -17,6 +17,9 @@ bcrypt ne prend en compte que les 72 premiers octets du mot de passe : ce qui su
 ## Réglages (`recus.securite.*`, surchargeables par l'environnement)
 Blocage : 5 échecs par source, 15 minutes. Inactivité de session : 8 heures (`server.servlet.session.timeout`). Corps de requête hors multipart : 64 Ko ; formulaire lu par Tomcat : 64 Ko (`server.tomcat.max-http-form-post-size`). Multipart (`spring.servlet.multipart.*`) : 15 Mo par fichier, 75 Mo par requête, et refusé sans session. Filtres de formulaire de Spring désactivés, car ils liraient le corps avant la sécurité : `spring.mvc.formcontent.filter.enabled`, et `spring.mvc.hiddenmethod.filter.enabled`, dont c'est déjà le défaut.
 
+## Concurrence des validations
+Le lien unique vers la base (`maximum-pool-size: 1`) garantit l'idempotence de deux envois simultanés. Le hachage et l'écriture des photos ont lieu dans la transaction : le lien reste tenu 149 à 439 ms pour 5 photos de 14 Mo (mesuré). Un refus d'unicité arrive en `JpaSystemException` avec le dialecte SQLite, et non en `DataIntegrityViolationException`. Ces choix sont à revoir si SQLite est remplacé.
+
 ## À reprendre avec NF-03
 - Derrière Cloudflare Tunnel, toutes les requêtes semblent venir de la même source : le blocage devra lire l'en-tête de confiance du tunnel, sans quoi il deviendrait global. Aucun en-tête `X-Forwarded-*` n'est lu aujourd'hui.
 - HSTS n'est pas émis : à ajouter avec HTTPS.
