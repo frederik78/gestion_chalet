@@ -158,7 +158,7 @@ class RecuFailureRealServerTest {
     }
 
     @Test
-    void ca19_unCorpsIllisibleOuInvalideNAtteintPasLesJournaux(CapturedOutput journaux) {
+    void unCorpsIllisibleOuInvalideNAtteintPasLesJournaux(CapturedOutput journaux) {
         String illisible = "{\"cleIdempotence\":\"" + UUID.randomUUID() + "\",\"valeurs\":{\"fournisseur\":\"" + TEMOIN_FOURNISSEUR + "\",";
         assertThat(RecuRequests.validerJson(client, illisible, RecuRequests.png()).statut()).isEqualTo(400);
 

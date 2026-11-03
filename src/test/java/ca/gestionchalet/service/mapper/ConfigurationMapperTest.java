@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 class ConfigurationMapperTest {
 
     @Test
-    void ca15_lesTypesEtLesFormatsArriventChacunDansLeurChamp() {
+    void lesTypesEtLesFormatsArriventChacunDansLeurChamp() {
         RecuRules regles = new RecuRules(List.of("Type"), 5, 15L, List.of("image/png"));
 
         ConfigurationDTO dto = new ConfigurationMapperImpl().toDto(regles);

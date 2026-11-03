@@ -179,7 +179,7 @@ class RecuRealServerTest {
     }
 
     @Test
-    void ca15_laConfigurationAnnonceLaListeEtLesLimitesAuxEcrans() {
+    void laConfigurationAnnonceLaListeEtLesLimitesAuxEcrans() {
         Reponse reponse = client.get("/api/configuration");
 
         assertThat(reponse.statut()).isEqualTo(200);
@@ -237,14 +237,14 @@ class RecuRealServerTest {
 
     @ParameterizedTest
     @CsvSource({"fournisseur, 0085", "fournisseur, 009B", "objet, 0085", "objet, 009B"})
-    void ca16_unCaractereDeControleHorsAsciiEstRefuse(String champ, String pointDeCode) {
+    void unCaractereDeControleHorsAsciiEstRefuse(String champ, String pointDeCode) {
         String texte = "a" + (char) Integer.parseInt(pointDeCode, 16) + "b";
 
         assertThat(validerAvec(champ, texte).json()).isEqualTo(erreurDeChamp(champ, "FORMAT"));
     }
 
     @Test
-    void ca16_lesTextesSontBornesEtSansCaractereDeControle() {
+    void lesTextesSontBornesEtSansCaractereDeControle() {
         assertThat(validerAvec("fournisseur", "x".repeat(120)).statut()).isEqualTo(201);
         assertThat(validerAvec("fournisseur", "x".repeat(121)).json()).isEqualTo(erreurDeChamp("fournisseur", "BORNE"));
         assertThat(validerAvec("fournisseur", "a\nb").json()).isEqualTo(erreurDeChamp("fournisseur", "FORMAT"));
@@ -559,7 +559,7 @@ class RecuRealServerTest {
     }
 
     @Test
-    void ca20_unePhotoDeFormatHorsListeEstRefusee() {
+    void ca69_unePhotoDeFormatHorsListeEstRefusee() {
         Reponse reponse = RecuRequests.validerAvecType(client, RecuRequests.corps(RecuRequests.valeurs()), "image/gif", RecuRequests.png());
 
         assertThat(reponse.statut()).isEqualTo(415);
