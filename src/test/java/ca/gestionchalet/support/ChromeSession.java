@@ -43,6 +43,18 @@ public final class ChromeSession implements AutoCloseable {
                 .redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                 .start();
+        try {
+            socket = connect(profile);
+            call("Page.enable", Map.of());
+            call("Network.enable", Map.of());
+            call("Emulation.setDeviceMetricsOverride", Map.of("width", 1000, "height", 900, "deviceScaleFactor", 1, "mobile", false));
+        } catch (IOException | InterruptedException | RuntimeException e) {
+            close();
+            throw e;
+        }
+    }
+
+    private WebSocket connect(Path profile) throws IOException, InterruptedException {
         HttpClient http = HttpClient.newHttpClient();
         String port = readDebugPort(profile.resolve("DevToolsActivePort"));
         HttpResponse<String> targets = http.send(
@@ -53,10 +65,7 @@ public final class ChromeSession implements AutoCloseable {
                 url = target.get("webSocketDebuggerUrl").asString();
             }
         }
-        socket = http.newWebSocketBuilder().buildAsync(URI.create(url), new Listener()).join();
-        call("Page.enable", Map.of());
-        call("Network.enable", Map.of());
-        call("Emulation.setDeviceMetricsOverride", Map.of("width", 1000, "height", 900, "deviceScaleFactor", 1, "mobile", false));
+        return http.newWebSocketBuilder().buildAsync(URI.create(url), new Listener()).join();
     }
 
     private static String readDebugPort(Path file) throws IOException, InterruptedException {
