@@ -1,6 +1,7 @@
 package ca.gestionchalet.service.dto;
 
 import ca.gestionchalet.service.validation.ExpenseType;
+import ca.gestionchalet.service.validation.StrictLocalDateDeserializer;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -10,10 +11,11 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 /** Objet {@code valeurs} du contrat (PRD, sections 7.1 et 11.4). */
 public record ValeursDTO(
-        @NotNull @PastOrPresent LocalDate date,
+        @NotNull @PastOrPresent @JsonDeserialize(using = StrictLocalDateDeserializer.class) LocalDate date,
         @NotBlank @Size(max = 120) @Pattern(regexp = NO_CONTROL_CHARACTER) String fournisseur,
         @Size(max = 200) @Pattern(regexp = NO_CONTROL_CHARACTER) String objet,
         @NotBlank @ExpenseType String typeDepense,

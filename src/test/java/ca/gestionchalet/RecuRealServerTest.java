@@ -32,6 +32,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -307,6 +308,41 @@ class RecuRealServerTest {
         corrige.put("valeurs", valeurs);
 
         verifierConflit(corrige, photo);
+    }
+
+    private static final Map<String, Object> REQUETE_INVALIDE = Map.of("erreur", "La requête est invalide.", "code", "REQUETE_INVALIDE");
+
+    static Stream<Object> datesMalFormees() {
+        return Stream.of("2026-10-11T23:00:00Z", "2026-10-11T23:00:00", List.of(2026, 10, 11), "2026-02-30", "-2026-10-11", " 2026-10-11 ",
+                "20261011", "2026-1-1", 20261011, "");
+    }
+
+    @ParameterizedTest
+    @MethodSource("datesMalFormees")
+    void uneDateHorsDuFormatAAAAMMJJEstRefuseeSansRienEnregistrer(Object date) throws IOException {
+        Etat avant = etat();
+        Map<String, Object> valeurs = RecuRequests.valeurs();
+        valeurs.put("date", date);
+
+        Reponse reponse = RecuRequests.valider(client, RecuRequests.corps(valeurs), RecuRequests.png());
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(REQUETE_INVALIDE);
+        assertThat(etat()).isEqualTo(avant);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"AAAAAAAAAAAAAAAAAAAAAA==", "1-1-1-1-1", "00000000000000000000000000000000", " 00000000-0000-4000-8000-000000000000 ", ""})
+    void uneCleHorsDuFormatUuidEstRefuseeSansRienEnregistrer(String cle) throws IOException {
+        Etat avant = etat();
+        Map<String, Object> corps = RecuRequests.corps(RecuRequests.valeurs());
+        corps.put("cleIdempotence", cle);
+
+        Reponse reponse = RecuRequests.valider(client, corps, RecuRequests.png());
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(REQUETE_INVALIDE);
+        assertThat(etat()).isEqualTo(avant);
     }
 
     @Test
