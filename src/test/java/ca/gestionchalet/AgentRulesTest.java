@@ -24,11 +24,16 @@ import archfixtures.rules.domain.FloatingAmount;
 import archfixtures.rules.repository.CrudOfferingRepository;
 import archfixtures.rules.repository.DerivedDeleteRepository;
 import archfixtures.rules.repository.NativePurgingRepository;
+import archfixtures.rules.repository.NeighbourStorage;
+import archfixtures.rules.repository.SpecificationRepository;
 import archfixtures.rules.repository.QueryPurgingRepository;
 import archfixtures.rules.service.DirectProviderCallService;
+import archfixtures.rules.service.EntityManagerRemovingService;
+import archfixtures.rules.service.JdbcPurgingService;
 import archfixtures.rules.service.LegacyFileDeletingService;
 import archfixtures.rules.service.ScheduledDiscardingService;
 import archfixtures.rules.service.FileDeletingService;
+import archfixtures.rules.service.PhotoDiscardingByReferenceService;
 import archfixtures.rules.service.PhotoDiscardingService;
 import archfixtures.rules.service.FloatingCalculationService;
 import archfixtures.rules.service.ControllerOutsideWebResource;
@@ -46,7 +51,6 @@ import archfixtures.rules.web.rest.ServiceOutsideLayerService;
 import ca.gestionchalet.domain.Photo;
 import ca.gestionchalet.repository.PhotoStorage;
 import ca.gestionchalet.repository.RecuRepository;
-import ca.gestionchalet.service.RecuService;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaCall;
 import com.tngtech.archunit.core.domain.JavaClass;
@@ -61,6 +65,7 @@ import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
+import jakarta.persistence.EntityManager;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.lang.reflect.Method;
@@ -221,18 +226,53 @@ class AgentRulesTest {
 
     private static final String RETRAIT_DE_PHOTO = "discard";
 
-    /** La méthode est nommée par une chaîne : si elle n'existe plus, la règle échoue au lieu de devenir muette. */
-    private static ArchRule seulLeServiceRetireUnePhoto(String methode) {
+    /**
+     * La méthode est nommée par une chaîne : si elle n'existe plus, la règle échoue au lieu de devenir muette. Seuls le retour de
+     * transaction de {@code RecuService} et {@code PhotoStorage} lui-même y ont droit. Les accès comptent les références de méthode,
+     * que {@code callMethod} ne voit pas (mesuré). Limite : un appel indirect, par une méthode intermédiaire de ces classes, n'est pas suivi.
+     */
+    private static ArchRule seulLeRetourDeTransactionRetireUnePhoto(String racine, String methode) {
         try {
             PhotoStorage.class.getMethod(methode, Photo.class);
         } catch (NoSuchMethodException e) {
             throw new AssertionError("PhotoStorage." + methode + " n'existe plus : la règle serait muette", e);
         }
-        return noClasses().that().resideOutsideOfPackage("ca.gestionchalet.repository..")
-                .and().doNotHaveFullyQualifiedName(RecuService.class.getName())
-                .and(DescribedPredicate.describe("hors classes internes de RecuService",
-                        classe -> !classe.getName().startsWith(RecuService.class.getName() + "$")))
-                .should().callMethod(PhotoStorage.class, methode, Photo.class);
+        ArchCondition<JavaClass> sansRetrait = new ArchCondition<>("ne pas retirer de photo hors du retour de transaction") {
+            @Override
+            public void check(JavaClass classe, ConditionEvents evenements) {
+                boolean stockage = classe.getName().equals(racine + ".repository.PhotoStorage");
+                boolean service = classe.getName().startsWith(racine + ".service.RecuService$");
+                classe.getAccessesFromSelf().stream()
+                        .filter(acces -> acces.getTargetOwner().isEquivalentTo(PhotoStorage.class) && acces.getName().equals(methode))
+                        .filter(acces -> !stockage && !(service && acces.getOrigin().getName().equals("afterCompletion")))
+                        .forEach(acces -> evenements.add(SimpleConditionEvent.violated(classe, acces.getDescription())));
+            }
+        };
+        return classes().should(sansRetrait).allowEmptyShould(true);
+    }
+
+    private static final Set<String> SQL_DIRECT = Set.of("org.springframework.jdbc.core.JdbcTemplate",
+            "org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate", "org.springframework.jdbc.core.simple.JdbcClient");
+
+    /** Classes autorisées à écrire du SQL direct : aucune à ce jour. */
+    private static final Set<String> SQL_DIRECT_AUTORISE = Set.of();
+
+    /** Limite : les requêtes de {@code EntityManager.createQuery} ne sont pas lues. */
+    private static ArchRule niEntityManagerRemoveNiSqlDirect() {
+        ArchCondition<JavaClass> sansSuppression = new ArchCondition<>("ne pas supprimer par EntityManager ni par SQL direct") {
+            @Override
+            public void check(JavaClass classe, ConditionEvents evenements) {
+                classe.getAccessesFromSelf().stream()
+                        .filter(acces -> acces.getTargetOwner().isEquivalentTo(EntityManager.class) && acces.getName().equals("remove"))
+                        .forEach(acces -> evenements.add(SimpleConditionEvent.violated(classe, acces.getDescription())));
+                if (!SQL_DIRECT_AUTORISE.contains(classe.getName())) {
+                    classe.getDirectDependenciesFromSelf().stream()
+                            .filter(dependance -> SQL_DIRECT.contains(dependance.getTargetClass().getName()))
+                            .forEach(dependance -> evenements.add(SimpleConditionEvent.violated(classe, dependance.getDescription())));
+                }
+            }
+        };
+        return classes().should(sansSuppression).allowEmptyShould(true);
     }
 
     private static final Pattern REQUETE_DE_SUPPRESSION = Pattern.compile("(?i)\\b(delete|truncate|drop)\\b");
@@ -269,7 +309,8 @@ class AgentRulesTest {
             @Override
             public void check(JavaClass depot, ConditionEvents evenements) {
                 if (depot.isAssignableTo("org.springframework.data.repository.CrudRepository")
-                        || depot.isAssignableTo("org.springframework.data.repository.ListCrudRepository")) {
+                        || depot.isAssignableTo("org.springframework.data.repository.ListCrudRepository")
+                        || depot.isAssignableTo("org.springframework.data.jpa.repository.JpaSpecificationExecutor")) {
                     evenements.add(SimpleConditionEvent.violated(depot, depot.getName() + " hérite de la suppression"));
                 }
                 depot.getMethods().stream().filter(methode -> methode.getName().matches("(delete|remove).*")
@@ -322,29 +363,37 @@ class AgentRulesTest {
     }
 
     @Test
-    void ca72_seulLaValidationEnEchecRetireUnFichierDePhoto() {
-        seulLeServiceRetireUnePhoto(RETRAIT_DE_PHOTO).check(PROJET);
+    void ca72_seulLeRetourDeTransactionAccedeDirectementAuRetraitDePhoto() {
+        seulLeRetourDeTransactionRetireUnePhoto("ca.gestionchalet", RETRAIT_DE_PHOTO).check(PROJET);
     }
 
     @Test
     void ca72_uneMethodeDeRetraitRenommeeFaitEchouerLaRegle() {
-        assertThatThrownBy(() -> seulLeServiceRetireUnePhoto("methodeRenommee"))
+        assertThatThrownBy(() -> seulLeRetourDeTransactionRetireUnePhoto("ca.gestionchalet", "methodeRenommee"))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("methodeRenommee");
     }
 
+    /** Limite : ni l'écrasement d'un fichier ({@code Files.write}, {@code REPLACE_EXISTING}), ni un appel indirect, ni un {@code <delete>} Liquibase. */
     @Test
-    void ca72_aucuneSuppressionDeFichierHorsDuRetraitDUneValidationEnEchec() {
+    void ca72_aucunAccesDirectAUneSuppressionDeFichierHorsDuStockage() {
         aucuneSuppressionDeFichierAilleurs("ca.gestionchalet").check(PROJET);
     }
 
+    /** Limite : les déclarations du dépôt seulement, pas le SQL d'une autre classe, voir {@link #ca72_niEntityManagerRemoveNiSqlDirect()}. */
     @Test
-    void ca72_aucunDepotNOffreDeSuppressionSousAucunNom() {
+    void ca72_aucunDepotNeDeclareNiNHeriteDeSuppression() {
         depotsSansSuppression().check(PROJET);
     }
 
     @Test
-    void ca72_aucuneTachePlanifieeNeRetireDePhoto() {
+    void ca72_niEntityManagerRemoveNiSqlDirect() {
+        niEntityManagerRemoveNiSqlDirect().check(PROJET);
+    }
+
+    /** Limite : l'accès direct depuis une méthode {@code @Scheduled}, sans analyse transitive ; {@code TaskScheduler}, {@code CommandLineRunner} et {@code @EventListener} ne sont pas vus. */
+    @Test
+    void ca72_uneMethodeScheduledNAccedePasDirectementAuRetraitDePhoto() {
         tachePlanifieeSansRetrait().check(PROJET);
     }
 
@@ -377,7 +426,8 @@ class AgentRulesTest {
                 Arguments.of(servicesNommesDansService(racine), List.of(ServiceOutsideLayerService.class)),
                 Arguments.of(servicesNommesDansService(racine), List.of(BadlyNamed.class)),
                 Arguments.of(fichiersRetiresSeulementParLeStockage(racine), List.of(FileDeletingService.class)),
-                Arguments.of(seulLeServiceRetireUnePhoto(RETRAIT_DE_PHOTO), List.of(PhotoDiscardingService.class)),
+                Arguments.of(seulLeRetourDeTransactionRetireUnePhoto(racine, RETRAIT_DE_PHOTO), List.of(PhotoDiscardingService.class)),
+                Arguments.of(seulLeRetourDeTransactionRetireUnePhoto(racine, RETRAIT_DE_PHOTO), List.of(PhotoDiscardingByReferenceService.class)),
                 Arguments.of(aucuneSuppressionDeFichierAilleurs(racine), List.of(LegacyFileDeletingService.class)),
                 Arguments.of(aucuneSuppressionDeFichierAilleurs(racine), List.of(FileDeletingService.class)),
                 Arguments.of(aucuneSuppressionDeFichierAilleurs(racine), List.of(archfixtures.rules.repository.PhotoStorage.class)),
@@ -385,6 +435,11 @@ class AgentRulesTest {
                 Arguments.of(depotsSansSuppression(), List.of(NativePurgingRepository.class)),
                 Arguments.of(depotsSansSuppression(), List.of(DerivedDeleteRepository.class)),
                 Arguments.of(depotsSansSuppression(), List.of(CrudOfferingRepository.class)),
+                Arguments.of(depotsSansSuppression(), List.of(SpecificationRepository.class)),
+                Arguments.of(seulLeRetourDeTransactionRetireUnePhoto(racine, RETRAIT_DE_PHOTO), List.of(archfixtures.rules.service.RecuService.class)),
+                Arguments.of(seulLeRetourDeTransactionRetireUnePhoto(racine, RETRAIT_DE_PHOTO), List.of(NeighbourStorage.class)),
+                Arguments.of(niEntityManagerRemoveNiSqlDirect(), List.of(EntityManagerRemovingService.class)),
+                Arguments.of(niEntityManagerRemoveNiSqlDirect(), List.of(JdbcPurgingService.class)),
                 Arguments.of(tachePlanifieeSansRetrait(), List.of(ScheduledDiscardingService.class)));
     }
 
