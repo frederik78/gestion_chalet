@@ -119,6 +119,17 @@ class RecuServiceTest {
     }
 
     @Test
+    void ca19_unStatutDeTransactionInconnuNeRetireAucunFichier() {
+        when(depot.findByCleIdempotence(CLE)).thenReturn(Optional.empty());
+        when(depot.saveAndFlush(any())).then(returnsFirstArg());
+
+        service.validate(validation(), List.of(photo("a")));
+        terminerLaTransaction(TransactionSynchronization.STATUS_UNKNOWN);
+
+        verify(stockage, never()).discard(any());
+    }
+
+    @Test
     void ca19_uneTransactionValideeGardeSesFichiers() {
         when(depot.findByCleIdempotence(CLE)).thenReturn(Optional.empty());
         when(depot.saveAndFlush(any())).then(returnsFirstArg());

@@ -57,7 +57,7 @@ public class RecuService {
             return new RecuValidationResult(recuMapper.toDto(known.get()), false);
         }
         List<Photo> photos = new ArrayList<>();
-        discardFilesUnlessCommitted(photos);
+        discardFilesOnRollback(photos);
         for (MultipartFile file : files) {
             Photo photo = Photo.of(photos.size() + 1, formatOf(file), file.getSize());
             photos.add(photo);
@@ -68,12 +68,12 @@ public class RecuService {
         return new RecuValidationResult(recuMapper.toDto(recuRepository.saveAndFlush(recu)), true);
     }
 
-    /** R-12 : quelle que soit la panne, jusqu'à celle du commit, une validation sans reçu ne laisse aucun fichier. */
-    private void discardFilesUnlessCommitted(List<Photo> photos) {
+    /** R-12 : une validation annulée, y compris par un échec au commit, ne laisse aucun fichier. Sur un statut inconnu, rien n'est retiré : un orphelin vaut mieux qu'une pièce perdue. */
+    private void discardFilesOnRollback(List<Photo> photos) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCompletion(int status) {
-                if (status != STATUS_COMMITTED) {
+                if (status == STATUS_ROLLED_BACK) {
                     photos.forEach(photoStorage::discard);
                 }
             }
