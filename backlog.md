@@ -71,6 +71,7 @@ Vue d'ensemble des besoins. Détail dans `docs/prd/`, suivi de la livraison dans
 | D-36 | 2026-11-02 | Renvoi d'une clé connue avec un contenu différent : 409 `CLE_DEJA_UTILISEE`, reçu inchangé, utilisateur averti | F-01 |
 | D-37 | 2026-11-03 | Tests d'écran en CI avec le Chrome de l'image du runner, sans téléchargement ; sa version suit l'image ; `sysctl` AppArmor gardé tant qu'un passage réel n'a pas montré qu'il est inutile | F-01 |
 | D-38 | 2026-11-03 | `service/validation` inscrit à la structure de l'ADR 0001, pour les validateurs Bean Validation propres au métier | F-01 |
+| D-39 | 2026-11-03 | `spring-boot-starter-data-jpa-test` (Apache-2.0), scope test, pour `@DataJpaTest` exigé par l'ADR 0001 | F-01 |
 
 ## À trancher
 
