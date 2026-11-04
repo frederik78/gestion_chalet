@@ -14,6 +14,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -318,5 +320,51 @@ class RecuScreensChromeTest {
 
         JsonNode envois = chrome.eval("window.envois");
         assertThat(envois.get(1).get("cle").asString()).isNotEqualTo(envois.get(0).get("cle").asString());
+    }
+
+    /** L'écran laisse passer ce fichier, d'après son extension : c'est le serveur qui lit son contenu et le refuse. */
+    @Test
+    void ca69_cs10_unFichierDeguiseEstRefuseParLeServeurEtLaSaisieEstConservee() throws InterruptedException, IOException {
+        long avant = recus();
+        Path deguise = Files.writeString(dossier.resolve("deguise.png"), "<!doctype html><html><script>alert(1)</script></html>");
+        chrome.chooseFiles("#importer", deguise);
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies figure').length === 1");
+        cliquer("continuer");
+        chrome.waitUntil("document.querySelectorAll('#photos-a-valider figure').length === 1");
+        saisirLesValeurs("Fournisseur déguisé");
+
+        cliquer("valider");
+        chrome.waitUntil("document.getElementById('message-validation').textContent !== ''");
+        capturer("validation-format-refuse.png");
+
+        assertThat(chrome.eval("document.getElementById('message-validation').textContent").asString())
+                .isEqualTo("Une photo n'est pas une image JPEG ou PNG. Rien n'a été enregistré.");
+        assertThat(visible("validation")).isTrue();
+        assertThat(valeur("fournisseur")).isEqualTo("Fournisseur déguisé");
+        assertThat(valeur("montantTotal")).isEqualTo("304,68");
+        assertThat(recus()).isEqualTo(avant);
+    }
+
+    /** Le corps exact du serveur est couvert par les tests sur serveur réel ; ici, le texte que chaque code donne à l'écran. */
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+        "400 | TROP_DE_PHOTOS | Ce reçu compte trop de photos. Rien n'a été enregistré.",
+        "413 | TAILLE_EXCESSIVE | Les photos sont trop lourdes. Rien n'a été enregistré.",
+        "400 | IMAGE_ILLISIBLE | Une photo est illisible. Rien n'a été enregistré.",
+        "400 | IMAGE_TROP_GRANDE | Les dimensions d'une photo sont trop grandes. Rien n'a été enregistré.",
+        "400 | PHOTO_MANQUANTE | Au moins une photo est requise. Rien n'a été enregistré.",
+    })
+    void ca70_cs11_chaqueRefusDUnePhotoDonneUnMessageClairSansPerdreLaSaisie(int statut, String code, String message) throws InterruptedException {
+        allerALaValidationAvecDeuxPhotos();
+        saisirLesValeurs("Fournisseur refusé");
+        chrome.eval("window.fetchOrigine = window.fetch; window.fetch = async () => new Response(JSON.stringify({ erreur: 'x', code: '" + code + "' }), { status: " + statut + " }); true");
+
+        cliquer("valider");
+        chrome.waitUntil("document.getElementById('message-validation').textContent !== ''");
+
+        assertThat(chrome.eval("document.getElementById('message-validation').textContent").asString()).isEqualTo(message);
+        assertThat(visible("validation")).isTrue();
+        assertThat(valeur("fournisseur")).isEqualTo("Fournisseur refusé");
+        assertThat(nombre(NOMBRE_DE_PHOTOS_A_VALIDER)).isEqualTo(2);
     }
 }

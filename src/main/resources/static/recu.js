@@ -19,6 +19,16 @@ const CHAMPS = {
   numeroInscriptionTvq: "le numéro d'inscription TVQ",
 };
 
+// Le serveur fait foi sur les photos : il lit leur contenu, que le contrôle de cet écran ne voit pas.
+const REFUS_DE_PHOTO = {
+  FORMAT_NON_ACCEPTE: "Une photo n'est pas une image JPEG ou PNG.",
+  TROP_DE_PHOTOS: 'Ce reçu compte trop de photos.',
+  TAILLE_EXCESSIVE: 'Les photos sont trop lourdes.',
+  IMAGE_ILLISIBLE: 'Une photo est illisible.',
+  IMAGE_TROP_GRANDE: "Les dimensions d'une photo sont trop grandes.",
+  PHOTO_MANQUANTE: 'Au moins une photo est requise.',
+};
+
 const elements = (() => {
   const parId = {};
   for (const id of ['prise-de-vue', 'validation', 'photographier', 'importer', 'photos-choisies', 'photos-a-valider', 'continuer',
@@ -175,6 +185,9 @@ function messageDeLErreur(statut, corps) {
   }
   if (corps && corps.code === 'CLE_DEJA_UTILISEE') {
     return "Ce reçu était déjà enregistré : votre modification n'a pas été appliquée. Abandonnez pour revenir au départ.";
+  }
+  if (corps && REFUS_DE_PHOTO[corps.code]) {
+    return REFUS_DE_PHOTO[corps.code] + " Rien n'a été enregistré.";
   }
   if (corps && corps.code === 'VALIDATION' && corps.champs) {
     return 'À corriger : ' + corps.champs.map((erreur) => CHAMPS[erreur.champ] || erreur.champ).join(', ') + '.';
