@@ -75,4 +75,10 @@
     <Method name="accessToken"/>
     <Bug pattern="CRLF_INJECTION_LOGS"/>
   </Match>
+  <!-- La seule valeur journalisée est un élément de l'énumération RecuExtractionException.Failure : ni contenu de reçu, ni retour à la ligne possible. -->
+  <Match>
+    <Class name="ca.gestionchalet.service.RecuReadingService"/>
+    <Method name="read"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
 </FindBugsFilter>
