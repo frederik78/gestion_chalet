@@ -14,7 +14,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
+import java.util.Comparator;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -27,6 +29,18 @@ class ChromeSessionTest {
               case "$argument" in --user-data-dir=*) profil="${argument#--user-data-dir=}" ;; esac
             done
             printf '%%s\\n' "$$" > "$profil/pid"
+            printf '%d\\n' > "$profil/DevToolsActivePort"
+            exec sleep 60
+            """;
+
+    /** Comme un Chrome réel, le principal lance un enfant qui écrit dans le profil et lui survit s'il n'est pas arrêté. */
+    private static final String FAUX_CHROME_AVEC_ENFANT = """
+            #!/bin/sh
+            for argument in "$@"; do
+              case "$argument" in --user-data-dir=*) profil="${argument#--user-data-dir=}" ;; esac
+            done
+            sh -c 'trap "" TERM; while :; do : > "$0/enfant.$$"; rm -f "$0/enfant.$$"; done' "$profil" &
+            printf '%%s\\n' "$!" > "$profil/pid"
             printf '%d\\n' > "$profil/DevToolsActivePort"
             exec sleep 60
             """;
@@ -101,5 +115,27 @@ class ChromeSessionTest {
                 devTools.stop(0);
             }
         }
+    }
+
+    @Test
+    void laFermetureAttendLesEnfantsDeChromeEtLeProfilPeutEtreSupprime() throws IOException {
+        Path binaire = dossier.resolve("faux-chrome");
+        Files.writeString(binaire, FAUX_CHROME_AVEC_ENFANT.formatted(portFerme()));
+        Files.setPosixFilePermissions(binaire, PosixFilePermissions.fromString("rwx------"));
+        Path profil = Files.createDirectory(dossier.resolve("profil"));
+
+        // La connexion échoue : le constructeur ferme la session, avec l'enfant encore en train d'écrire.
+        assertThatThrownBy(() -> new ChromeSession(binaire.toString(), profil)).isInstanceOf(ConnectException.class);
+
+        long pid = Long.parseLong(Files.readString(profil.resolve("pid")).strip());
+        Optional<ProcessHandle> enfant = ProcessHandle.of(pid).filter(ProcessHandle::isAlive);
+        enfant.ifPresent(ProcessHandle::destroyForcibly);
+        assertThat(enfant).isEmpty();
+        try (Stream<Path> chemins = Files.walk(profil)) {
+            for (Path chemin : chemins.sorted(Comparator.reverseOrder()).toList()) {
+                Files.delete(chemin);
+            }
+        }
+        assertThat(profil).doesNotExist();
     }
 }

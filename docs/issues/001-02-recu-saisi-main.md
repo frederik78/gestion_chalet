@@ -3,11 +3,11 @@ id: 001-02
 titre: Reçu saisi à la main
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: En cours
+statut: Fait
 depend_de: [001-01]
 criteres: [CA14, CA15, CA16, CA18, CA19, CA20, CA72, CA75, CA76, CA79, CA81, CS17, CS27]
 branche: feat/001-02-recu-saisi-main
-commits: []
+commits: [bfff609..3c161ee]
 revue: docs/reviews/001-02.md
 ---
 
@@ -36,3 +36,7 @@ Tests rouges puis verts, capture de l'écran de validation, `scripts/verify-clea
 - 2026-11-03 : Décisions en attente de l'utilisateur, à inscrire au PRD à la clôture : date ou montant illisible en `REQUETE_INVALIDE` sans `champs` ; `VALIDATION` avant `PHOTO_MANQUANTE`, sans `champs` (CA14) ; M14, normalisation d'`objet`. Détail : `docs/reviews/001-02.md`.
 - 2026-11-03 : Rouverte après la revue indépendante de la branche : corrections décidées par l'utilisateur (tests par couche, règles d'architecture, DTO de configuration, format de la date et de la clé, CA72, identifiants des tests, champs de l'empreinte). Décision de PRD à la clôture : type JSON de `fournisseur` (`123` accepté). Autres appréciations de la revue reportées : données de `ApplicationProperties`, `RecuRules` et `ConfigurationDTO`, connexion de test dupliquée, nom `hasContent`, empreinte en `String`, Javadoc de `ApplicationProperties`.
 - 2026-11-03 : À joindre aux décisions de PRD de la clôture : clé vide en `REQUETE_INVALIDE`, `null` en `VALIDATION` ; `objet` et `numeroInscription*` numériques ; arrêt brutal entre écriture et commit (R-12).
+- 2026-11-03 : Limite de 3 relectures atteinte, constat restant corrigé sans nouvelle relecture (0295238, a4132b9, eb21cbd, 3c161ee), vérifié par l'orchestrateur : 378 tests, 0 échec, 0 ignoré, SpotBugs 0.
+- 2026-11-03 : Échec intermittent à surveiller, 1 passage sur 5 : `RecuScreensChromeTest`, `JUnit Failed to close extension context`. Hypothèse non vérifiée : le profil `@TempDir` non retirable, car les processus enfants de Chrome y écrivent encore ; `ChromeSession.close` n'attend que le processus principal. Peut faire échouer la CI.
+- 2026-11-03 : Mineurs ouverts, revue par lecture seule : M-a, M-c à M-i. Dernière relecture : photos en `644`, à reprendre avec NF-03 ; réseau figé avec Abandonner inactif ; `JdbcOperations` et `DataSource.getConnection` hors `SQL_DIRECT` ; commentaire de `RecuService` sur l'échec au commit (mesuré `ROLLED_BACK` sur une FK différée, non généralisé).
+- 2026-11-03 : Non prouvé avant le premier passage sur GitHub : `jdk.FileForce` et `force` du dossier sous Linux.

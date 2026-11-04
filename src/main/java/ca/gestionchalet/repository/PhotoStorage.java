@@ -51,7 +51,7 @@ public final class PhotoStorage {
         }
     }
 
-    /** Un système peut refuser d'ouvrir un dossier : la photo est écrite, l'envoi n'échoue pas pour autant. */
+    /** La photo est déjà écrite : tout échec, à l'ouverture du dossier comme à son {@code force}, est journalisé et n'échoue pas l'envoi. */
     private void forceDirectory() {
         try (FileChannel directory = FileChannel.open(root, StandardOpenOption.READ)) {
             directory.force(true);
