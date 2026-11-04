@@ -43,7 +43,8 @@ public class RecuConfiguration {
     @Bean
     ReadingRules readingRules(ApplicationProperties properties) {
         ApplicationProperties.Reading reading = properties.lecture();
-        return new ReadingRules(reading.coteMaxPixels(), reading.coteSourceMaxPixels(), reading.decodagesSimultanes());
+        return new ReadingRules(reading.coteMaxPixels(), reading.coteSourceMaxPixels(), reading.decodagesSimultanes(),
+                reading.passesDecodageMax(), reading.delaiDecodage(), reading.attenteDecodage());
     }
 
     @Bean

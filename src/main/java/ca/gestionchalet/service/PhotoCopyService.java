@@ -12,11 +12,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Optional;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReadParam;
 import javax.imageio.ImageReader;
+import javax.imageio.ImageWriter;
+import javax.imageio.event.IIOReadUpdateListener;
 import javax.imageio.stream.ImageInputStream;
+import javax.imageio.stream.ImageOutputStream;
 import javax.imageio.stream.MemoryCacheImageInputStream;
+import javax.imageio.stream.MemoryCacheImageOutputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -40,10 +45,17 @@ public class PhotoCopyService {
         this.decodings = new Semaphore(rules.decodagesSimultanes(), true);
     }
 
-    /** Vide si la photo, admise sur son seul en-tête (D-41), ne se décode pas : erreur du décodeur sur un fichier hostile ou tronqué. */
+    /**
+     * Vide si la photo, admise sur son seul en-tête (D-41), ne se décode pas : erreur du décodeur sur un fichier hostile ou tronqué, bornes de décodage franchies, ou place attendue
+     * trop longtemps. Le sémaphore reste écrit à la main : {@code @ConcurrencyLimit} de Spring 7 n'offre que {@code BLOCK}, sans délai, ce qui bloquait toutes les lectures, ou
+     * {@code REJECT}, immédiat, qui ferait échouer une lecture dès qu'une autre décode.
+     */
     public Optional<byte[]> copy(MultipartFile file, PhotoFormat format) {
         try {
-            decodings.acquire();
+            if (!decodings.tryAcquire(rules.attenteDecodage().toMillis(), TimeUnit.MILLISECONDS)) {
+                LOG.warn("Copie d'une photo impossible : aucune place de décodage");
+                return Optional.empty();
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return Optional.empty();
@@ -53,10 +65,6 @@ public class PhotoCopyService {
             return decodeAndEncode(file, format, orientation);
         } catch (IOException | RuntimeException e) {
             LOG.warn("Copie d'une photo impossible : {}", e.getClass().getName());
-            return Optional.empty();
-        } catch (OutOfMemoryError e) {
-            // Une seule allocation démesurée d'un fichier hostile, déjà abandonnée ici : la lecture échoue, le serveur continue (mesuré sous -Xmx256m).
-            LOG.error("Copie d'une photo impossible : mémoire insuffisante");
             return Optional.empty();
         } finally {
             decodings.release();
@@ -83,7 +91,13 @@ public class PhotoCopyService {
             ImageReadParam param = reader.getDefaultReadParam();
             int subsampling = Math.max(1, longSide / rules.coteMaxPixels());
             param.setSourceSubsampling(subsampling, subsampling, 0, 0);
+            DecodingGuard guard = new DecodingGuard(reader, rules.passesDecodageMax(), System.nanoTime() + rules.delaiDecodage().toNanos());
+            reader.addIIOReadUpdateListener(guard);
             BufferedImage decoded = reader.read(0, param);
+            if (guard.stopped) {
+                LOG.warn("Copie d'une photo impossible : bornes de décodage franchies");
+                return Optional.empty();
+            }
             int targetLongSide = Math.min(longSide, rules.coteMaxPixels());
             return Optional.of(encode(oriented(decoded, scaled(width, targetLongSide, longSide), scaled(height, targetLongSide, longSide), orientation)));
         } finally {
@@ -127,10 +141,75 @@ public class PhotoCopyService {
         };
     }
 
+    /** En mémoire : le cache de {@code ImageIO.write} ferait transiter la copie du reçu, en clair, par le dossier temporaire. */
     private static byte[] encode(BufferedImage image) throws IOException {
+        ImageWriter writer = ImageIO.getImageWritersByFormatName("jpeg").next();
         try (ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
-            ImageIO.write(image, "jpeg", bytes);
+            try (ImageOutputStream output = new MemoryCacheImageOutputStream(bytes)) {
+                writer.setOutput(output);
+                writer.write(image);
+            }
             return bytes.toByteArray();
+        } finally {
+            writer.dispose();
+        }
+    }
+
+    /** Interrompt un décodage trop long : le JDK refait une passe complète à chaque balayage d'un JPEG progressif, même vide. */
+    private static final class DecodingGuard implements IIOReadUpdateListener {
+
+        private final ImageReader reader;
+        private final int maxPasses;
+        private final long deadlineNanos;
+        private int passes;
+        private boolean stopped;
+
+        private DecodingGuard(ImageReader reader, int maxPasses, long deadlineNanos) {
+            this.reader = reader;
+            this.maxPasses = maxPasses;
+            this.deadlineNanos = deadlineNanos;
+        }
+
+        private void stopIf(boolean exceeded) {
+            if (exceeded && !stopped) {
+                stopped = true;
+                reader.abort();
+            }
+        }
+
+        private boolean isLate() {
+            return System.nanoTime() - deadlineNanos > 0;
+        }
+
+        @Override
+        public void passStarted(ImageReader source, BufferedImage image, int pass, int minPass, int maxPass, int minX, int minY, int periodX, int periodY, int[] bands) {
+            passes++;
+            stopIf(passes > maxPasses || isLate());
+        }
+
+        @Override
+        public void imageUpdate(ImageReader source, BufferedImage image, int minX, int minY, int width, int height, int periodX, int periodY, int[] bands) {
+            stopIf(isLate());
+        }
+
+        @Override
+        public void passComplete(ImageReader source, BufferedImage image) {
+            // Rien à contrôler de plus qu'au début de la passe suivante.
+        }
+
+        @Override
+        public void thumbnailPassStarted(ImageReader source, BufferedImage thumbnail, int pass, int minPass, int maxPass, int minX, int minY, int periodX, int periodY, int[] bands) {
+            // Aucune vignette n'est lue.
+        }
+
+        @Override
+        public void thumbnailUpdate(ImageReader source, BufferedImage thumbnail, int minX, int minY, int width, int height, int periodX, int periodY, int[] bands) {
+            // Aucune vignette n'est lue.
+        }
+
+        @Override
+        public void thumbnailPassComplete(ImageReader source, BufferedImage thumbnail) {
+            // Aucune vignette n'est lue.
         }
     }
 }

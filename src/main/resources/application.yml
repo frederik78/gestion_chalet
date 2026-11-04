@@ -109,6 +109,10 @@ recus:
     # Protections du décodage : sous -Xmx256m, un PNG de 9,8 Mpx sur 16 bits échoue parfois à 2 décodages simultanés, jamais à 1 (mesuré).
     cote-source-max-pixels: 20000
     decodages-simultanes: 1
+    # Un JPEG progressif peut enchaîner des balayages vides, chacun refaisant une passe complète : borné en passes et en durée.
+    passes-decodage-max: 32
+    delai-decodage: 20s
+    attente-decodage: 30s
   formats:
     - image/jpeg
     - image/png

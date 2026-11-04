@@ -76,8 +76,12 @@ public record ApplicationProperties(@Valid @NotNull Security securite, @Valid @N
      * @param coteMaxPixels long côté de la copie envoyée au modèle
      * @param coteSourceMaxPixels long côté au-delà duquel une photo n'est pas décodée
      * @param decodagesSimultanes nombre de photos décodées en même temps
+     * @param passesDecodageMax nombre de passes d'un décodage
+     * @param delaiDecodage durée maximale d'un décodage
+     * @param attenteDecodage attente maximale d'une place de décodage
      */
-    public record Reading(@Min(1) int lecturesParHeure, @Min(1) int coteMaxPixels, @Min(1) int coteSourceMaxPixels, @Min(1) int decodagesSimultanes) {
+    public record Reading(@Min(1) int lecturesParHeure, @Min(1) int coteMaxPixels, @Min(1) int coteSourceMaxPixels, @Min(1) int decodagesSimultanes,
+            @Min(1) int passesDecodageMax, @NotNull Duration delaiDecodage, @NotNull Duration attenteDecodage) {
     }
 
     /**

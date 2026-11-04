@@ -16,7 +16,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.zip.CRC32;
+import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
+import javax.imageio.stream.MemoryCacheImageOutputStream;
 import tools.jackson.databind.json.JsonMapper;
 
 /** Validations de reçus telles que la PWA les envoie : un vrai multipart, avec le jeton CSRF. Les images sont générées, jamais de photo réelle. */
@@ -108,6 +113,45 @@ public final class RecuRequests {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /** Un JPEG progressif, tel que l'écrit le JDK. */
+    public static byte[] jpegProgressif(int cote) {
+        ImageWriter ecrivain = ImageIO.getImageWritersByFormatName("jpeg").next();
+        ImageWriteParam reglages = ecrivain.getDefaultWriteParam();
+        reglages.setProgressiveMode(ImageWriteParam.MODE_DEFAULT);
+        try (ByteArrayOutputStream octets = new ByteArrayOutputStream(); ImageOutputStream sortie = new MemoryCacheImageOutputStream(octets)) {
+            ecrivain.setOutput(sortie);
+            ecrivain.write(null, new IIOImage(new BufferedImage(cote, cote, BufferedImage.TYPE_INT_RGB), null, null), reglages);
+            sortie.flush();
+            return octets.toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } finally {
+            ecrivain.dispose();
+        }
+    }
+
+    /** Ajoute avant la fin d'image des balayages vides, dont chacun fait refaire au JDK une passe complète. */
+    public static byte[] avecBalayagesVides(byte[] jpeg, int nombre) {
+        byte[] balayage = {(byte) 0xFF, (byte) 0xDA, 0, 8, 1, 1, 0, 1, 63, 0x10};
+        ByteBuffer sortie = ByteBuffer.allocate(jpeg.length + nombre * balayage.length);
+        sortie.put(jpeg, 0, jpeg.length - 2);
+        for (int i = 0; i < nombre; i++) {
+            sortie.put(balayage);
+        }
+        return sortie.put((byte) 0xFF).put((byte) 0xD9).array();
+    }
+
+    /** Le nombre de balayages d'un JPEG, en suivant ses segments. */
+    public static int balayages(byte[] jpeg) {
+        int nombre = 0;
+        for (int i = 2; i < jpeg.length - 1; i++) {
+            if (jpeg[i] == (byte) 0xFF && jpeg[i + 1] == (byte) 0xDA) {
+                nombre++;
+            }
+        }
+        return nombre;
     }
 
     /** Insère un segment juste après la signature SOI d'un JPEG. */
