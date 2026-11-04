@@ -110,6 +110,27 @@ public final class RecuRequests {
         return envoyer(client, JSON.writeValueAsString(corps), type, nom, photos);
     }
 
+    /** Une lecture telle que la PWA la demande : les seules parties {@code photos}. */
+    public static Reponse lire(TestClient client, String type, String nom, byte[]... photos) {
+        List<byte[]> morceaux = new ArrayList<>();
+        for (byte[] photo : photos) {
+            morceaux.add(("--" + BOUNDARY + "\r\nContent-Disposition: form-data; name=\"photos\"; filename=\"" + nom + "\"\r\nContent-Type: " + type + "\r\n\r\n")
+                    .getBytes(StandardCharsets.UTF_8));
+            morceaux.add(photo);
+            morceaux.add("\r\n".getBytes(StandardCharsets.UTF_8));
+        }
+        morceaux.add(("--" + BOUNDARY + "--\r\n").getBytes(StandardCharsets.UTF_8));
+        return client.envoyer(client.requete("/api/lectures")
+                .header("Content-Type", "multipart/form-data; boundary=" + BOUNDARY)
+                .header("X-XSRF-TOKEN", client.cookie("XSRF-TOKEN"))
+                .POST(HttpRequest.BodyPublishers.ofByteArrays(morceaux))
+                .build());
+    }
+
+    public static Reponse lire(TestClient client, byte[]... photos) {
+        return lire(client, "image/jpeg", "recu.jpg", photos);
+    }
+
     private static Reponse envoyer(TestClient client, String corpsJson, String type, byte[]... photos) {
         return envoyer(client, corpsJson, type, "recu.png", photos);
     }

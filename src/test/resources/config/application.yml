@@ -13,3 +13,6 @@ recus:
     adresse-jeton: http://localhost:9/jeton
     # 32 octets d'essai, en base 64, sans valeur hors des tests.
     cle-chiffrement: Y2xlLWQtZXNzYWktc2Fucy12YWxldXItaG9ycy10ZXM=
+  # Le contexte est partagé par de nombreuses lectures ; cs19 fixe sa propre limite, DefaultValuesTest garde la vraie.
+  lecture:
+    lectures-par-heure: 100000

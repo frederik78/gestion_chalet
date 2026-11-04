@@ -1,9 +1,12 @@
 package ca.gestionchalet.config;
 
 import ca.gestionchalet.domain.AlertRules;
+import ca.gestionchalet.client.AnthropicRecuExtractor;
+import ca.gestionchalet.client.RecuExtractor;
 import ca.gestionchalet.domain.RecuRules;
 import ca.gestionchalet.repository.PhotoStorage;
 import java.time.Clock;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.boot.servlet.autoconfigure.MultipartProperties;
 import org.springframework.boot.validation.autoconfigure.ValidationConfigurationCustomizer;
 import org.springframework.context.annotation.Bean;
@@ -12,6 +15,11 @@ import org.springframework.context.annotation.Configuration;
 /** Transmet la configuration {@code recus.*} aux couches qui ne peuvent pas lire {@code config} (ADR 0001). */
 @Configuration
 public class RecuConfiguration {
+
+    @Bean
+    RecuExtractor recuExtractor(ChatModel chatModel) {
+        return new AnthropicRecuExtractor(chatModel);
+    }
 
     @Bean
     PhotoStorage photoStorage(ApplicationProperties properties) {
