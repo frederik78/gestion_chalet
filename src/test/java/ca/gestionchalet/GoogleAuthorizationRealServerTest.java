@@ -340,6 +340,11 @@ class GoogleAuthorizationRealServerTest {
         assertThat(fin.enTete("Location")).isEqualTo("/");
         assertThat(GOOGLE.requetes()).isEmpty();
         assertThat(etat()).isEqualTo("ABSENTE");
+
+        rappel("/api/google/rappel?code=code-temoin&state=" + stateDeLaVictime);
+
+        assertThat(GOOGLE.requetes()).hasSize(1);
+        assertThat(etat()).isEqualTo("VALIDE");
     }
 
     @Test
@@ -477,5 +482,95 @@ class GoogleAuthorizationRealServerTest {
         client.get("/api/google/rappel?code=c&state=faux");
 
         assertThat(journal.getOut()).contains("Rappel Google refusé : STATE_INVALIDE").doesNotContain("Rappel Google en échec");
+    }
+
+    private void assertAutorisationIntacte(Map<String, Object> avant, List<String> redirections, CapturedOutput journal) {
+        assertThat(redirections).last().isEqualTo("/");
+        assertThat(ligneAutorisation()).isEqualTo(avant);
+        assertThat(etat()).isEqualTo("VALIDE");
+        assertThat(journal.getOut()).doesNotContain(GoogleStub.JETON_ACCES).doesNotContain(GoogleStub.JETON_RENOUVELLEMENT);
+    }
+
+    @Test
+    void cs22_unRefusAvecUnStateValideLaisseLAutorisationIntacte(CapturedOutput journal) {
+        autoriser();
+        Map<String, Object> avant = ligneAutorisation();
+        String state = nouveauState();
+        GOOGLE.reinitialiser();
+
+        List<String> redirections = chaineDeRedirections("/api/google/rappel?error=access_denied&state=" + state);
+
+        assertThat(GOOGLE.requetes()).isEmpty();
+        assertAutorisationIntacte(avant, redirections, journal);
+    }
+
+    @Test
+    void cs22_unEchangeEnEchecLaisseLAutorisationIntacte(CapturedOutput journal) {
+        autoriser();
+        Map<String, Object> avant = ligneAutorisation();
+        String state = nouveauState();
+        GOOGLE.repondre(401, "{\"access_token\":\"" + GoogleStub.JETON_ACCES + "\",\"refresh_token\":\"" + GoogleStub.JETON_RENOUVELLEMENT + "\"}");
+
+        List<String> redirections = chaineDeRedirections("/api/google/rappel?code=code-temoin&state=" + state);
+
+        assertAutorisationIntacte(avant, redirections, journal);
+    }
+
+    /** Google peut taire les droits accordés : sans preuve qu'ils le sont tous, l'autorisation n'est pas donnée. */
+    @Test
+    void ca67_uneReponseSansDroitsPasseARenouveler() {
+        GOOGLE.repondreJeton(3600, null, GoogleStub.JETON_RENOUVELLEMENT);
+
+        autoriser();
+
+        assertThat(etat()).isEqualTo("A_RENOUVELER");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"jeton_acces_chiffre", "jeton_renouvellement_chiffre"})
+    void ca66_unChiffreTropCourtPasseARenouveler(String colonne) {
+        autoriser();
+        Object enAttente = valider().json().get("id");
+        base.update("update autorisation_google set " + colonne + " = 'AAAA'");
+
+        assertThat(jetons.accessToken()).isEmpty();
+
+        assertThat(etat()).isEqualTo("A_RENOUVELER");
+        assertThat(etatCopie(enAttente)).isEqualTo("BLOQUEE");
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+        "400 | {\"error\":\"invalid_client\",\"error_description\":\"description-temoin\"} | invalid_client",
+        "400 | {\"error\":\"code-recu-temoin\"}                                                 | AUTRE",
+        "401 | {\"error\":\"invalid_client\",\"error_description\":\"description-temoin\"} | invalid_token_response",
+        "401 | ''                                                                               | invalid_token_response",
+        "403 | {\"error\":\"code-recu-temoin\"}                                                 | invalid_token_response",
+        "200 | ceci n'est pas du JSON                                                           | invalid_token_response"
+    })
+    void ca66_unRefusQuiNEstPasUnePannePassagerePasseARenouveler(int statut, String corps, String code, CapturedOutput journal) {
+        GOOGLE.repondreJeton(1, GoogleStub.SHEETS + " " + GoogleStub.DRIVE_FILE, GoogleStub.JETON_RENOUVELLEMENT);
+        autoriser();
+        Object enAttente = valider().json().get("id");
+        GOOGLE.repondre(statut, corps);
+
+        assertThat(jetons.accessToken()).isEmpty();
+
+        assertThat(etat()).isEqualTo("A_RENOUVELER");
+        assertThat(etatCopie(enAttente)).isEqualTo("BLOQUEE");
+        assertThat(journal.getOut()).contains("ERROR").contains("Renouvellement Google refusé : " + code)
+                .doesNotContain("temoin");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {429, 500, 503})
+    void ca66_unePannePassagereGardeLAutorisation(int statut) {
+        GOOGLE.repondreJeton(1, GoogleStub.SHEETS + " " + GoogleStub.DRIVE_FILE, GoogleStub.JETON_RENOUVELLEMENT);
+        autoriser();
+        GOOGLE.repondre(statut, "{\"error\":\"invalid_client\"}");
+
+        assertThatThrownBy(() -> jetons.accessToken()).isInstanceOf(OAuth2AuthorizationException.class);
+
+        assertThat(etat()).isEqualTo("VALIDE");
     }
 }
