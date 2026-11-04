@@ -2,16 +2,16 @@ package ca.gestionchalet.service;
 
 import ca.gestionchalet.client.RecuExtractionException;
 import ca.gestionchalet.client.RecuExtractor;
+import ca.gestionchalet.domain.PhotoFormat;
 import ca.gestionchalet.domain.ReadingResult;
 import ca.gestionchalet.domain.RecuReading;
 import ca.gestionchalet.domain.RecuRules;
 import ca.gestionchalet.domain.Valeurs;
 import ca.gestionchalet.service.dto.RecuReadingDTO;
 import ca.gestionchalet.service.mapper.RecuReadingMapper;
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -28,28 +28,38 @@ public class RecuReadingService {
     private final RecuRules rules;
     private final RecuReadingMapper mapper;
     private final ModelFieldsValidationService validation;
+    private final PhotoValidationService photoValidationService;
+    private final PhotoCopyService photoCopyService;
 
-    public RecuReadingService(RecuExtractor recuExtractor, RecuRules rules, RecuReadingMapper mapper, ModelFieldsValidationService validation) {
+    public RecuReadingService(RecuExtractor recuExtractor, RecuRules rules, RecuReadingMapper mapper, ModelFieldsValidationService validation,
+            PhotoValidationService photoValidationService, PhotoCopyService photoCopyService) {
         this.recuExtractor = recuExtractor;
         this.rules = rules;
         this.mapper = mapper;
         this.validation = validation;
+        this.photoValidationService = photoValidationService;
+        this.photoCopyService = photoCopyService;
     }
 
     public RecuReadingDTO read(List<MultipartFile> files) {
+        List<PhotoFormat> formats = photoValidationService.check(files);
         List<byte[]> images = new ArrayList<>();
-        try {
-            for (MultipartFile file : files) {
-                images.add(file.getBytes());
+        for (int i = 0; i < files.size(); i++) {
+            Optional<byte[]> image = photoCopyService.copy(files.get(i), formats.get(i));
+            if (image.isEmpty()) {
+                return failure();
             }
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
+            images.add(image.get());
         }
         try {
             return mapper.toDto(validation.validate(recuExtractor.extract(images, rules.typesDepense())));
         } catch (RecuExtractionException e) {
             LOG.warn("Lecture en échec : {}", e.getMessage());
-            return mapper.toDto(new RecuReading(ReadingResult.ECHEC, NO_VALUE, List.of()));
+            return failure();
         }
+    }
+
+    private RecuReadingDTO failure() {
+        return mapper.toDto(new RecuReading(ReadingResult.ECHEC, NO_VALUE, List.of()));
     }
 }

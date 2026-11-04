@@ -92,6 +92,16 @@ recus:
   photos-par-recu-max: 5
   # Protection contre les images piégées : lue dans l'en-tête, sans décoder les pixels (PRD, section 9).
   dimensions-max-megapixels: 64
+  lecture:
+    # Lu par le client du modèle (spring.ai.anthropic.timeout) : au-delà, le résultat est ECHEC (PRD, section 7.3).
+    delai: 60s
+    # Maîtrise du coût (CS19), sur une heure glissante.
+    lectures-par-heure: 60
+    # Long côté de la copie envoyée, celui jusqu'auquel le service n'applique aucune réduction.
+    cote-max-pixels: 1568
+    # Protections du décodage : voir la mesure dans le rapport de 001-03.
+    cote-source-max-pixels: 20000
+    decodages-simultanes: 2
   formats:
     - image/jpeg
     - image/png

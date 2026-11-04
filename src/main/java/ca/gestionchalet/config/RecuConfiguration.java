@@ -3,6 +3,7 @@ package ca.gestionchalet.config;
 import ca.gestionchalet.domain.AlertRules;
 import ca.gestionchalet.client.AnthropicRecuExtractor;
 import ca.gestionchalet.client.RecuExtractor;
+import ca.gestionchalet.domain.ReadingRules;
 import ca.gestionchalet.domain.RecuRules;
 import ca.gestionchalet.repository.PhotoStorage;
 import java.time.Clock;
@@ -36,6 +37,12 @@ public class RecuConfiguration {
     AlertRules alertRules(ApplicationProperties properties) {
         ApplicationProperties.Alerts alertes = properties.alertes();
         return new AlertRules(alertes.seuilNumerosInscriptionCents(), alertes.seuilPieceAVerifierCents(), alertes.ecartTolereCents());
+    }
+
+    @Bean
+    ReadingRules readingRules(ApplicationProperties properties) {
+        ApplicationProperties.Reading reading = properties.lecture();
+        return new ReadingRules(reading.coteMaxPixels(), reading.coteSourceMaxPixels(), reading.decodagesSimultanes());
     }
 
     /** {@code @PastOrPresent} compare à la date du jour dans ce fuseau, et non dans celui de la machine. */

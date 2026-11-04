@@ -1,6 +1,8 @@
 package ca.gestionchalet.support;
 
 import ca.gestionchalet.support.TestClient.Reponse;
+import java.awt.Color;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -91,6 +93,50 @@ public final class RecuRequests {
             }
         }
         throw new IllegalStateException("En-tête de trame absent");
+    }
+
+    /** Moitié gauche blanche, moitié droite noire : une rotation se lit sur les pixels. */
+    public static byte[] jpegDeuxMoities(int largeur, int hauteur) {
+        BufferedImage image = new BufferedImage(largeur, hauteur, BufferedImage.TYPE_INT_RGB);
+        Graphics2D dessin = image.createGraphics();
+        dessin.setColor(Color.WHITE);
+        dessin.fillRect(0, 0, largeur / 2, hauteur);
+        dessin.dispose();
+        try (ByteArrayOutputStream octets = new ByteArrayOutputStream()) {
+            ImageIO.write(image, "jpeg", octets);
+            return octets.toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /** Insère un segment juste après la signature SOI d'un JPEG. */
+    public static byte[] avecSegment(byte[] jpeg, int marqueur, byte[] contenu) {
+        ByteBuffer sortie = ByteBuffer.allocate(jpeg.length + 4 + contenu.length);
+        sortie.put(jpeg, 0, 2).put((byte) 0xFF).put((byte) marqueur).putShort((short) (contenu.length + 2)).put(contenu).put(jpeg, 2, jpeg.length - 2);
+        return sortie.array();
+    }
+
+    /** Un segment APP1 Exif, grand-boutiste ou petit-boutiste : l'orientation, et un texte témoin dans une zone GPS. */
+    public static byte[] exif(int orientation, boolean grandBoutiste, String temoin) {
+        byte[] texte = temoin.getBytes(StandardCharsets.US_ASCII);
+        ByteBuffer tiff = ByteBuffer.allocate(6 + 8 + 2 + 12 + 4 + texte.length);
+        tiff.put(new byte[] {'E', 'x', 'i', 'f', 0, 0});
+        tiff.order(grandBoutiste ? java.nio.ByteOrder.BIG_ENDIAN : java.nio.ByteOrder.LITTLE_ENDIAN);
+        tiff.put(grandBoutiste ? new byte[] {'M', 'M'} : new byte[] {'I', 'I'}).putShort((short) 42).putInt(8);
+        tiff.putShort((short) 1).putShort((short) 0x0112).putShort((short) 3).putInt(1).putShort((short) orientation).putShort((short) 0);
+        tiff.putInt(0).put(texte);
+        return tiff.array();
+    }
+
+    public static byte[] pngSeize(int cote) {
+        BufferedImage image = new BufferedImage(cote, cote, BufferedImage.TYPE_USHORT_GRAY);
+        try (ByteArrayOutputStream octets = new ByteArrayOutputStream()) {
+            ImageIO.write(image, "png", octets);
+            return octets.toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     public static Reponse valider(TestClient client, Map<String, Object> corps, byte[]... photos) {

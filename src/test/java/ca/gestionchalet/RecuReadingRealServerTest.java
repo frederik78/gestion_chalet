@@ -203,4 +203,206 @@ class RecuReadingRealServerTest {
         assertThat(base.queryForObject("select count(*) from recu", Long.class)).isEqualTo(recus);
         assertThat(fichiers()).isEqualTo(fichiers);
     }
+
+    private static final byte[] HTML = "<!doctype html><script>alert(1)</script>".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+    private static Stream<org.junit.jupiter.params.provider.Arguments> contenusRefuses() {
+        return Stream.of(
+                org.junit.jupiter.params.provider.Arguments.of("GIF", RecuRequests.gif(4)),
+                org.junit.jupiter.params.provider.Arguments.of("HEIC", new byte[] {0, 0, 0, 24, 'f', 't', 'y', 'p', 'h', 'e', 'i', 'c', 0, 0, 0, 0}),
+                org.junit.jupiter.params.provider.Arguments.of("SVG", "<svg xmlns=\"http://www.w3.org/2000/svg\"/>".getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                org.junit.jupiter.params.provider.Arguments.of("PDF", "%PDF-1.7\n".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.MethodSource("contenusRefuses")
+    void ca69_surLesLecturesUnFormatHorsListeDonne415SansAppelAuModele(String nature, byte[] contenu) {
+        Reponse reponse = RecuRequests.lire(client, contenu);
+
+        assertThat(reponse.statut()).isEqualTo(415);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Format non accepté.", "code", "FORMAT_NON_ACCEPTE"));
+        assertThat(modele.calls).isEmpty();
+    }
+
+    @Test
+    void ca69_surLesLecturesUnJpegEtUnPngSontAcceptes() {
+        assertThat(RecuRequests.lire(client, "image/gif", "a.gif", RecuRequests.jpeg(8)).statut()).isEqualTo(200);
+        assertThat(RecuRequests.lire(client, RecuRequests.png(8)).statut()).isEqualTo(200);
+    }
+
+    @Test
+    void cs10_surLesLecturesDuHtmlDeclareJpegDonne415SansStockageNiModele() throws IOException {
+        long fichiers = fichiers();
+
+        Reponse reponse = RecuRequests.lire(client, "image/jpeg", "recu.jpg", HTML);
+
+        assertThat(reponse.statut()).isEqualTo(415);
+        assertThat(modele.calls).isEmpty();
+        assertThat(fichiers()).isEqualTo(fichiers);
+    }
+
+    @Test
+    void cs11_surLesLecturesDesDimensionsTropGrandesDonnent400SansDecodage() {
+        Reponse aLaLimite = RecuRequests.lire(client, RecuRequests.entetePng(8000, 8000));
+        assertThat(aLaLimite.statut()).isEqualTo(200);
+
+        Reponse reponse = RecuRequests.lire(client, RecuRequests.entetePng(8000, 8001));
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Les dimensions de cette image sont trop grandes.", "code", "IMAGE_TROP_GRANDE"));
+        assertThat(modele.calls).isEmpty();
+    }
+
+    @Test
+    void ca70_surLesLecturesCinqPhotosPassentEtSixDonnent400() {
+        byte[] image = RecuRequests.jpeg(8);
+
+        assertThat(RecuRequests.lire(client, image, image, image, image, image).statut()).isEqualTo(200);
+        modele.calls.clear();
+        Reponse reponse = RecuRequests.lire(client, image, image, image, image, image, image);
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Ce reçu compte trop de photos.", "code", "TROP_DE_PHOTOS"));
+        assertThat(modele.calls).isEmpty();
+    }
+
+    @Test
+    void ca70_surLesLecturesSansPhotoDonne400() {
+        Reponse reponse = RecuRequests.lire(client);
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(modele.calls).isEmpty();
+    }
+
+    @Test
+    void cs01_uneLectureSansSessionEstRefuseeSansAppelAuModele() {
+        TestClient anonyme = new TestClient(port, "source-" + UUID.randomUUID());
+        anonyme.get("/actuator/health");
+
+        assertThat(RecuRequests.lire(anonyme, RecuRequests.jpeg(8)).statut()).isEqualTo(401);
+        assertThat(modele.calls).isEmpty();
+    }
+
+    @Test
+    void cs02_uneLectureSansJetonCsrfEstRefuseeSansAppelAuModele() {
+        client.poserCookie("XSRF-TOKEN", "faux");
+        Reponse reponse = client.envoyer(client.requete("/api/lectures")
+                .header("Content-Type", "multipart/form-data; boundary=b")
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString("--b--\r\n")).build());
+
+        assertThat(reponse.statut()).isEqualTo(403);
+        assertThat(modele.calls).isEmpty();
+    }
+
+    private static boolean contient(byte[] octets, String texte) {
+        return new String(octets, java.nio.charset.StandardCharsets.ISO_8859_1).contains(texte);
+    }
+
+    private static java.awt.image.BufferedImage image(byte[] octets) throws IOException {
+        return javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(octets));
+    }
+
+    private static boolean blanc(int rgb) {
+        return (rgb & 0xFF) > 200;
+    }
+
+    @Test
+    void ca07_laCopieEnvoyeeNAPlusDeMetadonneesEtSonOrientationEstAppliquee() throws IOException {
+        byte[] photo = RecuRequests.avecSegment(RecuRequests.jpegDeuxMoities(40, 20), 0xE1, RecuRequests.exif(6, false, "GPS-TEMOIN"));
+        photo = RecuRequests.avecSegment(photo, 0xFE, "COMMENTAIRE-TEMOIN".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+
+        Reponse reponse = RecuRequests.lire(client, "image/jpeg", "facture-perso.jpg", photo);
+
+        assertThat(reponse.statut()).isEqualTo(200);
+        byte[] envoyee = modele.calls.getFirst().images().getFirst();
+        assertThat(contient(envoyee, "GPS-TEMOIN")).isFalse();
+        assertThat(contient(envoyee, "COMMENTAIRE-TEMOIN")).isFalse();
+        assertThat(contient(envoyee, "Exif")).isFalse();
+        assertThat(contient(envoyee, "facture-perso")).isFalse();
+        java.awt.image.BufferedImage redressee = image(envoyee);
+        assertThat(redressee.getWidth()).isEqualTo(20);
+        assertThat(redressee.getHeight()).isEqualTo(40);
+        assertThat(blanc(redressee.getRGB(10, 5))).isTrue();
+        assertThat(blanc(redressee.getRGB(10, 35))).isFalse();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+        // Le blanc (moitié gauche de la photo) après chaque orientation : x, y où il se trouve, x, y où se trouve le noir.
+        "1, false, 40, 20, 5, 10, 35, 10",
+        "1, true, 40, 20, 5, 10, 35, 10",
+        "2, false, 40, 20, 35, 10, 5, 10",
+        "3, true, 40, 20, 35, 10, 5, 10",
+        "4, false, 40, 20, 5, 10, 35, 10",
+        "5, true, 20, 40, 10, 5, 10, 35",
+        "6, true, 20, 40, 10, 5, 10, 35",
+        "7, false, 20, 40, 10, 35, 10, 5",
+        "8, false, 20, 40, 10, 35, 10, 5",
+        "99, false, 40, 20, 5, 10, 35, 10",
+    })
+    void ca07_chaqueOrientationEstAppliquee(int orientation, boolean grandBoutiste, int largeur, int hauteur, int xBlanc, int yBlanc, int xNoir, int yNoir) throws IOException {
+        byte[] photo = RecuRequests.avecSegment(RecuRequests.jpegDeuxMoities(40, 20), 0xE1, RecuRequests.exif(orientation, grandBoutiste, "x"));
+
+        RecuRequests.lire(client, photo);
+
+        java.awt.image.BufferedImage redressee = image(modele.calls.getFirst().images().getFirst());
+        assertThat(redressee.getWidth()).isEqualTo(largeur);
+        assertThat(redressee.getHeight()).isEqualTo(hauteur);
+        assertThat(blanc(redressee.getRGB(xBlanc, yBlanc))).isTrue();
+        assertThat(blanc(redressee.getRGB(xNoir, yNoir))).isFalse();
+    }
+
+    @Test
+    void ca07_unExifHostileEstIgnoreEtLaLectureAboutit() {
+        byte[] coupe = java.util.Arrays.copyOf(RecuRequests.exif(6, false, ""), 12);
+
+        Reponse reponse = RecuRequests.lire(client, RecuRequests.avecSegment(RecuRequests.jpegDeuxMoities(40, 20), 0xE1, coupe));
+
+        assertThat(reponse.statut()).isEqualTo(200);
+        assertThat(modele.calls).hasSize(1);
+    }
+
+    @Test
+    void ca07_uneGrandeImageEstReduiteAuCoteConfigure() throws IOException {
+        RecuRequests.lire(client, RecuRequests.jpegDeuxMoities(4000, 1000));
+
+        java.awt.image.BufferedImage copie = image(modele.calls.getFirst().images().getFirst());
+        assertThat(copie.getWidth()).isEqualTo(1568);
+        assertThat(copie.getHeight()).isEqualTo(392);
+    }
+
+    @Test
+    void ca07_unPngAvecTransparenceOuSeizeBitsDonneUnJpegSansMetadonnee() throws IOException {
+        RecuRequests.lire(client, RecuRequests.pngSeize(16));
+
+        byte[] copie = modele.calls.getFirst().images().getFirst();
+        assertThat(copie[0]).isEqualTo((byte) 0xFF);
+        assertThat(copie[1]).isEqualTo((byte) 0xD8);
+        assertThat(image(copie).getWidth()).isEqualTo(16);
+    }
+
+    /** Photos de téléphone : profil ICC et segment MPF, générés. Un PNG ou un JPEG dont le corps manque passe le contrôle (D-41) : pas de copie, donc ECHEC sans appel. */
+    @Test
+    void ca07_unJpegAvecProfilIccEtMpfEstLu() {
+        byte[] icc = java.awt.color.ICC_Profile.getInstance(java.awt.color.ColorSpace.CS_sRGB).getData();
+        byte[] entete = "ICC_PROFILE\0\1\1".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        byte[] segmentIcc = java.util.Arrays.copyOf(entete, entete.length + icc.length);
+        System.arraycopy(icc, 0, segmentIcc, entete.length, icc.length);
+        byte[] photo = RecuRequests.avecSegment(RecuRequests.jpegDeuxMoities(40, 20), 0xE2, segmentIcc);
+        photo = RecuRequests.avecSegment(photo, 0xE2, "MPF\0II*\0\0\0\0\0".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+
+        Reponse reponse = RecuRequests.lire(client, photo);
+
+        assertThat(reponse.statut()).isEqualTo(200);
+        assertThat(modele.calls).hasSize(1);
+    }
+
+    @Test
+    void ca04_uneImageTroqueeApresSonEnTeteDonneEchecSansAppelAuModele() {
+        Reponse reponse = RecuRequests.lire(client, RecuRequests.entetePng(100, 100));
+
+        assertThat(reponse.statut()).isEqualTo(200);
+        assertThat(reponse.json()).containsEntry("resultat", "ECHEC");
+        assertThat(modele.calls).isEmpty();
+    }
 }

@@ -26,6 +26,7 @@ import org.springframework.validation.annotation.Validated;
  * @param dimensionsMaxMegapixels dimensions maximales d'une image, en mégapixels
  * @param fuseauHoraire fuseau de la date du jour, à laquelle une date de reçu ne peut être postérieure
  * @param alertes seuils des alertes ({@code recus.alertes.*})
+ * @param lecture réglages de la lecture par le modèle ({@code recus.lecture.*})
  */
 @Validated
 @ConfigurationProperties("recus")
@@ -35,7 +36,8 @@ public record ApplicationProperties(@Valid @NotNull Security securite, @Valid @N
         @NotEmpty List<String> formats,
         @Min(1) long dimensionsMaxMegapixels,
         @NotNull ZoneId fuseauHoraire,
-        @Valid @NotNull Alerts alertes) {
+        @Valid @NotNull Alerts alertes,
+        @Valid @NotNull Reading lecture) {
 
     public ApplicationProperties {
         typesDepense = typesDepense == null ? List.of() : List.copyOf(typesDepense);
@@ -65,6 +67,17 @@ public record ApplicationProperties(@Valid @NotNull Security securite, @Valid @N
         public Google {
             droits = droits == null ? List.of() : List.copyOf(droits);
         }
+    }
+
+    /**
+     * Le délai de lecture, {@code recus.lecture.delai}, est transmis au client du modèle par {@code spring.ai.anthropic.timeout}.
+     *
+     * @param lecturesParHeure nombre maximal de lectures sur une heure glissante
+     * @param coteMaxPixels long côté de la copie envoyée au modèle
+     * @param coteSourceMaxPixels long côté au-delà duquel une photo n'est pas décodée
+     * @param decodagesSimultanes nombre de photos décodées en même temps
+     */
+    public record Reading(@Min(1) int lecturesParHeure, @Min(1) int coteMaxPixels, @Min(1) int coteSourceMaxPixels, @Min(1) int decodagesSimultanes) {
     }
 
     /**
