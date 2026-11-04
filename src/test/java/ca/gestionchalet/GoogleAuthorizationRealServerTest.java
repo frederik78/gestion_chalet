@@ -9,7 +9,12 @@ import ca.gestionchalet.support.TestClient;
 import ca.gestionchalet.support.TestClient.Reponse;
 import ca.gestionchalet.support.TestDoublesConfiguration;
 import java.io.IOException;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +23,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.web.util.UriComponentsBuilder;
 
 /** Autorisation Google de bout en bout : serveur réel, session, base temporaire, et un serveur local à la place de Google. */
 @RealServerTest
@@ -82,5 +88,40 @@ class GoogleAuthorizationRealServerTest {
         Reponse etat = client.get("/api/google/etat");
         assertThat(etat.statut()).isEqualTo(200);
         assertThat(etat.corps()).isEqualTo("{\"etat\":\"ABSENTE\"}");
+    }
+
+    /** Les paramètres décodés d'une redirection reçue. */
+    private static Map<String, String> parametres(String adresse) {
+        return UriComponentsBuilder.fromUri(URI.create(adresse)).build(true).getQueryParams().toSingleValueMap().entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, parametre -> URLDecoder.decode(parametre.getValue(), StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void ca68_laDemandeNeReclameQueLesDroitsDeLaSection76() {
+        Reponse reponse = client.get("/api/google/autorisation");
+
+        assertThat(reponse.statut()).isEqualTo(302);
+        String adresse = reponse.enTete("Location");
+        assertThat(adresse).startsWith(GOOGLE.adresseConsentement() + "?");
+        Map<String, String> demande = parametres(adresse);
+        assertThat(demande.get("scope").split(" ")).containsExactlyInAnyOrder(
+                "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file");
+        assertThat(demande).containsEntry("response_type", "code").containsEntry("client_id", "client-essai")
+                .containsEntry("redirect_uri", "http://localhost:" + port + "/api/google/rappel")
+                .containsEntry("code_challenge_method", "S256")
+                .containsEntry("access_type", "offline").containsEntry("prompt", "consent")
+                .doesNotContainKey("include_granted_scopes");
+        assertThat(demande.get("state")).isNotBlank();
+        assertThat(demande.get("code_challenge")).isNotBlank();
+        assertThat(GOOGLE.requetes()).isEmpty();
+    }
+
+    @Test
+    void ca65_sansSessionLaDemandeEtLeRappelSontRefuses() {
+        TestClient anonyme = new TestClient(port, "source-" + UUID.randomUUID());
+
+        assertThat(anonyme.get("/api/google/autorisation").statut()).isEqualTo(401);
+        assertThat(anonyme.get("/api/google/rappel?code=c&state=s").statut()).isEqualTo(401);
+        assertThat(GOOGLE.requetes()).isEmpty();
     }
 }

@@ -1,5 +1,6 @@
 package ca.gestionchalet.config;
 
+import ca.gestionchalet.security.GoogleAuthorizationRequestResolver;
 import ca.gestionchalet.security.LoginRateLimiter;
 import ca.gestionchalet.web.rest.errors.SecurityErrorHandler;
 import jakarta.servlet.DispatcherType;
@@ -16,6 +17,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
@@ -54,7 +56,7 @@ public class SecurityConfiguration {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, LoginRateLimiter rateLimiter) {
+    public SecurityFilterChain filterChain(HttpSecurity http, LoginRateLimiter rateLimiter, ClientRegistrationRepository clientRegistrations) {
         RequestMatcher loginMatcher = PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, LOGIN_ROUTE);
         SecurityErrorHandler errorHandler = new SecurityErrorHandler(loginMatcher);
         CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
@@ -80,6 +82,8 @@ public class SecurityConfiguration {
                 .deleteCookies("JSESSIONID")
                 .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT))
                 .permitAll()) // alignement JHipster, sans effet mesuré
+            .oauth2Client(oauth2 -> oauth2.authorizationCodeGrant(grant -> grant
+                .authorizationRequestResolver(new GoogleAuthorizationRequestResolver(clientRegistrations))))
             .addFilterBefore(
                 new LoginGuardFilter(loginMatcher, rateLimiter, applicationProperties.securite().corpsRequeteMax().toBytes()),
                 UsernamePasswordAuthenticationFilter.class)
