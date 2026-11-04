@@ -37,15 +37,30 @@ public record ValeursDTO(
     private static final String READABLE_TEXT = "[\\P{C}&&\\P{Zl}&&\\P{Zp}]*";
     private static final String REGISTRATION_NUMBER = "[\\p{L}\\p{N} -]*";
 
+    private static final java.util.regex.Pattern ONLY_SEPARATORS = java.util.regex.Pattern.compile("\\p{Z}*");
+
     public ValeursDTO {
-        fournisseur = fournisseur == null ? null : fournisseur.strip();
+        fournisseur = fournisseur == null ? null : normalize(fournisseur);
         objet = stripToNull(objet);
         numeroInscriptionTps = stripToNull(numeroInscriptionTps);
         numeroInscriptionTvq = stripToNull(numeroInscriptionTvq);
     }
 
+    /**
+     * Un texte fait seulement de séparateurs {@code \\p{Z}} est vide : {@code strip} ne retire pas l'espace insécable. Limite : U+3164 et
+     * U+2800 paraissent vides mais sont pour Unicode une lettre et un symbole ordinaires ; ils restent acceptés.
+     */
+    private static String normalize(String text) {
+        String stripped = text.strip();
+        return ONLY_SEPARATORS.matcher(stripped).matches() ? "" : stripped;
+    }
+
     /** Un texte facultatif sans contenu est absent : un numéro fait d'espaces ne passerait pas pour un numéro manquant. */
     private static String stripToNull(String text) {
-        return text == null || text.isBlank() ? null : text.strip();
+        if (text == null) {
+            return null;
+        }
+        String normalized = normalize(text);
+        return normalized.isEmpty() ? null : normalized;
     }
 }

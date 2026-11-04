@@ -631,4 +631,22 @@ class RecuRealServerTest {
         assertThat(reponse.statut()).isEqualTo(201);
         assertThat(valeursDe(reponse)).containsEntry("objet", "Café \uD83C\uDF32 à l'érable");
     }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\u00A0", "\u00A0 \u00A0", "\u202F", "\u2007", "\u3000"})
+    void unFournisseurFaitDeSeparateursEstManquant(String texte) throws IOException {
+        Etat avant = etat();
+
+        assertThat(validerAvec("fournisseur", texte).json()).isEqualTo(erreurDeChamp("fournisseur", "OBLIGATOIRE"));
+        assertThat(etat()).isEqualTo(avant);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\u00A0", "\u202F", "\u3000"})
+    void unObjetFaitDeSeparateursDevientVide(String texte) {
+        Reponse reponse = validerAvec("objet", texte);
+
+        assertThat(reponse.statut()).isEqualTo(201);
+        assertThat(valeursDe(reponse).get("objet")).isNull();
+    }
 }
