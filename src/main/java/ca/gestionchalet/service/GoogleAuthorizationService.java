@@ -60,6 +60,20 @@ public class GoogleAuthorizationService implements OAuth2AuthorizedClientService
         return currentState() == EtatAutorisationGoogle.VALIDE;
     }
 
+    /** Sans identifiants, ou sans jeton de renouvellement, aucun appel à Google ne peut aboutir. */
+    @Transactional(readOnly = true)
+    public boolean canRenew() {
+        return clientRegistrations.findByRegistrationId(REGISTRATION_ID) != null && current().estRenouvelable();
+    }
+
+    /** Un refus sans révocation (D-57) : les reçus attendent, le jeton reste, et un renouvellement réussi passera par {@link #saveAuthorizedClient}. */
+    @Transactional
+    public void suspend() {
+        AutorisationGoogle autorisation = current();
+        autorisation.suspendre();
+        blockPending(autorisation);
+    }
+
     /** Un jeton illisible, après un changement de clé, se traite comme un {@code invalid_grant} : il n'est pas réutilisé. */
     @Override
     @Transactional
@@ -67,7 +81,7 @@ public class GoogleAuthorizationService implements OAuth2AuthorizedClientService
     public <T extends OAuth2AuthorizedClient> T loadAuthorizedClient(String clientRegistrationId, String principalName) {
         ClientRegistration registration = clientRegistrations.findByRegistrationId(clientRegistrationId);
         AutorisationGoogle autorisation = current();
-        if (registration == null || autorisation.getEtat() != EtatAutorisationGoogle.VALIDE) {
+        if (registration == null || !autorisation.estRenouvelable()) {
             return null;
         }
         try {
@@ -106,6 +120,10 @@ public class GoogleAuthorizationService implements OAuth2AuthorizedClientService
 
     private void requireRenewal(AutorisationGoogle autorisation) {
         autorisation.demanderRenouvellement();
+        blockPending(autorisation);
+    }
+
+    private void blockPending(AutorisationGoogle autorisation) {
         recuRepository.findByEtatCopie(EtatCopie.A_COPIER).forEach(recu -> recu.bloquer(MotifBlocage.AUTORISATION_GOOGLE));
         autorisationRepository.save(autorisation);
         LOG.warn("Autorisation Google : A_RENOUVELER");

@@ -1,11 +1,17 @@
 package ca.gestionchalet.config;
 
+import java.io.IOException;
+import java.net.http.HttpClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.HttpRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.http.converter.FormHttpMessageConverter;
 import org.springframework.security.oauth2.client.AuthorizedClientServiceOAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
@@ -19,8 +25,13 @@ import org.springframework.security.oauth2.client.http.OAuth2ErrorResponseErrorH
 import org.springframework.security.config.oauth2.client.CommonOAuth2Provider;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.oauth2.core.OAuth2AuthorizationException;
+import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.http.converter.OAuth2AccessTokenResponseHttpMessageConverter;
+import org.springframework.security.oauth2.core.http.converter.OAuth2ErrorHttpMessageConverter;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 /** Le client OAuth2 de Spring Security pour Google : mêmes composants que par défaut, avec le délai de {@code recus.google.delai-appel}, sans lequel un Google muet retient l'appel sans fin. */
@@ -35,9 +46,9 @@ public class GoogleAuthorizationConfiguration {
 
     public GoogleAuthorizationConfiguration(ApplicationProperties applicationProperties) {
         google = applicationProperties.google();
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(applicationProperties.google().delaiAppel());
-        requestFactory.setReadTimeout(applicationProperties.google().delaiAppel());
+        // Pas SimpleClientHttpRequestFactory : en mode flux, HttpURLConnection perd le corps d'un 401, donc le code invalid_client (mesuré, D-57).
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(google.delaiAppel()).build());
+        requestFactory.setReadTimeout(google.delaiAppel());
         // Les convertisseurs et le gestionnaire d'erreur que ces clients exigent d'un RestClient fourni (AbstractRestClientOAuth2AccessTokenResponseClient).
         tokenRestClient = RestClient.builder()
                 .requestFactory(requestFactory)
@@ -45,8 +56,27 @@ public class GoogleAuthorizationConfiguration {
                     converters.addCustomConverter(new FormHttpMessageConverter());
                     converters.addCustomConverter(new OAuth2AccessTokenResponseHttpMessageConverter());
                 })
+                .defaultStatusHandler(GoogleAuthorizationConfiguration::isRefusal, GoogleAuthorizationConfiguration::throwRefusal)
                 .defaultStatusHandler(new OAuth2ErrorResponseErrorHandler())
                 .build();
+    }
+
+    private static boolean isRefusal(HttpStatusCode status) {
+        return status.is4xxClientError() && !status.isSameCodeAs(HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    /**
+     * {@link OAuth2ErrorResponseErrorHandler} ne lit le code de Google qu'en 400 ; or D-57 décide par ce code, quel que soit le statut. Lu par le convertisseur
+     * du framework ; un corps illisible garde l'erreur HTTP, que Spring Security traduit en {@code invalid_token_response}.
+     */
+    private static void throwRefusal(HttpRequest request, ClientHttpResponse response) throws IOException {
+        OAuth2Error error;
+        try {
+            error = new OAuth2ErrorHttpMessageConverter().read(OAuth2Error.class, response);
+        } catch (HttpMessageNotReadableException unreadable) {
+            throw HttpClientErrorException.create(response.getStatusCode(), response.getStatusText(), response.getHeaders(), new byte[0], null);
+        }
+        throw new OAuth2AuthorizationException(error);
     }
 
     /**

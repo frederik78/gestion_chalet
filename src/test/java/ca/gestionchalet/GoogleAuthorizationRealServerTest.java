@@ -539,27 +539,118 @@ class GoogleAuthorizationRealServerTest {
         assertThat(etatCopie(enAttente)).isEqualTo("BLOQUEE");
     }
 
+    private Object autoriserPuisValiderUnRecu() {
+        GOOGLE.repondreJeton(1, GoogleStub.SHEETS + " " + GoogleStub.DRIVE_FILE, GoogleStub.JETON_RENOUVELLEMENT);
+        autoriser();
+        return valider().json().get("id");
+    }
+
+    /** D-57 : le jeton reste, chiffré, pour reprendre sans nouveau consentement. */
     @ParameterizedTest
     @CsvSource(delimiter = '|', value = {
         "400 | {\"error\":\"invalid_client\",\"error_description\":\"description-temoin\"} | invalid_client",
+        "401 | {\"error\":\"invalid_client\",\"error_description\":\"description-temoin\"} | invalid_client",
         "400 | {\"error\":\"code-recu-temoin\"}                                                 | AUTRE",
-        "401 | {\"error\":\"invalid_client\",\"error_description\":\"description-temoin\"} | invalid_token_response",
-        "401 | ''                                                                               | invalid_token_response",
-        "403 | {\"error\":\"code-recu-temoin\"}                                                 | invalid_token_response",
-        "200 | ceci n'est pas du JSON                                                           | invalid_token_response"
+        "403 | {\"error\":\"code-recu-temoin\"}                                                 | AUTRE"
     })
-    void ca66_unRefusQuiNEstPasUnePannePassagerePasseARenouveler(int statut, String corps, String code, CapturedOutput journal) {
-        GOOGLE.repondreJeton(1, GoogleStub.SHEETS + " " + GoogleStub.DRIVE_FILE, GoogleStub.JETON_RENOUVELLEMENT);
-        autoriser();
-        Object enAttente = valider().json().get("id");
+    void ca66_unRefusPasseARenouvelerSansEffacerLeJeton(int statut, String corps, String code, CapturedOutput journal) {
+        Object enAttente = autoriserPuisValiderUnRecu();
+        Map<String, Object> avant = ligneAutorisation();
         GOOGLE.repondre(statut, corps);
+
+        assertThat(jetons.accessToken()).isEmpty();
+
+        assertThat(client.get("/api/google/etat").corps()).isEqualTo("{\"etat\":\"A_RENOUVELER\"}");
+        assertThat(etatCopie(enAttente)).isEqualTo("BLOQUEE");
+        assertThat(ligneAutorisation().get("jeton_renouvellement_chiffre")).isEqualTo(avant.get("jeton_renouvellement_chiffre")).isNotNull();
+        assertThat(ligneAutorisation().values().toString()).doesNotContain(GoogleStub.JETON_RENOUVELLEMENT);
+        assertThat(journal.getOut()).contains("ERROR").contains("Renouvellement Google refusé : " + code)
+                .doesNotContain("temoin");
+    }
+
+    @Test
+    void ca66_apresUnRefusUnRenouvellementReussiRepasseAValideSansConsentementEtUnSeulAppelParEssai() {
+        Object enAttente = autoriserPuisValiderUnRecu();
+        GOOGLE.repondre(401, "{\"error\":\"invalid_client\"}");
+        assertThat(jetons.accessToken()).isEmpty();
+        assertThat(renouvellements()).hasSize(1);
+
+        assertThat(jetons.accessToken()).isEmpty();
+        assertThat(renouvellements()).hasSize(2);
+        assertThat(etat()).isEqualTo("A_RENOUVELER");
+
+        GOOGLE.repondreJeton(3600, GoogleStub.SHEETS + " " + GoogleStub.DRIVE_FILE, null);
+        assertThat(jetons.accessToken()).contains(GoogleStub.JETON_ACCES);
+
+        assertThat(renouvellements()).hasSize(3).allSatisfy(requete ->
+                assertThat(requete.parametres()).containsEntry("refresh_token", GoogleStub.JETON_RENOUVELLEMENT));
+        assertThat(etat()).isEqualTo("VALIDE");
+        assertThat(etatCopie(enAttente)).isEqualTo("A_COPIER");
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {"400 | invalid_grant", "401 | invalid_grant", "400 | invalid_token"})
+    void ca66_uneRevocationEffaceLeJeton(int statut, String code) {
+        Object enAttente = autoriserPuisValiderUnRecu();
+        GOOGLE.repondre(statut, "{\"error\":\"" + code + "\"}");
 
         assertThat(jetons.accessToken()).isEmpty();
 
         assertThat(etat()).isEqualTo("A_RENOUVELER");
         assertThat(etatCopie(enAttente)).isEqualTo("BLOQUEE");
-        assertThat(journal.getOut()).contains("ERROR").contains("Renouvellement Google refusé : " + code)
-                .doesNotContain("temoin");
+        assertThat(ligneAutorisation()).containsEntry("jeton_renouvellement_chiffre", null).containsEntry("jeton_acces_chiffre", null);
+    }
+
+    @Test
+    void ca66_apresUnRefusUneRevocationEffaceLeJeton() {
+        autoriserPuisValiderUnRecu();
+        GOOGLE.repondre(401, "{\"error\":\"invalid_client\"}");
+        jetons.accessToken();
+        GOOGLE.repondre(400, "{\"error\":\"invalid_grant\"}");
+
+        assertThat(jetons.accessToken()).isEmpty();
+
+        assertThat(ligneAutorisation()).containsEntry("jeton_renouvellement_chiffre", null);
+        GOOGLE.reinitialiser();
+        assertThat(jetons.accessToken()).isEmpty();
+        assertThat(GOOGLE.requetes()).isEmpty();
+    }
+
+    /** D-57 : une réponse illisible ou un de ces deux codes, quel que soit le statut, ne prouve aucun refus. */
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+        "200 | ceci n'est pas du JSON",
+        "200 | <html>proxy</html>",
+        "200 | ''",
+        "401 | ''",
+        "403 | <html>proxy</html>",
+        "400 | <html>proxy</html>",
+        "400 | {}",
+        "400 | {\"error\":\"temporarily_unavailable\"}",
+        "400 | {\"error\":\"server_error\"}",
+        "401 | {\"error\":\"temporarily_unavailable\"}",
+        "403 | {\"error\":\"server_error\"}"
+    })
+    void ca66_uneReponseIllisibleOuUnCodePassagerGardeLAutorisation(int statut, String corps) {
+        Object enAttente = autoriserPuisValiderUnRecu();
+        Map<String, Object> avant = ligneAutorisation();
+        GOOGLE.repondre(statut, corps);
+
+        assertThatThrownBy(() -> jetons.accessToken()).isInstanceOf(OAuth2AuthorizationException.class);
+
+        assertThat(etat()).isEqualTo("VALIDE");
+        assertThat(etatCopie(enAttente)).isEqualTo("A_COPIER");
+        assertThat(ligneAutorisation()).isEqualTo(avant);
+    }
+
+    @Test
+    void ca66_uneReponseEnTypeHtmlGardeLAutorisation() {
+        autoriserPuisValiderUnRecu();
+        GOOGLE.repondreHtml(200, "<html>proxy</html>");
+
+        assertThatThrownBy(() -> jetons.accessToken()).isInstanceOf(OAuth2AuthorizationException.class);
+
+        assertThat(etat()).isEqualTo("VALIDE");
     }
 
     @ParameterizedTest

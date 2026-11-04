@@ -30,6 +30,7 @@ public final class GoogleStub implements AutoCloseable {
     private volatile int statut;
     private volatile String reponse;
     private volatile long attenteMillis;
+    private volatile String typeReponse;
 
     public GoogleStub() throws IOException {
         serveur = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
@@ -86,6 +87,13 @@ public final class GoogleStub implements AutoCloseable {
     public void repondre(int statut, String corps) {
         this.statut = statut;
         this.reponse = corps;
+        this.typeReponse = "application/json";
+    }
+
+    /** Comme un mandataire devant Google. */
+    public void repondreHtml(int statut, String corps) {
+        repondre(statut, corps);
+        this.typeReponse = "text/html";
     }
 
     private void traiter(HttpExchange echange) throws IOException {
@@ -94,7 +102,7 @@ public final class GoogleStub implements AutoCloseable {
             requetes.add(new Requete(echange.getRequestURI().getPath(), formulaire(corps)));
             attendre();
             byte[] octets = reponse.getBytes(StandardCharsets.UTF_8);
-            echange.getResponseHeaders().add("Content-Type", "application/json");
+            echange.getResponseHeaders().add("Content-Type", typeReponse);
             echange.sendResponseHeaders(statut, octets.length);
             echange.getResponseBody().write(octets);
         }

@@ -57,6 +57,16 @@ public class AutorisationGoogle {
         jetonRenouvellementChiffre = null;
     }
 
+    /** Google refuse le renouvellement sans avoir révoqué le jeton ({@code invalid_client}, par exemple) : il reste, pour reprendre sans nouveau consentement une fois la cause corrigée (D-57). */
+    public void suspendre() {
+        etat = EtatAutorisationGoogle.A_RENOUVELER;
+    }
+
+    /** Un jeton de renouvellement est encore là : autorisation valide, ou suspendue. */
+    public boolean estRenouvelable() {
+        return jetonRenouvellementChiffre != null;
+    }
+
     public EtatAutorisationGoogle getEtat() {
         return etat;
     }
