@@ -28,3 +28,4 @@ Tests rouges puis verts aux bornes (99,99 / 100,00 ; 499,99 / 500,00 ; 0,02 / 0,
 
 ## Notes
 - 2026-11-01 : Parallélisable avec 001-03 et 001-05 ; conflit probable avec 001-03 sur l'écran de validation.
+- 2026-11-04 : Pour 001-03 : `controler()` de `recu.js` doit envoyer `montantTotalLuCents` (CA29), sinon l'écran pourrait taire une alerte que le serveur figera. Mineurs de la relecture n° 1, non corrigés d'office (`docs/reviews/001-04.md`) : M-3 NBSP en bordure du fournisseur, M-4 exclusion SpotBugs à limiter à `comparableSupplier`.
