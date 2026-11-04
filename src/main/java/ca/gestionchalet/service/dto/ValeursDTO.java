@@ -17,8 +17,8 @@ import tools.jackson.databind.annotation.JsonDeserialize;
 /** Objet {@code valeurs} du contrat (PRD, sections 7.1 et 11.4). */
 public record ValeursDTO(
         @NotNull @PastOrPresent @JsonDeserialize(using = StrictLocalDateDeserializer.class) LocalDate date,
-        @JsonDeserialize(using = StrictStringDeserializer.class) @NotBlank @Size(max = 120) @Pattern(regexp = NO_CONTROL_OR_FORMAT_CHARACTER) String fournisseur,
-        @JsonDeserialize(using = StrictStringDeserializer.class) @Size(max = 200) @Pattern(regexp = NO_CONTROL_OR_FORMAT_CHARACTER) String objet,
+        @JsonDeserialize(using = StrictStringDeserializer.class) @NotBlank @Size(max = 120) @Pattern(regexp = READABLE_TEXT) String fournisseur,
+        @JsonDeserialize(using = StrictStringDeserializer.class) @Size(max = 200) @Pattern(regexp = READABLE_TEXT) String objet,
         @JsonDeserialize(using = StrictStringDeserializer.class) @NotBlank @ExpenseType String typeDepense,
         @PositiveOrZero @Max(MONTANT_MAX_CENTS) Long montantAvantTaxesCents,
         @PositiveOrZero @Max(MONTANT_MAX_CENTS) Long tpsCents,
@@ -30,8 +30,11 @@ public record ValeursDTO(
     /** 1 000 000,00 $ (R-10). */
     static final long MONTANT_MAX_CENTS = 100_000_000L;
 
-    /** Ni contrôle ({@code Cc}), ni format ({@code Cf}) : espace de largeur nulle, inversion d'affichage. */
-    private static final String NO_CONTROL_OR_FORMAT_CHARACTER = "[\\P{Cc}&&\\P{Cf}]*";
+    /**
+     * Ni la catégorie {@code C} (contrôle, format, surrogate isolé, usage privé, non attribué d'après la version Unicode du JDK), ni les
+     * séparateurs de ligne et de paragraphe : la valeur enregistrée reste celle validée, et s'affiche telle quelle.
+     */
+    private static final String READABLE_TEXT = "[\\P{C}&&\\P{Zl}&&\\P{Zp}]*";
     private static final String REGISTRATION_NUMBER = "[\\p{L}\\p{N} -]*";
 
     public ValeursDTO {

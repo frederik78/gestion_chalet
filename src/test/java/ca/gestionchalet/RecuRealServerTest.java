@@ -599,4 +599,36 @@ class RecuRealServerTest {
         assertThat(reponse.statut()).isEqualTo(201);
         assertThat(valeursDe(reponse).get(champ)).isNull();
     }
+
+    private Reponse validerAvecJsonBrut(String champ, String texteJson) {
+        Map<String, Object> valeurs = RecuRequests.valeurs();
+        valeurs.put(champ, "@@@");
+        String json = JsonMapper.builder().build().writeValueAsString(RecuRequests.corps(valeurs)).replace("@@@", texteJson);
+        return RecuRequests.validerJson(client, json, RecuRequests.png());
+    }
+
+    /** Échappés dans le JSON : un surrogate isolé deviendrait « ? » en base, la valeur enregistrée différerait de la valeur validée. */
+    @ParameterizedTest
+    @CsvSource({
+        "fournisseur, a\\ud800b", "fournisseur, a\\udc00b", "fournisseur, a\\ue000b", "fournisseur, a\\uffffb", "fournisseur, a\\u0378b",
+        "fournisseur, a\\u2028b", "fournisseur, a\\u2029b",
+        "objet, a\\ud800b", "objet, a\\ue000b", "objet, a\\uffffb", "objet, a\\u2028b", "objet, a\\u2029b",
+        "numeroInscriptionTps, 1\\ud800", "numeroInscriptionTvq, 1\\uffff",
+    })
+    void unTexteRefuseToutLaCategorieCEtLesSeparateursDeLigneEtDeParagraphe(String champ, String texteJson) throws IOException {
+        Etat avant = etat();
+
+        Reponse reponse = validerAvecJsonBrut(champ, texteJson);
+
+        assertThat(reponse.json()).isEqualTo(erreurDeChamp(champ, "FORMAT"));
+        assertThat(etat()).isEqualTo(avant);
+    }
+
+    @Test
+    void unTexteGardeLesEmojisEtLesAccentsTelsQuels() {
+        Reponse reponse = validerAvec("objet", "Café \uD83C\uDF32 à l'érable");
+
+        assertThat(reponse.statut()).isEqualTo(201);
+        assertThat(valeursDe(reponse)).containsEntry("objet", "Café \uD83C\uDF32 à l'érable");
+    }
 }
