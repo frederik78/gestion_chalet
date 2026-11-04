@@ -22,6 +22,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -173,11 +174,30 @@ public final class ChromeSession implements AutoCloseable {
         Files.write(file, Base64.getDecoder().decode(data.getBytes(StandardCharsets.US_ASCII)));
     }
 
+    /**
+     * Attend aussi les enfants de Chrome, relevés avant l'arrêt : ils survivent un instant au principal et écrivent encore dans le profil,
+     * dont la suppression échouait alors par intermittence (mesuré sous Linux, {@code DirectoryNotEmptyException}).
+     */
     @Override
     public void close() throws InterruptedException {
+        List<ProcessHandle> family = Stream.concat(Stream.of(process.toHandle()), process.descendants()).toList();
         process.destroy();
-        if (!process.waitFor(5, TimeUnit.SECONDS)) {
-            process.destroyForcibly().waitFor();
+        if (!exited(family)) {
+            family.forEach(ProcessHandle::destroyForcibly);
+            if (!exited(family)) {
+                throw new IllegalStateException("Des processus de Chrome restent lancés après un arrêt forcé");
+            }
+        }
+    }
+
+    private static boolean exited(List<ProcessHandle> family) throws InterruptedException {
+        try {
+            CompletableFuture.allOf(family.stream().map(ProcessHandle::onExit).toArray(CompletableFuture[]::new)).get(5, TimeUnit.SECONDS);
+            return true;
+        } catch (TimeoutException e) {
+            return false;
+        } catch (ExecutionException e) {
+            throw new IllegalStateException(e);
         }
     }
 }
