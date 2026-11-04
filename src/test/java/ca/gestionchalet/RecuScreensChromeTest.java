@@ -367,4 +367,106 @@ class RecuScreensChromeTest {
         assertThat(valeur("fournisseur")).isEqualTo("Fournisseur refusé");
         assertThat(nombre(NOMBRE_DE_PHOTOS_A_VALIDER)).isEqualTo(2);
     }
+
+    private static final String TEXTES_D_ALERTES = "Array.from(document.querySelectorAll('#alertes li')).map((alerte) => alerte.textContent).join(' | ')";
+
+    private void signalerLaSaisie() {
+        chrome.eval("document.getElementById('formulaire-recu').dispatchEvent(new Event('input', { bubbles: true })); true");
+    }
+
+    private void saisirUnRecuAAlertes(String fournisseur) {
+        saisirLesValeurs(fournisseur);
+        saisir("tps", "");
+        saisir("montantTotal", "600,00");
+        saisir("montantAvantTaxes", "500,00");
+        signalerLaSaisie();
+    }
+
+    private String alertes() {
+        return chrome.eval(TEXTES_D_ALERTES).asString();
+    }
+
+    @Test
+    void ca80_lesAlertesSAffichentALaSaisieEtValiderResteActif() throws InterruptedException, IOException {
+        long avant = recus();
+        allerALaValidationAvecDeuxPhotos();
+
+        saisirUnRecuAAlertes("Fournisseur alerté");
+        chrome.waitUntil("document.querySelectorAll('#alertes li').length === 3");
+        capturer("validation-alertes.png");
+
+        assertThat(alertes()).isEqualTo("Numéros d'inscription manquants : TPS, TVQ"
+                + " | Pièce à vérifier : nom de l'acheteur, description, conditions de paiement | Écart de calcul : 100,00 $");
+        assertThat(chrome.eval("document.getElementById('valider').disabled").asBoolean()).isFalse();
+        assertThat(recus()).isEqualTo(avant);
+
+        cliquer("valider");
+        chrome.waitUntil("document.getElementById('prise-de-vue').offsetParent !== null");
+        assertThat(recus()).isEqualTo(avant + 1);
+        assertThat(nombre("document.querySelectorAll('#alertes li').length")).isZero();
+    }
+
+    @Test
+    void ca80_desValeursCorrigeesRetirentLesAlertes() throws InterruptedException {
+        allerALaValidationAvecDeuxPhotos();
+        saisirUnRecuAAlertes("Fournisseur corrigé ensuite");
+        chrome.waitUntil("document.querySelectorAll('#alertes li').length === 3");
+
+        saisir("montantTotal", "35,00");
+        saisir("montantAvantTaxes", "");
+        signalerLaSaisie();
+
+        chrome.waitUntil("document.querySelectorAll('#alertes li').length === 0");
+    }
+
+    @Test
+    void ca80_unTexteDeReponseResteDuTexteJamaisDuHtml() throws InterruptedException {
+        allerALaValidationAvecDeuxPhotos();
+        chrome.eval("window.fetch = async () => new Response(JSON.stringify({ alertes: [{ code: 'X', message: '<img src=x onerror=\\'window.piege=1\\'>' }] }), { status: 200 }); true");
+
+        saisirUnRecuAAlertes("Fournisseur piégé");
+        chrome.waitUntil("document.querySelectorAll('#alertes li').length === 1");
+
+        assertThat(alertes()).isEqualTo("<img src=x onerror='window.piege=1'>");
+        assertThat(nombre("document.querySelectorAll('#alertes img').length")).isZero();
+    }
+
+    @Test
+    void ca80_unControleEnEchecLeDitSansBloquerLaValidation() throws InterruptedException {
+        allerALaValidationAvecDeuxPhotos();
+        chrome.eval("window.fetchOrigine = window.fetch; window.fetch = async (chemin, options) => String(chemin) === '/api/recus/controles'"
+                + " ? new Response('{}', { status: 500 }) : window.fetchOrigine(chemin, options); true");
+
+        saisirUnRecuAAlertes("Fournisseur sans contrôle");
+        chrome.waitUntil("document.querySelectorAll('#alertes li').length === 1");
+
+        assertThat(alertes()).isEqualTo("Les alertes n'ont pas pu être vérifiées. Vous pouvez tout de même valider.");
+        assertThat(chrome.eval("document.getElementById('valider').disabled").asBoolean()).isFalse();
+    }
+
+    @Test
+    void ca80_uneReponseEnRetardNeRemplacePasLaPlusRecenteEtNeSurvitPasALAbandon() throws InterruptedException {
+        allerALaValidationAvecDeuxPhotos();
+        chrome.eval("""
+                window.fetch = async (chemin, options) => {
+                  const numero = (window.controles = (window.controles || 0) + 1);
+                  if (numero === 1) {
+                    await new Promise((liberer) => { window.libererLePremier = liberer; });
+                    return new Response(JSON.stringify({ alertes: [{ code: 'X', message: 'ancienne' }] }), { status: 200 });
+                  }
+                  return new Response(JSON.stringify({ alertes: [{ code: 'X', message: 'récente' }] }), { status: 200 });
+                };
+                true""");
+        saisirUnRecuAAlertes("Fournisseur en retard");
+        chrome.waitUntil("!!window.libererLePremier");
+        signalerLaSaisie();
+        chrome.waitUntil("document.querySelectorAll('#alertes li').length === 1");
+
+        chrome.eval("window.libererLePremier(); true");
+        Thread.sleep(200);
+        assertThat(alertes()).isEqualTo("récente");
+
+        cliquer("abandonner");
+        assertThat(nombre("document.querySelectorAll('#alertes li').length")).isZero();
+    }
 }

@@ -4,6 +4,8 @@
 // validation, l'abandon n'a donc rien à nettoyer (PRD, section 4.1). Tout texte est affiché par textContent, jamais comme du HTML.
 
 const APERCU_COTE_MAX = 320;
+const DELAI_CONTROLE_MS = 300;
+const CONTROLE_INDISPONIBLE = "Les alertes n'ont pas pu être vérifiées. Vous pouvez tout de même valider.";
 const MONTANT = /^(\d{1,7})(?:[.,](\d{1,2}))?$/;
 
 const CHAMPS = {
@@ -32,7 +34,7 @@ const REFUS_DE_PHOTO = {
 const elements = (() => {
   const parId = {};
   for (const id of ['prise-de-vue', 'validation', 'photographier', 'importer', 'photos-choisies', 'photos-a-valider', 'continuer',
-    'message-depart', 'message-succes', 'message-validation', 'formulaire-recu', 'valider', 'abandonner', 'typeDepense']) {
+    'message-depart', 'message-succes', 'message-validation', 'formulaire-recu', 'valider', 'abandonner', 'typeDepense', 'alertes']) {
     parId[id] = document.getElementById(id);
   }
   return parId;
@@ -42,6 +44,9 @@ let limites = { photosParRecuMax: 1, tailleParPhotoMaxOctets: 0, formats: [] };
 let photos = [];
 // La même clé pour tous les envois d'un même reçu : un renvoi après une panne ne crée pas de doublon (R-11).
 let cleIdempotence = null;
+// Seule la réponse au dernier contrôle demandé s'affiche : une réponse en retard décrirait des valeurs déjà changées.
+let dernierControle = 0;
+let minuterieControle = null;
 
 async function chargerConfiguration() {
   const reponse = await fetch('/api/configuration', { credentials: 'same-origin' });
@@ -134,6 +139,7 @@ async function montrerValidation() {
 function revenirAuDepart() {
   photos = [];
   cleIdempotence = null;
+  oublierLesControles();
   elements['formulaire-recu'].reset();
   elements['photos-choisies'].replaceChildren();
   elements['photos-a-valider'].replaceChildren();
@@ -198,6 +204,50 @@ function messageDeLErreur(statut, corps) {
   return (corps && corps.erreur) || "L'enregistrement a été refusé.";
 }
 
+function afficherAlertes(textes) {
+  elements.alertes.replaceChildren(...textes.map((texte) => {
+    const alerte = document.createElement('li');
+    alerte.textContent = texte;
+    return alerte;
+  }));
+}
+
+function oublierLesControles() {
+  clearTimeout(minuterieControle);
+  dernierControle += 1;
+  afficherAlertes([]);
+}
+
+/** Les alertes viennent du serveur et n'empêchent jamais de valider. Tant que la saisie est incomplète ou invalide, il n'y a rien à contrôler. */
+async function controler(numero) {
+  const { valeurs, invalide } = lireValeurs();
+  if (invalide || !valeurs.date || !valeurs.fournisseur || !valeurs.typeDepense || !valeurs.montantTotalCents) {
+    afficherAlertes([]);
+    return;
+  }
+  let textes;
+  try {
+    const reponse = await ecrireApi('/api/recus/controles', { valeurs });
+    if (reponse.ok) {
+      textes = (await reponse.json()).alertes.map((alerte) => alerte.message);
+    } else {
+      textes = reponse.status === 400 ? [] : [CONTROLE_INDISPONIBLE];
+    }
+  } catch {
+    textes = [CONTROLE_INDISPONIBLE];
+  }
+  if (numero === dernierControle) {
+    afficherAlertes(textes);
+  }
+}
+
+function planifierControle() {
+  clearTimeout(minuterieControle);
+  dernierControle += 1;
+  const numero = dernierControle;
+  minuterieControle = setTimeout(() => controler(numero), DELAI_CONTROLE_MS);
+}
+
 async function valider(evenement) {
   evenement.preventDefault();
   const message = elements['message-validation'];
@@ -234,4 +284,5 @@ async function valider(evenement) {
 elements.continuer.addEventListener('click', montrerValidation);
 elements.abandonner.addEventListener('click', revenirAuDepart);
 elements['formulaire-recu'].addEventListener('submit', valider);
+elements['formulaire-recu'].addEventListener('input', planifierControle);
 chargerConfiguration();
