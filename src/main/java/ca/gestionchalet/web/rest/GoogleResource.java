@@ -1,7 +1,7 @@
 package ca.gestionchalet.web.rest;
 
 import ca.gestionchalet.service.GoogleAuthorizationService;
-import ca.gestionchalet.service.GoogleErrorCodes;
+import ca.gestionchalet.security.GoogleErrorCodes;
 import ca.gestionchalet.service.dto.GoogleAuthorizationStateDTO;
 import ca.gestionchalet.web.rest.errors.ErrorCode;
 import ca.gestionchalet.web.rest.errors.ErrorDTO;

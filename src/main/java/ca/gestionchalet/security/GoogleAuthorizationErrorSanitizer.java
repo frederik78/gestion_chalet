@@ -1,6 +1,5 @@
 package ca.gestionchalet.security;
 
-import ca.gestionchalet.service.GoogleErrorCodes;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.config.ObjectPostProcessor;
 import org.springframework.security.core.Authentication;

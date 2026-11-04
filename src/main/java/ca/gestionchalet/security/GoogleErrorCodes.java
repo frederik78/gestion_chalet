@@ -1,4 +1,4 @@
-package ca.gestionchalet.service;
+package ca.gestionchalet.security;
 
 import java.util.Set;
 import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
