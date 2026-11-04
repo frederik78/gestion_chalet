@@ -64,4 +64,12 @@
     <Class name="ca.gestionchalet.web.rest.GoogleResource"/>
     <Bug pattern="EI_EXPOSE_REP2"/>
   </Match>
+  <!-- Seul est journalisé le résultat de GoogleErrorCodes.loggable : un code de sa liste blanche ou AUTRE, jamais la valeur reçue (ca65_unCodeInconnu, avec retour à la ligne). -->
+  <Match>
+    <Or>
+      <Class name="ca.gestionchalet.web.rest.GoogleResource"/>
+      <Class name="ca.gestionchalet.service.GoogleTokenService"/>
+    </Or>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
 </FindBugsFilter>
