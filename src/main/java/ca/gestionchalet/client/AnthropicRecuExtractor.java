@@ -6,6 +6,7 @@ import org.springframework.ai.anthropic.AnthropicChatOptions;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.content.Media;
@@ -58,7 +59,8 @@ public class AnthropicRecuExtractor implements RecuExtractor {
                 .build();
         try {
             ChatResponse response = chatModel.call(new Prompt(message, options()));
-            String text = response.getResult() == null ? null : response.getResult().getOutput().getText();
+            Generation result = response == null ? null : response.getResult();
+            String text = result == null ? null : result.getOutput().getText();
             if (text == null) {
                 throw new RecuExtractionException("réponse sans texte");
             }

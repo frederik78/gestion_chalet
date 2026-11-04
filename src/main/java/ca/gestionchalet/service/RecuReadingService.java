@@ -62,7 +62,7 @@ public class RecuReadingService {
         try {
             return mapper.toDto(validation.validate(recuExtractor.extract(images, rules.typesDepense())));
         } catch (RecuExtractionException e) {
-            LOG.warn("Lecture en échec : {}", e.getMessage());
+            LOG.warn("Lecture en échec : ECHEC");
             return failure();
         }
     }
