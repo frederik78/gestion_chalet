@@ -33,6 +33,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
+import tools.jackson.databind.json.JsonMapper;
 
 /** Validation d'un reçu de bout en bout : serveur réel, session, CSRF, multipart, base et dossier temporaires. */
 @RealServerTest
@@ -541,5 +542,61 @@ class RecuRealServerTest {
 
         assertThat(reponse.statut()).isEqualTo(415);
         assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Format non accepté.", "code", "FORMAT_NON_ACCEPTE"));
+    }
+
+    /** Un JSON brut : la valeur testée n'est pas une chaîne, et le texte reçu serait sinon converti (123 devenait "123"). */
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+        "fournisseur | 123", "fournisseur | true", "fournisseur | 1.5", "fournisseur | [\"a\"]", "fournisseur | {\"a\":1}",
+        "objet | 123", "objet | false", "objet | [\"a\"]", "objet | {\"a\":1}",
+        "typeDepense | 123", "typeDepense | true", "typeDepense | [\"Fournitures\"]", "typeDepense | {\"a\":1}",
+        "numeroInscriptionTps | 123456789", "numeroInscriptionTps | true", "numeroInscriptionTps | [\"1\"]", "numeroInscriptionTps | {\"a\":1}",
+        "numeroInscriptionTvq | 123456789", "numeroInscriptionTvq | false", "numeroInscriptionTvq | [\"1\"]", "numeroInscriptionTvq | {\"a\":1}",
+    })
+    void unTexteRecuEnJsonDoitEtreUneChaine(String champ, String jsonBrut) throws IOException {
+        Etat avant = etat();
+        Map<String, Object> valeurs = RecuRequests.valeurs();
+        valeurs.put(champ, "@@@");
+        String json = JsonMapper.builder().build().writeValueAsString(RecuRequests.corps(valeurs)).replace("\"@@@\"", jsonBrut);
+
+        Reponse reponse = RecuRequests.validerJson(client, json, RecuRequests.png());
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "La requête est invalide.", "code", "REQUETE_INVALIDE"));
+        assertThat(etat()).isEqualTo(avant);
+    }
+
+    /** Espace de largeur nulle, inversion d'affichage, indicateur d'ordre, trait d'union conditionnel : invisibles à l'écran, ils changeraient le sens lu. */
+    @ParameterizedTest
+    @CsvSource({"fournisseur, 200B", "fournisseur, 202E", "fournisseur, FEFF", "fournisseur, 00AD", "objet, 200B", "objet, 202E", "objet, 2066"})
+    void unCaractereDeFormatEstRefuse(String champ, String pointDeCode) {
+        Reponse reponse = validerAvec(champ, "Fournisseur" + Character.toString(Integer.parseInt(pointDeCode, 16)) + "x");
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json().get("champs")).isEqualTo(List.of(Map.of("champ", champ, "code", "FORMAT")));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> valeursDe(Reponse reponse) {
+        return (Map<String, Object>) reponse.json().get("valeurs");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"objet", "numeroInscriptionTps", "numeroInscriptionTvq"})
+    void unTexteFacultatifPerdSesEspacesEnBordure(String champ) {
+        Reponse reponse = validerAvec(champ, "  123 45  ");
+
+        assertThat(reponse.statut()).isEqualTo(201);
+        assertThat(valeursDe(reponse)).containsEntry(champ, "123 45");
+    }
+
+    /** Un numéro fait d'espaces ne doit pas passer pour un numéro présent : l'alerte de numéros manquants compte sur le vide. */
+    @ParameterizedTest
+    @CsvSource({"objet, '   '", "objet, ''", "numeroInscriptionTps, '   '", "numeroInscriptionTps, ''", "numeroInscriptionTvq, '   '"})
+    void unTexteFacultatifVideOuFaitDEspacesDevientVide(String champ, String valeur) {
+        Reponse reponse = validerAvec(champ, valeur);
+
+        assertThat(reponse.statut()).isEqualTo(201);
+        assertThat(valeursDe(reponse).get(champ)).isNull();
     }
 }
