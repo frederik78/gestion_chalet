@@ -242,7 +242,7 @@ class RecuReadingRealServerTest {
     }
 
     @Test
-    void cs11_surLesLecturesDesDimensionsTropGrandesDonnent400SansDecodage() {
+    void cs11_surLesLecturesDesDimensionsTropGrandesDonnent400() {
         Reponse aLaLimite = RecuRequests.lire(client, RecuRequests.entetePng(8000, 8000));
         assertThat(aLaLimite.statut()).isEqualTo(200);
 
@@ -267,7 +267,7 @@ class RecuReadingRealServerTest {
     }
 
     @Test
-    void ca70_surLesLecturesSansPhotoDonne400() {
+    void surLesLecturesSansPhotoDonne400() {
         Reponse reponse = RecuRequests.lire(client);
 
         assertThat(reponse.statut()).isEqualTo(400);
@@ -363,7 +363,7 @@ class RecuReadingRealServerTest {
     }
 
     @Test
-    void ca07_uneGrandeImageEstReduiteAuCoteConfigure() throws IOException {
+    void uneGrandeImageEstReduiteAuCoteConfigure() throws IOException {
         RecuRequests.lire(client, RecuRequests.jpegDeuxMoities(4000, 1000));
 
         java.awt.image.BufferedImage copie = image(modele.calls.getFirst().images().getFirst());
@@ -383,7 +383,7 @@ class RecuReadingRealServerTest {
 
     /** Photos de téléphone : profil ICC et segment MPF, générés. Un PNG ou un JPEG dont le corps manque passe le contrôle (D-41) : pas de copie, donc ECHEC sans appel. */
     @Test
-    void ca07_unJpegAvecProfilIccEtMpfEstLu() {
+    void ca07_unProfilIccUnMpfUnXmpEtDesDonneesApresLaFinDImageNeSontPasEnvoyes() {
         byte[] icc = java.awt.color.ICC_Profile.getInstance(java.awt.color.ColorSpace.CS_sRGB).getData();
         byte[] entete = "ICC_PROFILE\0\1\1".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
         byte[] segmentIcc = java.util.Arrays.copyOf(entete, entete.length + icc.length);
@@ -391,14 +391,22 @@ class RecuReadingRealServerTest {
         byte[] photo = RecuRequests.avecSegment(RecuRequests.jpegDeuxMoities(40, 20), 0xE2, segmentIcc);
         photo = RecuRequests.avecSegment(photo, 0xE2, "MPF\0II*\0\0\0\0\0".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
 
-        Reponse reponse = RecuRequests.lire(client, photo);
+        photo = RecuRequests.avecSegment(photo, 0xE1, "http://ns.adobe.com/xap/1.0/\0XMP-TEMOIN".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+        byte[] fin = "APRES-LA-FIN-TEMOIN".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        byte[] complete = java.util.Arrays.copyOf(photo, photo.length + fin.length);
+        System.arraycopy(fin, 0, complete, photo.length, fin.length);
+
+        Reponse reponse = RecuRequests.lire(client, complete);
 
         assertThat(reponse.statut()).isEqualTo(200);
-        assertThat(modele.calls).hasSize(1);
+        byte[] envoyee = modele.calls.getFirst().images().getFirst();
+        for (String temoin : List.of("ICC_PROFILE", "MPF", "ns.adobe.com", "XMP-TEMOIN", "APRES-LA-FIN-TEMOIN")) {
+            assertThat(contient(envoyee, temoin)).as(temoin).isFalse();
+        }
     }
 
     @Test
-    void ca04_uneImageTroqueeApresSonEnTeteDonneEchecSansAppelAuModele() {
+    void uneImageTronqueeApresSonEnTeteDonneEchecSansAppelAuModele() {
         Reponse reponse = RecuRequests.lire(client, RecuRequests.entetePng(100, 100));
 
         assertThat(reponse.statut()).isEqualTo(200);

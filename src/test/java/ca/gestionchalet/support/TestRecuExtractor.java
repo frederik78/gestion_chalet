@@ -34,7 +34,7 @@ public class TestRecuExtractor implements RecuExtractor {
     public Map<String, Object> extract(List<byte[]> images, List<String> expenseTypes) {
         calls.add(new Call(images, expenseTypes));
         if (failing) {
-            throw new RecuExtractionException("panne d'essai");
+            throw new RecuExtractionException(RecuExtractionException.Failure.UNREACHABLE);
         }
         return fields;
     }

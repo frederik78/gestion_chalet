@@ -1,5 +1,8 @@
 package ca.gestionchalet.client;
 
+import ca.gestionchalet.client.RecuExtractionException.Failure;
+import com.anthropic.errors.AnthropicIoException;
+import com.anthropic.errors.AnthropicServiceException;
 import java.util.List;
 import java.util.Map;
 import org.springframework.ai.anthropic.AnthropicChatOptions;
@@ -62,13 +65,17 @@ public class AnthropicRecuExtractor implements RecuExtractor {
             Generation result = response == null ? null : response.getResult();
             String text = result == null ? null : result.getOutput().getText();
             if (text == null) {
-                throw new RecuExtractionException("réponse sans texte");
+                throw new RecuExtractionException(Failure.INVALID_RESPONSE);
             }
             return text;
         } catch (RecuExtractionException e) {
             throw e;
+        } catch (AnthropicIoException e) {
+            throw new RecuExtractionException(Failure.UNREACHABLE);
+        } catch (AnthropicServiceException e) {
+            throw new RecuExtractionException(Failure.SERVICE_ERROR);
         } catch (RuntimeException e) {
-            throw new RecuExtractionException(e.getClass().getName());
+            throw new RecuExtractionException(Failure.INVALID_RESPONSE);
         }
     }
 
@@ -89,11 +96,11 @@ public class AnthropicRecuExtractor implements RecuExtractor {
         try {
             JsonNode root = JSON.readTree(text);
             if (root == null || !root.isObject()) {
-                throw new RecuExtractionException("réponse qui n'est pas un objet JSON");
+                throw new RecuExtractionException(Failure.INVALID_RESPONSE);
             }
             return JSON.convertValue(root, JSON.getTypeFactory().constructMapType(Map.class, String.class, Object.class));
         } catch (JacksonException e) {
-            throw new RecuExtractionException("réponse qui n'est pas du JSON");
+            throw new RecuExtractionException(Failure.INVALID_RESPONSE);
         }
     }
 }
