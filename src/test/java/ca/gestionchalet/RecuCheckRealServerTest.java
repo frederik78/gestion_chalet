@@ -7,7 +7,9 @@ import ca.gestionchalet.support.RecuRequests;
 import ca.gestionchalet.support.TestClient;
 import ca.gestionchalet.support.TestClient.Reponse;
 import ca.gestionchalet.support.TestDoublesConfiguration;
+import java.io.ByteArrayInputStream;
 import java.net.http.HttpRequest;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +33,8 @@ class RecuCheckRealServerTest {
 
     private static final String CHEMIN = "/api/recus/controles";
     private static final JsonMapper JSON = JsonMapper.builder().build();
+    private static final Map<String, String> TROP_VOLUMINEUX = Map.of("erreur", "La requête est trop volumineuse.", "code", "TAILLE_EXCESSIVE");
+    private static final String VALEURS_VALIDES = "\"valeurs\":{\"date\":\"2026-06-16\",\"fournisseur\":\"F\",\"typeDepense\":\"Fournitures\",\"montantTotalCents\":2500}";
     private static final Map<String, String> DOUBLON = Map.of("code", "DOUBLON_POSSIBLE", "message", "Doublon possible");
 
     @LocalServerPort
@@ -151,7 +155,7 @@ class RecuCheckRealServerTest {
     }
 
     @Test
-    void cs15_uneInjectionEnFournisseurNeTrouveAucunDoublon() {
+    void uneInjectionEnFournisseurNeTrouveAucunDoublon() {
         enregistrer(saisie(unique("Témoin injection"), "2026-06-16", 2500));
 
         Reponse reponse = controler(saisie("' OR 1=1--", "2026-06-16", 2500));
@@ -180,9 +184,17 @@ class RecuCheckRealServerTest {
         assertThat(reponse.json()).containsEntry("code", "CSRF_INVALIDE");
     }
 
+    @Test
+    void cs02_unJetonFauxDonne403() {
+        Reponse reponse = client.appelSansJeton("POST", CHEMIN, "{\"valeurs\":{}}", "faux");
+
+        assertThat(reponse.statut()).isEqualTo(403);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Jeton de sécurité absent ou invalide.", "code", "CSRF_INVALIDE"));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x"})
-    void cs10_unAutreTypeDeContenuDonne415(String type) {
+    void unAutreTypeDeContenuDonne415(String type) {
         Reponse reponse = client.envoyer(client.requete(CHEMIN).header("Content-Type", type).header("X-XSRF-TOKEN", client.cookie("XSRF-TOKEN"))
                 .POST(HttpRequest.BodyPublishers.ofString("{}")).build());
 
@@ -194,19 +206,49 @@ class RecuCheckRealServerTest {
         Reponse reponse = client.appelAvecJeton("POST", CHEMIN, "{\"valeurs\":{\"fournisseur\":\"" + "x".repeat(64 * 1024) + "\"}}");
 
         assertThat(reponse.statut()).isEqualTo(413);
+        assertThat(reponse.json()).isEqualTo(TROP_VOLUMINEUX);
+    }
+
+    @Test
+    void cs08_unCorpsFragmenteAuDelaDe64KoDonne413() {
+        byte[] corps = ("{\"valeurs\":{\"fournisseur\":\"" + "x".repeat(64 * 1024) + "\"}}").getBytes(StandardCharsets.UTF_8);
+
+        Reponse reponse = client.envoyer(client.requete(CHEMIN).header("Content-Type", "application/json").header("X-XSRF-TOKEN", client.cookie("XSRF-TOKEN"))
+                .POST(HttpRequest.BodyPublishers.ofInputStream(() -> new ByteArrayInputStream(corps))).build());
+
+        assertThat(reponse.statut()).isEqualTo(413);
+        assertThat(reponse.json()).isEqualTo(TROP_VOLUMINEUX);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {
         "pas du json",
         "{\"valeurs\":{\"date\":\"2026-06-16\",\"fournisseur\":12,\"typeDepense\":\"Fournitures\",\"montantTotalCents\":2500}}",
-        "{\"valeurs\":{\"date\":\"2026-06-16\",\"fournisseur\":{\"@class\":\"java.lang.Runtime\"},\"typeDepense\":\"Fournitures\",\"montantTotalCents\":2500}}",
         "{\"valeurs\":{\"date\":\"16/06/2026\",\"fournisseur\":\"F\",\"typeDepense\":\"Fournitures\",\"montantTotalCents\":2500}}",
         "{\"valeurs\":{\"date\":\"2026-06-16\",\"fournisseur\":\"F\",\"typeDepense\":\"Fournitures\",\"montantTotalCents\":25.5}}",
         "{\"valeurs\":{\"date\":\"2026-06-16\",\"fournisseur\":\"F\",\"typeDepense\":\"Fournitures\",\"montantTotalCents\":\"2500\"}}",
+        "{\"montantTotalLuCents\":25.5," + VALEURS_VALIDES + "}",
+        "{\"montantTotalLuCents\":\"2500\"," + VALEURS_VALIDES + "}",
         "{\"recuId\":\"pas-un-uuid\",\"valeurs\":{\"date\":\"2026-06-16\",\"fournisseur\":\"F\",\"typeDepense\":\"Fournitures\",\"montantTotalCents\":2500}}",
     })
-    void cs27_uneConversionNonStricteEstRefusee(String corps) {
+    void uneConversionNonStricteEstRefusee(String corps) {
+        assertRequeteInvalide(corps);
+    }
+
+    @Test
+    void cs27_unObjetTypeEnFournisseurEstRefuse() {
+        assertRequeteInvalide("{\"valeurs\":{\"date\":\"2026-06-16\",\"fournisseur\":{\"@class\":\"java.lang.Runtime\"},\"typeDepense\":\"Fournitures\",\"montantTotalCents\":2500}}");
+    }
+
+    /** Sous la limite de 64 Ko : c'est la profondeur ou la longueur du nombre qui doit être refusée, sans débordement de pile. */
+    @Test
+    void uneProfondeurOuUnNombreDemesuresSontRefuses() {
+        assertRequeteInvalide("[".repeat(30_000));
+        assertRequeteInvalide("{\"a\":".repeat(9_000));
+        assertRequeteInvalide("{\"montantTotalLuCents\":" + "9".repeat(60_000) + "," + VALEURS_VALIDES + "}");
+    }
+
+    private void assertRequeteInvalide(String corps) {
         Reponse reponse = client.appelAvecJeton("POST", CHEMIN, corps);
 
         assertThat(reponse.statut()).isEqualTo(400);
@@ -215,8 +257,8 @@ class RecuCheckRealServerTest {
 
     /** U+202E (inversion du sens), U+0000, U+2028 : refusés comme à la validation. */
     @ParameterizedTest
-    @ValueSource(strings = {"F\u202E", "F\u0000x", "F x"})
-    void cs27_unCaractereDeFormatEstRefuse(String fournisseur) {
+    @ValueSource(strings = {"F\u202E", "F\u0000x", "F\u2028x"})
+    void unCaractereDeFormatEstRefuse(String fournisseur) {
         Reponse reponse = controler(saisie(fournisseur, "2026-06-16", 2500));
 
         assertThat(reponse.statut()).isEqualTo(400);
@@ -237,7 +279,7 @@ class RecuCheckRealServerTest {
     }
 
     @Test
-    void cs21_aucuneValeurDuControleNeVaAuxJournaux(CapturedOutput journaux) {
+    void aucuneValeurDuControleNeVaAuxJournaux(CapturedOutput journaux) {
         String marque = "MarqueJournal" + UUID.randomUUID();
         Map<String, Object> valeurs = saisie(marque, "2026-06-16", 2500);
 
@@ -248,9 +290,11 @@ class RecuCheckRealServerTest {
     }
 
     @Test
-    void cs06_laReponseDuControlePorteLesEnTetesDeSecurite() {
+    void cs09_laReponseDuControlePorteLesEnTetesDeSecurite() {
         Reponse reponse = controler(saisie(unique("En-têtes"), "2026-06-16", 2500));
 
+        assertThat(reponse.enTete("Content-Security-Policy")).isEqualTo("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; "
+                + "connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
         assertThat(reponse.enTete("X-Content-Type-Options")).isEqualTo("nosniff");
         assertThat(reponse.enTete("Cache-Control")).contains("no-store");
     }
