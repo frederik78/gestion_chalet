@@ -3,7 +3,7 @@ id: 001-04
 titre: Alertes et doublons
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: À faire
+statut: En cours
 depend_de: [001-02]
 criteres: [CA09, CA10, CA11, CA12, CA21, CA22, CA23, CA24, CA25, CA26, CA27, CA29, CA80]
 branche: feat/001-04-alertes-doublons
