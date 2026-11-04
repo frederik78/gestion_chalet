@@ -58,18 +58,24 @@ class PhotoValidationServiceTest {
         assertThatThrownBy(() -> unMegapixel.check(List.of(fichier(RecuRequests.entetePng(1000, 1001))))).isInstanceOf(ImageTooLargeException.class);
     }
 
-    /** Un flux qui ne finit jamais de fournir des octets, et les compte. */
-    private static final class CountingEndlessStream extends InputStream {
+    /** Un flux de 16 Mo, la taille d'une lourde photo, qui compte ce qu'on en lit. */
+    private static final class CountingStream extends InputStream {
+
+        private static final long LONGUEUR = 16L * 1024 * 1024;
+
 
         private final byte[] debut;
         private long lus;
 
-        CountingEndlessStream(byte[] debut) {
+        CountingStream(byte[] debut) {
             this.debut = debut;
         }
 
         @Override
         public int read() {
+            if (lus >= LONGUEUR) {
+                return -1;
+            }
             int octet = lus < debut.length ? debut[(int) lus] & 0xFF : 0;
             lus++;
             return octet;
@@ -78,11 +84,11 @@ class PhotoValidationServiceTest {
 
     private static final class CountingFile extends MockMultipartFile {
 
-        private final CountingEndlessStream flux;
+        private final CountingStream flux;
 
         CountingFile(byte[] debut) {
             super("photos", "x", "image/png", debut);
-            flux = new CountingEndlessStream(debut);
+            flux = new CountingStream(debut);
         }
 
         @Override
@@ -92,7 +98,7 @@ class PhotoValidationServiceTest {
     }
 
     /**
-     * 192 Mo de pixels si l'image était décodée (3 octets x 8000 x 8001), et un flux sans fin : le refus vient de l'en-tête, avec une
+     * 192 Mo de pixels si l'image était décodée (3 octets x 8000 x 8001) : le refus vient de l'en-tête, avec une
      * lecture bornée et moins de 8 Mo alloués.
      */
     private static Stream<Arguments> entetesEnormes() {

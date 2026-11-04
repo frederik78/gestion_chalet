@@ -165,6 +165,7 @@ class PhotoContentRealServerTest {
     private static Stream<Arguments> imagesTropGrandes() {
         return Stream.of(
                 Arguments.of("PNG de 64 Mpx + une ligne", RecuRequests.entetePng(8000, 8001)),
+                Arguments.of("PNG de 64 Mpx + un pixel", RecuRequests.entetePng(1, 64_000_001)),
                 Arguments.of("PNG de 4 Gpx", RecuRequests.entetePng(65536, 65536)),
                 Arguments.of("PNG aux dimensions maximales", RecuRequests.entetePng(Integer.MAX_VALUE, Integer.MAX_VALUE)),
                 Arguments.of("JPEG de 400 Mpx", RecuRequests.jpegAnnoncant(20000, 20000)));
