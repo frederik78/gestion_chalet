@@ -4,7 +4,7 @@ titre: Reprise de la copie
 prd: docs/prd/001-recus.md
 besoin: F-01
 statut: À faire
-depend_de: [001-06]
+depend_de: [001-11]
 criteres: [CA46, CA47, CA48, CA49, CA50, CA51, CA52, CA53, CA54, CS18]
 branche: feat/001-08-reprise-copie
 commits: []

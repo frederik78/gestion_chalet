@@ -1,24 +1,24 @@
 ---
 id: 001-06
-titre: Copie vers Drive et le Sheet
+titre: Dépôt Drive et ligne écrite
 prd: docs/prd/001-recus.md
 besoin: F-01
 statut: À faire
 depend_de: [001-03, 001-05]
-criteres: [CA13, CA17, CA30, CA31, CA32, CA38, CA39, CA40, CA41, CA42, CA43, CA44, CA45, CS12, CS16, CS26]
-branche: feat/001-06-copie-drive-sheet
+criteres: [CA13, CA17, CA38, CA39, CA40, CA44, CA45, CS12, CS16, CS26]
+branche: feat/001-06-depot-drive-ligne
 commits: []
 revue:
 ---
 
 ## Objectif
-Un reçu validé part sur Drive pour ses photos, puis dans le bon fichier et le bon onglet du Sheet pour sa ligne.
+Un reçu validé dépose ses photos sur Drive, puis écrit sa ligne dans un onglet au format habituel.
 
 ## Périmètre
 - Dans : Dépôt des photos avant l'écriture de la ligne, sans attendre dans la réponse de validation
-- Dans : Fichier et onglet selon l'année, colonnes repérées par leur en-tête, colonne PHOTO, NOTES, protection contre l'injection de formules
-- Dans : Placement simple de la ligne dans une section existante
-- Hors : Création de sections et placement selon la date (001-07), reprise après panne (001-08).
+- Dans : Valeurs écrites dans la ligne, colonne PHOTO, NOTES, protection contre l'injection de formules
+- Hors : Fichier et onglet selon l'année, colonnes repérées par leur en-tête, colonne PHOTO absente, placement dans une section, blocage sur une structure inattendue (001-11) ; création de sections et placement selon la date (001-07) ; reprise après panne (001-08).
+- Limite : tant que 001-11 n'est pas livrée, ne pas utiliser sur un vrai Sheet.
 
 ## Critères d'acceptation
 Les critères listés dans l'en-tête (`criteres`), tels que définis dans le PRD. Chaque critère doit être couvert par au moins un test
