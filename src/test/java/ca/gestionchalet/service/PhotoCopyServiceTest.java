@@ -55,6 +55,17 @@ class PhotoCopyServiceTest {
         assertThat(copier(service, RecuRequests.jpeg(8))).isPresent();
     }
 
+    /** Mesuré sur le fichier de la revue : à cette échelle le décodeur natif ne rend plus la main, un arrêt pendant le décodage ne suffit pas. */
+    @Test
+    void uneGrandeImageAuxBalayagesInnombrablesEstRefuseeSansLaDecoder() {
+        byte[] hostile = RecuRequests.avecBalayagesVides(RecuRequests.jpegProgressif(4000), 100_000);
+        PhotoCopyService service = service(20000, 1, 32, LONG, LONG);
+
+        Optional<byte[]> copie = assertTimeoutPreemptively(ofSeconds(5), () -> copier(service, hostile));
+
+        assertThat(copie).isEmpty();
+    }
+
     @Test
     void unDecodageAuDelaDuDelaiEstInterrompu() {
         byte[] hostile = RecuRequests.avecBalayagesVides(RecuRequests.jpegProgressif(512), 100_000);

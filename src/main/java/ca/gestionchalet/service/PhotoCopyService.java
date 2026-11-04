@@ -46,7 +46,7 @@ public class PhotoCopyService {
     }
 
     /**
-     * Vide si la photo, admise sur son seul en-tête (D-41), ne se décode pas : erreur du décodeur sur un fichier hostile ou tronqué, bornes de décodage franchies, ou place attendue
+     * Vide si la photo, admise sur son seul en-tête (D-41), ne se décode pas : erreur du décodeur sur un fichier hostile ou tronqué, délai de décodage dépassé, ou place attendue
      * trop longtemps. Le sémaphore reste écrit à la main : {@code @ConcurrencyLimit} de Spring 7 n'offre que {@code BLOCK}, sans délai, ce qui bloquait toutes les lectures, ou
      * {@code REJECT}, immédiat, qui ferait échouer une lecture dès qu'une autre décode.
      */
@@ -61,6 +61,10 @@ public class PhotoCopyService {
             return Optional.empty();
         }
         try {
+            if (format == PhotoFormat.JPEG && hasTooManyScans(file)) {
+                LOG.warn("Copie d'une photo impossible : trop de balayages");
+                return Optional.empty();
+            }
             int orientation = format == PhotoFormat.JPEG ? readOrientation(file) : ExifOrientation.NONE;
             return decodeAndEncode(file, format, orientation);
         } catch (IOException | RuntimeException e) {
@@ -68,6 +72,12 @@ public class PhotoCopyService {
             return Optional.empty();
         } finally {
             decodings.release();
+        }
+    }
+
+    private boolean hasTooManyScans(MultipartFile file) throws IOException {
+        try (InputStream content = file.getInputStream()) {
+            return JpegScanCounter.exceeds(content, rules.passesDecodageMax());
         }
     }
 
@@ -91,11 +101,11 @@ public class PhotoCopyService {
             ImageReadParam param = reader.getDefaultReadParam();
             int subsampling = Math.max(1, longSide / rules.coteMaxPixels());
             param.setSourceSubsampling(subsampling, subsampling, 0, 0);
-            DecodingGuard guard = new DecodingGuard(reader, rules.passesDecodageMax(), System.nanoTime() + rules.delaiDecodage().toNanos());
+            DecodingGuard guard = new DecodingGuard(reader, System.nanoTime() + rules.delaiDecodage().toNanos());
             reader.addIIOReadUpdateListener(guard);
             BufferedImage decoded = reader.read(0, param);
             if (guard.stopped) {
-                LOG.warn("Copie d'une photo impossible : bornes de décodage franchies");
+                LOG.warn("Copie d'une photo impossible : délai de décodage dépassé");
                 return Optional.empty();
             }
             int targetLongSide = Math.min(longSide, rules.coteMaxPixels());
@@ -155,41 +165,33 @@ public class PhotoCopyService {
         }
     }
 
-    /** Interrompt un décodage trop long : le JDK refait une passe complète à chaque balayage d'un JPEG progressif, même vide. */
+    /** Interrompt un décodage trop long ; le nombre de balayages, lui, est contrôlé avant le décodage par {@link JpegScanCounter}. */
     private static final class DecodingGuard implements IIOReadUpdateListener {
 
         private final ImageReader reader;
-        private final int maxPasses;
         private final long deadlineNanos;
-        private int passes;
         private boolean stopped;
 
-        private DecodingGuard(ImageReader reader, int maxPasses, long deadlineNanos) {
+        private DecodingGuard(ImageReader reader, long deadlineNanos) {
             this.reader = reader;
-            this.maxPasses = maxPasses;
             this.deadlineNanos = deadlineNanos;
         }
 
-        private void stopIf(boolean exceeded) {
-            if (exceeded && !stopped) {
+        private void stopIfLate() {
+            if (!stopped && System.nanoTime() - deadlineNanos > 0) {
                 stopped = true;
                 reader.abort();
             }
         }
 
-        private boolean isLate() {
-            return System.nanoTime() - deadlineNanos > 0;
-        }
-
         @Override
         public void passStarted(ImageReader source, BufferedImage image, int pass, int minPass, int maxPass, int minX, int minY, int periodX, int periodY, int[] bands) {
-            passes++;
-            stopIf(passes > maxPasses || isLate());
+            stopIfLate();
         }
 
         @Override
         public void imageUpdate(ImageReader source, BufferedImage image, int minX, int minY, int width, int height, int periodX, int periodY, int[] bands) {
-            stopIf(isLate());
+            stopIfLate();
         }
 
         @Override
