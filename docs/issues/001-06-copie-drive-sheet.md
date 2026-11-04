@@ -30,3 +30,4 @@ Tests rouges puis verts avec un Sheet doublé en mémoire, `scripts/verify-clean
 ## Notes
 - 2026-11-01 : Q-07 reste à confirmer sur un fichier d'essai (section 13 du PRD).
 - 2026-11-03 : Dépend aussi de 001-03 : aucune photo ne part vers Drive tant que le contenu des images n'est pas contrôlé sur toutes les routes (D-40).
+- 2026-11-04 : Reporté de la relecture de 001-05 : la clause « copiés sans doublon » de CA66 et la relance immédiate de CA65 et de la section 7.6 du PRD ne sont prouvables qu'avec la copie. Les tester ici, en plus des critères de cette issue. Le premier appel à `accessToken()` arrive ici : une clé changée n'est détectée qu'à partir de cette issue.

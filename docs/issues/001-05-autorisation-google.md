@@ -28,3 +28,4 @@ Tests rouges puis verts avec un serveur local doublant Google, `scripts/verify-c
 
 ## Notes
 - 2026-11-01 : Q-12 reste à confirmer dans la documentation de Google (section 13 du PRD).
+- 2026-11-04 : Mineurs de la relecture n° 1, non corrigés d'office (`docs/reviews/001-05.md`) : m1 `withPkce()` redondant ; m3 `HEAD` répond 503 alors que Google est configuré ; m5 `"google"` répété dans 4 classes.
