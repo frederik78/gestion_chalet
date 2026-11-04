@@ -51,7 +51,7 @@ class RecuServiceTest {
     private final RecuMapper mapper = new RecuMapperImpl();
     private final Clock horloge = Clock.fixed(Instant.parse("2026-10-11T12:00:00Z"), ZoneOffset.UTC);
     private final RecuService service = new RecuService(depot, stockage, mapper,
-            new PhotoValidationService(new RecuRules(List.of("Fournitures"), 5, 1_000_000L, List.of("image/jpeg", "image/png"))), horloge);
+            new PhotoValidationService(new RecuRules(List.of("Fournitures"), 5, 1_000_000L, List.of("image/jpeg", "image/png"), 64L)), horloge);
     private final ValeursDTO valeurs = new ValeursDTO(LocalDate.of(2026, 10, 11), "F", null, "Fournitures", null, null, null, 1150L, null, null);
 
     /** Le service compte sur une transaction pour retirer les fichiers : sa synchronisation est ouverte à la main, sans Spring. */

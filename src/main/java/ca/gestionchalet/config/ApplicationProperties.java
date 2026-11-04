@@ -21,6 +21,7 @@ import org.springframework.validation.annotation.Validated;
  * @param typesDepense liste fermée des types de dépense, dans l'orthographe du Sheet
  * @param photosParRecuMax nombre maximal de photos d'un reçu
  * @param formats types de média acceptés pour une photo
+ * @param dimensionsMaxMegapixels dimensions maximales d'une image, en mégapixels
  * @param fuseauHoraire fuseau de la date du jour, à laquelle une date de reçu ne peut être postérieure
  */
 @Validated
@@ -29,6 +30,7 @@ public record ApplicationProperties(@Valid @NotNull Security securite, @NotNull 
         @NotEmpty List<String> typesDepense,
         @Min(1) int photosParRecuMax,
         @NotEmpty List<String> formats,
+        @Min(1) long dimensionsMaxMegapixels,
         @NotNull ZoneId fuseauHoraire) {
 
     public ApplicationProperties {

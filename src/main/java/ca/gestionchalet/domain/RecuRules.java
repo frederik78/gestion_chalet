@@ -9,12 +9,14 @@ import java.util.List;
  * @param photosParRecuMax nombre maximal de photos d'un reçu, annoncé à la PWA
  * @param tailleParPhotoMaxOctets taille maximale d'une photo, annoncée à la PWA
  * @param formats types de média acceptés pour une photo, annoncés à la PWA
+ * @param dimensionsMaxMegapixels dimensions maximales d'une image, en mégapixels
  */
 public record RecuRules(
         List<String> typesDepense,
         int photosParRecuMax,
         long tailleParPhotoMaxOctets,
-        List<String> formats) {
+        List<String> formats,
+        long dimensionsMaxMegapixels) {
 
     public RecuRules {
         typesDepense = List.copyOf(typesDepense);

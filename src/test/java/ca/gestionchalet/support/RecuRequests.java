@@ -6,12 +6,14 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.http.HttpRequest;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.zip.CRC32;
 import javax.imageio.ImageIO;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -64,6 +66,31 @@ public final class RecuRequests {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /** La signature et un en-tête PNG annonçant ces dimensions, sans aucun pixel : une image légère, aussi grande qu'on veut. */
+    public static byte[] entetePng(int largeur, int hauteur) {
+        ByteBuffer bloc = ByteBuffer.allocate(4 + 13);
+        bloc.put("IHDR".getBytes(StandardCharsets.US_ASCII)).putInt(largeur).putInt(hauteur);
+        bloc.put(new byte[] {8, 2, 0, 0, 0});
+        CRC32 crc = new CRC32();
+        crc.update(bloc.array());
+        return ByteBuffer.allocate(8 + 4 + 17 + 4)
+                .put(new byte[] {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'})
+                .putInt(13).put(bloc.array()).putInt((int) crc.getValue())
+                .array();
+    }
+
+    /** Un vrai JPEG dont l'en-tête est réécrit pour annoncer ces dimensions. */
+    public static byte[] jpegAnnoncant(int largeur, int hauteur) {
+        byte[] octets = jpeg(4);
+        for (int i = 2; i < octets.length - 8; i++) {
+            if (octets[i] == (byte) 0xFF && octets[i + 1] == (byte) 0xC0) {
+                ByteBuffer.wrap(octets, i + 5, 4).putShort((short) hauteur).putShort((short) largeur);
+                return octets;
+            }
+        }
+        throw new IllegalStateException("En-tête de trame absent");
     }
 
     public static Reponse valider(TestClient client, Map<String, Object> corps, byte[]... photos) {

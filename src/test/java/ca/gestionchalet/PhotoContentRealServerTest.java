@@ -8,11 +8,13 @@ import ca.gestionchalet.support.RecuRequests;
 import ca.gestionchalet.support.TestClient;
 import ca.gestionchalet.support.TestClient.Reponse;
 import ca.gestionchalet.support.TestDoublesConfiguration;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -117,5 +119,83 @@ class PhotoContentRealServerTest {
             assertThat(fichier.getFileName().toString()).endsWith(extension);
             assertThat(Files.readAllBytes(fichier)).isEqualTo(image);
         });
+    }
+
+    private static byte[] coller(byte[]... morceaux) {
+        ByteArrayOutputStream octets = new ByteArrayOutputStream();
+        for (byte[] morceau : morceaux) {
+            octets.writeBytes(morceau);
+        }
+        return octets.toByteArray();
+    }
+
+    private static Stream<Arguments> entetesIllisibles() {
+        byte[] signaturePng = Arrays.copyOf(RecuRequests.png(4), 8);
+        byte[] signatureJpeg = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF};
+        byte[] html = texte("<!doctype html><html><script>alert(1)</script></html>");
+        return Stream.of(
+                Arguments.of("signature PNG seule", signaturePng),
+                Arguments.of("signature PNG puis HTML", coller(signaturePng, html)),
+                Arguments.of("PNG tronqué dans son en-tête", Arrays.copyOf(RecuRequests.png(4), 20)),
+                Arguments.of("PNG de largeur nulle", RecuRequests.entetePng(0, 10)),
+                Arguments.of("signature JPEG seule", signatureJpeg),
+                Arguments.of("signature JPEG puis HTML", coller(signatureJpeg, html)),
+                Arguments.of("JPEG tronqué dans son en-tête", Arrays.copyOf(RecuRequests.jpeg(4), 12)),
+                Arguments.of("JPEG de hauteur nulle", RecuRequests.jpegAnnoncant(10, 0)));
+    }
+
+    /** La signature dit le format ; c'est le lecteur d'en-tête qui dit si le fichier est bien de ce format. */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("entetesIllisibles")
+    void ca69_uneSignatureAccepteeSansEnTeteLisibleDonneImageIllisible(String nature, byte[] contenu) throws IOException {
+        Etat avant = etat();
+
+        Reponse reponse = RecuRequests.validerDeclare(client, RecuRequests.corps(RecuRequests.valeurs()), "image/jpeg", "recu.jpg", contenu);
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Cette image est illisible.", "code", "IMAGE_ILLISIBLE"));
+        assertThat(etat()).isEqualTo(avant);
+    }
+
+    private static Stream<Arguments> imagesTropGrandes() {
+        return Stream.of(
+                Arguments.of("PNG de 64 Mpx + une ligne", RecuRequests.entetePng(8000, 8001)),
+                Arguments.of("PNG de 4 Gpx", RecuRequests.entetePng(65536, 65536)),
+                Arguments.of("PNG aux dimensions maximales", RecuRequests.entetePng(Integer.MAX_VALUE, Integer.MAX_VALUE)),
+                Arguments.of("JPEG de 400 Mpx", RecuRequests.jpegAnnoncant(20000, 20000)));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("imagesTropGrandes")
+    void cs11_uneImageLegereAuxDimensionsExcessivesEstRefuseeSansRienEnregistrer(String nature, byte[] contenu) throws IOException {
+        Etat avant = etat();
+
+        Reponse reponse = RecuRequests.validerDeclare(client, RecuRequests.corps(RecuRequests.valeurs()), "image/png", "recu.png", contenu);
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Les dimensions de cette image sont trop grandes.", "code", "IMAGE_TROP_GRANDE"));
+        assertThat(etat()).isEqualTo(avant);
+    }
+
+    @Test
+    void cs11_uneImageAuxDimensionsMaximalesEstAcceptee() {
+        Reponse reponse = RecuRequests.validerDeclare(client, RecuRequests.corps(RecuRequests.valeurs()), "image/png", "recu.png", RecuRequests.entetePng(8000, 8000));
+
+        assertThat(reponse.statut()).isEqualTo(201);
+    }
+
+    /** Une image valide suivie d'un autre contenu reste cette image : rien ne l'exécutera, elle n'est servie que sous le type de son format. */
+    @Test
+    void cs10_unPngValideSuiviDeHtmlEstConserveCommePngSansReecriture() throws IOException {
+        Etat avant = etat();
+        byte[] contenu = coller(RecuRequests.png(4), texte("<html><script>alert(1)</script></html>"));
+
+        Reponse reponse = RecuRequests.validerDeclare(client, RecuRequests.corps(RecuRequests.valeurs()), "text/html", "recu.html", contenu);
+
+        assertThat(reponse.statut()).isEqualTo(201);
+        assertThat(premierePhoto(reponse)).containsEntry("format", "PNG");
+        List<Path> nouveaux = new ArrayList<>(etat().fichiers());
+        nouveaux.removeAll(avant.fichiers());
+        assertThat(Files.readAllBytes(nouveaux.getFirst())).isEqualTo(contenu);
     }
 }

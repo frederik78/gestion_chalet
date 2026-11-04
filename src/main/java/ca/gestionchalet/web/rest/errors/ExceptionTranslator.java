@@ -1,7 +1,9 @@
 package ca.gestionchalet.web.rest.errors;
 
 import ca.gestionchalet.domain.IdempotencyKeyConflictException;
+import ca.gestionchalet.domain.ImageTooLargeException;
 import ca.gestionchalet.domain.MissingPhotoException;
+import ca.gestionchalet.domain.UnreadableImageException;
 import ca.gestionchalet.domain.UnsupportedPhotoFormatException;
 import ca.gestionchalet.web.rest.errors.ErrorDTO.InvalidFieldDTO;
 import jakarta.servlet.http.HttpServletResponse;
@@ -74,6 +76,16 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
     @ExceptionHandler(MissingPhotoException.class)
     public ResponseEntity<Object> handleMissingPhoto(MissingPhotoException ex, WebRequest request) {
         return handleExceptionInternal(ex, ErrorDTO.of(ErrorCode.PHOTO_MANQUANTE), new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
+    }
+
+    @ExceptionHandler(UnreadableImageException.class)
+    public ResponseEntity<Object> handleUnreadableImage(UnreadableImageException ex, WebRequest request) {
+        return handleExceptionInternal(ex, ErrorDTO.of(ErrorCode.IMAGE_ILLISIBLE), new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
+    }
+
+    @ExceptionHandler(ImageTooLargeException.class)
+    public ResponseEntity<Object> handleImageTooLarge(ImageTooLargeException ex, WebRequest request) {
+        return handleExceptionInternal(ex, ErrorDTO.of(ErrorCode.IMAGE_TROP_GRANDE), new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
     }
 
     @ExceptionHandler(UnsupportedPhotoFormatException.class)

@@ -11,7 +11,7 @@ class ConfigurationMapperTest {
 
     @Test
     void lesTypesEtLesFormatsArriventChacunDansLeurChamp() {
-        RecuRules regles = new RecuRules(List.of("Type"), 5, 15L, List.of("image/png"));
+        RecuRules regles = new RecuRules(List.of("Type"), 5, 15L, List.of("image/png"), 64L);
 
         ConfigurationDTO dto = new ConfigurationMapperImpl().toDto(regles);
 

@@ -1,14 +1,22 @@
 package ca.gestionchalet.service;
 
+import ca.gestionchalet.domain.ImageTooLargeException;
 import ca.gestionchalet.domain.MissingPhotoException;
 import ca.gestionchalet.domain.PhotoFormat;
 import ca.gestionchalet.domain.RecuRules;
+import ca.gestionchalet.domain.UnreadableImageException;
 import ca.gestionchalet.domain.UnsupportedPhotoFormatException;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.SequenceInputStream;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.List;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
+import javax.imageio.stream.MemoryCacheImageInputStream;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -18,6 +26,8 @@ import org.springframework.web.multipart.MultipartFile;
  */
 @Service
 public class PhotoValidationService {
+
+    private static final long PIXELS_PER_MEGAPIXEL = 1_000_000L;
 
     private final RecuRules rules;
 
@@ -37,9 +47,13 @@ public class PhotoValidationService {
         return formats;
     }
 
+    /** Un seul flux par photo : la signature en est lue, puis rejouée pour le lecteur d'en-tête. Une panne à l'ouverture reste une panne, et non un refus de la photo. */
     private PhotoFormat check(MultipartFile file) {
         try (InputStream content = file.getInputStream()) {
-            return acceptedFormat(content.readNBytes(PhotoFormat.SIGNATURE_MAX_LENGTH));
+            byte[] start = content.readNBytes(PhotoFormat.SIGNATURE_MAX_LENGTH);
+            PhotoFormat format = acceptedFormat(start);
+            checkPixels(format, new SequenceInputStream(new ByteArrayInputStream(start), content));
+            return format;
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -49,5 +63,27 @@ public class PhotoValidationService {
         return PhotoFormat.ofSignature(start)
                 .filter(format -> rules.formats().contains(format.mediaType()))
                 .orElseThrow(UnsupportedPhotoFormatException::new);
+    }
+
+    private void checkPixels(PhotoFormat format, InputStream content) {
+        if (pixelsAnnounced(format, content) > rules.dimensionsMaxMegapixels() * PIXELS_PER_MEGAPIXEL) {
+            throw new ImageTooLargeException();
+        }
+    }
+
+    /**
+     * Lit les dimensions dans l'en-tête seul, sans décoder aucun pixel ni allouer aucune image. Les erreurs du décodeur sont celles d'un
+     * fichier hostile : toutes valent un fichier illisible, y compris une exception non vérifiée, et rien de leur message n'est conservé.
+     */
+    private static long pixelsAnnounced(PhotoFormat format, InputStream content) {
+        ImageReader reader = ImageIO.getImageReadersByMIMEType(format.mediaType()).next();
+        try (ImageInputStream header = new MemoryCacheImageInputStream(content)) {
+            reader.setInput(header, true, true);
+            return (long) reader.getWidth(0) * reader.getHeight(0);
+        } catch (IOException | RuntimeException e) {
+            throw new UnreadableImageException();
+        } finally {
+            reader.dispose();
+        }
     }
 }

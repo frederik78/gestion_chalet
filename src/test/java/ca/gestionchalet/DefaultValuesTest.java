@@ -29,6 +29,7 @@ class DefaultValuesTest {
         "spring.servlet.multipart.max-request-size, 75MB",
         "logging.level.org.hibernate.orm.jdbc.error, OFF",
         "recus.photos-par-recu-max, 5",
+        "recus.dimensions-max-megapixels, 64",
         "'recus.formats[0]', image/jpeg",
         "'recus.formats[1]', image/png",
         "recus.fuseau-horaire, America/Montreal",
