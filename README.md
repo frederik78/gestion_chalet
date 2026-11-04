@@ -8,7 +8,7 @@ Projet construit avec la Software Factory (`factory/`). Les règles de travail, 
 - **Prérequis** : Java 25 ; Maven est fourni par le wrapper `./mvnw`
 - **Tests** : `./mvnw test` (voir `AGENTS.md`, section Commandes)
 - **Vérification complète** : `scripts/verify-clean.sh` (tests et analyses dans une copie propre du dépôt, hors IDE ; c'est ce que lance la CI)
-- **Lancer l'application** : `RECUS_SECURITE_CONDENSE_MOT_DE_PASSE='<condensé bcrypt>' RECUS_SECURITE_COOKIE_SECURISE=false ./mvnw spring-boot:run`, voir [`docs/deploiement.md`](docs/deploiement.md)
+- **Lancer l'application** : `RECUS_SECURITE_CONDENSE_MOT_DE_PASSE='<condensé bcrypt>' RECUS_GOOGLE_CLIENT_ID='<identifiant>' RECUS_GOOGLE_CLIENT_SECRET='<secret>' RECUS_GOOGLE_CLE_CHIFFREMENT="$(openssl rand -base64 32)" RECUS_SECURITE_COOKIE_SECURISE=false ./mvnw spring-boot:run`, voir [`docs/deploiement.md`](docs/deploiement.md)
 - **Après un clone** : `./factory/sync.sh` (recrée les alias de skills et, pour Claude Code, les agents, générés et non versionnés)
 
 ## Où trouver quoi
