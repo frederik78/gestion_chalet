@@ -1,0 +1,106 @@
+package ca.gestionchalet.support;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
+
+/** Serveur HTTP local qui double Google : il répond ce que le test choisit, et garde chaque requête reçue. Aucun appel ne quitte la machine. */
+public final class GoogleStub implements AutoCloseable {
+
+    public static final String SHEETS = "https://www.googleapis.com/auth/spreadsheets";
+    public static final String DRIVE_FILE = "https://www.googleapis.com/auth/drive.file";
+    public static final String JETON_RENOUVELLEMENT = "jeton-renouvellement-temoin";
+    public static final String JETON_ACCES = "jeton-acces-temoin";
+
+    /** Une requête reçue : chemin et, pour un formulaire, ses paramètres. */
+    public record Requete(String chemin, Map<String, String> parametres) {
+    }
+
+    private final HttpServer serveur;
+    private final List<Requete> requetes = new CopyOnWriteArrayList<>();
+    private volatile int statut;
+    private volatile String reponse;
+
+    public GoogleStub() throws IOException {
+        serveur = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+        serveur.createContext("/", this::traiter);
+        serveur.start();
+        reinitialiser();
+    }
+
+    public String adresse() {
+        return "http://localhost:" + serveur.getAddress().getPort();
+    }
+
+    public String adresseConsentement() {
+        return adresse() + "/consentement";
+    }
+
+    public String adresseJeton() {
+        return adresse() + "/jeton";
+    }
+
+    public List<Requete> requetes() {
+        return List.copyOf(requetes);
+    }
+
+    /** Tous les droits accordés, avec un jeton de renouvellement. */
+    public void reinitialiser() {
+        requetes.clear();
+        repondreJeton(3600, SHEETS + " " + DRIVE_FILE, JETON_RENOUVELLEMENT);
+    }
+
+    /** {@code jetonRenouvellement} ou {@code droits} à {@code null} : absents de la réponse. */
+    public void repondreJeton(int expireDans, String droits, String jetonRenouvellement) {
+        Map<String, String> champs = new LinkedHashMap<>();
+        champs.put("access_token", JETON_ACCES);
+        champs.put("token_type", "Bearer");
+        if (droits != null) {
+            champs.put("scope", droits);
+        }
+        if (jetonRenouvellement != null) {
+            champs.put("refresh_token", jetonRenouvellement);
+        }
+        String corps = champs.entrySet().stream()
+                .map(champ -> "\"" + champ.getKey() + "\":\"" + champ.getValue() + "\"")
+                .collect(Collectors.joining(","));
+        repondre(200, "{" + corps + ",\"expires_in\":" + expireDans + "}");
+    }
+
+    public void repondre(int statut, String corps) {
+        this.statut = statut;
+        this.reponse = corps;
+    }
+
+    private void traiter(HttpExchange echange) throws IOException {
+        try (echange) {
+            String corps = new String(echange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            requetes.add(new Requete(echange.getRequestURI().getPath(), formulaire(corps)));
+            byte[] octets = reponse.getBytes(StandardCharsets.UTF_8);
+            echange.getResponseHeaders().add("Content-Type", "application/json");
+            echange.sendResponseHeaders(statut, octets.length);
+            echange.getResponseBody().write(octets);
+        }
+    }
+
+    private static Map<String, String> formulaire(String corps) {
+        return Arrays.stream(corps.split("&"))
+                .filter(paire -> paire.contains("="))
+                .map(paire -> paire.split("=", 2))
+                .collect(Collectors.toMap(paire -> paire[0], paire -> URLDecoder.decode(paire[1], StandardCharsets.UTF_8)));
+    }
+
+    @Override
+    public void close() {
+        serveur.stop(0);
+    }
+}

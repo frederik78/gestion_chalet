@@ -4,5 +4,6 @@
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
     <include file="config/liquibase/changelog/20261102120000_added_entity_Recu.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261103120000_added_entity_AutorisationGoogle.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261104120000_added_entity_RecuAlerte.xml" relativeToChangelogFile="false"/>
 </databaseChangeLog>

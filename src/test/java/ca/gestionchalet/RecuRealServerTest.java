@@ -426,8 +426,8 @@ class RecuRealServerTest {
         Reponse reponse = RecuRequests.valider(client, corps, RecuRequests.png());
 
         assertThat(reponse.statut()).isEqualTo(201);
-        assertThat(reponse.json()).containsEntry("etatCopie", "A_COPIER")
-                .containsEntry("motifBlocage", null).containsEntry("version", 1);
+        assertThat(reponse.json()).containsEntry("etatCopie", "BLOQUEE")
+                .containsEntry("motifBlocage", "AUTORISATION_GOOGLE").containsEntry("version", 1);
         assertThat(reponse.corps()).doesNotContain("FAUSSE");
         assertThat(reponse.json().get("id")).isNotEqualTo(idDuClient.toString());
         assertThat(base.queryForObject("select count(*) from recu where id = ?", Long.class, idDuClient.toString())).isZero();
@@ -440,7 +440,7 @@ class RecuRealServerTest {
         Reponse reponse = client.appelAvecJeton("PUT", "/api/recus/" + id, "{\"etatCopie\":\"COPIEE\",\"alertes\":[],\"motifBlocage\":\"FORMULE_PRESENTE\"}");
 
         assertThat(reponse.statut()).isEqualTo(404);
-        assertThat(base.queryForObject("select etat_copie from recu where id = ?", String.class, id)).isEqualTo("A_COPIER");
+        assertThat(base.queryForObject("select etat_copie from recu where id = ?", String.class, id)).isEqualTo("BLOQUEE");
     }
 
     /** Un type qu'une désérialisation polymorphe instancierait : son constructeur laisse une trace. */
@@ -493,7 +493,7 @@ class RecuRealServerTest {
         Reponse reponse = RecuRequests.valider(client, RecuRequests.corps(RecuRequests.valeurs()), photo);
 
         assertThat(reponse.statut()).isEqualTo(201);
-        assertThat(reponse.json()).containsEntry("montantTotalLuCents", null).containsEntry("etatCopie", "A_COPIER");
+        assertThat(reponse.json()).containsEntry("montantTotalLuCents", null).containsEntry("etatCopie", "BLOQUEE");
         List<Path> nouveaux = fichiers().stream().filter(chemin -> !avant.contains(chemin)).toList();
         assertThat(nouveaux).hasSize(1);
         assertThat(Files.readAllBytes(nouveaux.getFirst())).isEqualTo(photo);
@@ -519,8 +519,8 @@ class RecuRealServerTest {
         assertThat(UUID.fromString((String) recu.get("id"))).isNotNull();
         assertThat(recu.get("alertes")).isInstanceOf(List.class);
         assertThat(recu).containsEntry("version", 1).containsEntry("montantTotalLuCents", 30468)
-                .containsEntry("etatCopie", "A_COPIER")
-                .containsEntry("motifBlocage", null).containsEntry("prochaineTentative", null).containsEntry("corrigeLe", null);
+                .containsEntry("etatCopie", "BLOQUEE")
+                .containsEntry("motifBlocage", "AUTORISATION_GOOGLE").containsEntry("prochaineTentative", null).containsEntry("corrigeLe", null);
         assertThat((String) recu.get("valideLe")).isEqualTo(horloge.instant().toString());
 
         Map<String, Object> valeurs = (Map<String, Object>) recu.get("valeurs");

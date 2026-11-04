@@ -2,6 +2,7 @@ package ca.gestionchalet.service;
 
 import ca.gestionchalet.domain.AlertRules;
 import ca.gestionchalet.domain.IdempotencyKeyConflictException;
+import ca.gestionchalet.domain.MotifBlocage;
 import ca.gestionchalet.domain.Photo;
 import ca.gestionchalet.domain.PhotoFormat;
 import ca.gestionchalet.domain.Recu;
@@ -38,9 +39,11 @@ public class RecuService {
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
     private final AlertRules alertRules;
+    private final GoogleAuthorizationService googleAuthorizationService;
 
     public RecuService(RecuRepository recuRepository, PhotoStorage photoStorage, RecuMapper recuMapper,
-            PhotoValidationService photoValidationService, TransactionTemplate transactionTemplate, Clock clock, AlertRules alertRules) {
+            PhotoValidationService photoValidationService, TransactionTemplate transactionTemplate, Clock clock, AlertRules alertRules,
+            GoogleAuthorizationService googleAuthorizationService) {
         this.recuRepository = recuRepository;
         this.photoStorage = photoStorage;
         this.recuMapper = recuMapper;
@@ -48,6 +51,7 @@ public class RecuService {
         this.transactionTemplate = transactionTemplate;
         this.clock = clock;
         this.alertRules = alertRules;
+        this.googleAuthorizationService = googleAuthorizationService;
     }
 
     /**
@@ -93,6 +97,9 @@ public class RecuService {
         Recu recu = Recu.valider(validation.cleIdempotence(), valeurs, fingerprint,
                 validation.montantTotalLuCents(), clock.instant(), photos,
                 alertRules.evaluate(valeurs, validation.montantTotalLuCents(), hasPossibleDuplicate(valeurs, null)));
+        if (!googleAuthorizationService.isValid()) {
+            recu.bloquer(MotifBlocage.AUTORISATION_GOOGLE);
+        }
         return new RecuValidationResult(recuMapper.toDto(recuRepository.saveAndFlush(recu)), true);
     }
 
