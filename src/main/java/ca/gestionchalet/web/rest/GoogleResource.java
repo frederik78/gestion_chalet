@@ -1,6 +1,7 @@
 package ca.gestionchalet.web.rest;
 
 import ca.gestionchalet.service.GoogleAuthorizationService;
+import ca.gestionchalet.service.GoogleErrorCodes;
 import ca.gestionchalet.service.dto.GoogleAuthorizationStateDTO;
 import ca.gestionchalet.web.rest.errors.ErrorCode;
 import ca.gestionchalet.web.rest.errors.ErrorDTO;
@@ -35,12 +36,16 @@ public class GoogleResource {
     }
 
     /**
-     * Le rappel valide est traité par le filtre de Spring Security, qui renvoie ici sans paramètre. Tout autre rappel ({@code state} absent,
-     * faux, d'une autre session ou déjà utilisé) arrive ici tel quel, sans qu'aucun jeton ait été demandé. L'adresse de sortie est fixe.
+     * Le rappel valide est traité par le filtre de Spring Security, qui renvoie ici sans paramètre ; un refus ou un échange en échec, avec {@code error}.
+     * Tout autre rappel ({@code state} absent, faux, d'une autre session ou déjà utilisé) arrive ici tel quel, sans qu'aucun jeton ait été demandé.
+     * L'adresse de sortie est fixe. {@code error} seul ne prouve rien de sa provenance : il n'a d'effet que sur le journal.
      */
     @GetMapping("/rappel")
-    public ResponseEntity<Void> callback(@RequestParam(required = false) String code, @RequestParam(required = false) String state) {
-        if (code != null || state != null) {
+    public ResponseEntity<Void> callback(@RequestParam(required = false) String code, @RequestParam(required = false) String state,
+            @RequestParam(required = false) String error) {
+        if (error != null) {
+            LOG.warn("Rappel Google en échec : {}", GoogleErrorCodes.loggable(error));
+        } else if (code != null || state != null) {
             LOG.warn("Rappel Google refusé : STATE_INVALIDE");
         }
         return ResponseEntity.status(HttpStatus.FOUND).location(PWA).build();

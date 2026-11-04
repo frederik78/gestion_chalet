@@ -434,4 +434,48 @@ class GoogleAuthorizationRealServerTest {
         assertSansTexteTechnique(chaineDeRedirections("/api/google/rappel?error=access_denied"
                 + "&error_description=Exception-recopiee&error_uri=https://exemple.invalid&state=" + state));
     }
+
+    @Test
+    void ca65_unRefusDeConsentementEstJournaliseParSonCodeSansSaDescription(CapturedOutput journal) {
+        String state = nouveauState();
+
+        chaineDeRedirections("/api/google/rappel?error=access_denied&error_description=description-temoin&state=" + state);
+
+        assertThat(journal.getOut()).contains("Rappel Google en échec : access_denied")
+                .doesNotContain("description-temoin").doesNotContain("STATE_INVALIDE");
+    }
+
+    @Test
+    void ca65_unEchangeEnEchecEstJournaliseParSonCode(CapturedOutput journal) {
+        String state = nouveauState();
+        GOOGLE.repondre(401, "");
+
+        chaineDeRedirections("/api/google/rappel?code=code-temoin&state=" + state);
+
+        assertThat(journal.getOut()).contains("Rappel Google en échec : invalid_token_response")
+                .doesNotContain(GOOGLE.adresseJeton()).doesNotContain("STATE_INVALIDE");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"code-inconnu-temoin", "access_denied%0d%0aFAUX-JOURNAL-temoin", "ACCESS_DENIED-temoin", ""})
+    void ca65_unCodeInconnuEstJournaliseAutreSansLaValeurRecue(String code, CapturedOutput journal) {
+        Reponse fin = client.get("/api/google/rappel?error=" + code);
+
+        assertThat(fin.enTete("Location")).isEqualTo("/");
+        assertThat(journal.getOut()).contains("Rappel Google en échec : AUTRE").doesNotContain("temoin");
+    }
+
+    @Test
+    void ca65_deuxCodesRecusSontJournalisesAutre(CapturedOutput journal) {
+        client.get("/api/google/rappel?error=access_denied&error=server_error");
+
+        assertThat(journal.getOut()).contains("Rappel Google en échec : AUTRE").doesNotContain("access_denied");
+    }
+
+    @Test
+    void cs22_unStateFauxResteJournaliseStateInvalide(CapturedOutput journal) {
+        client.get("/api/google/rappel?code=c&state=faux");
+
+        assertThat(journal.getOut()).contains("Rappel Google refusé : STATE_INVALIDE").doesNotContain("Rappel Google en échec");
+    }
 }
