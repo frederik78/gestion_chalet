@@ -477,13 +477,92 @@ class RecuScreensChromeTest {
         "429 | TROP_DE_TENTATIVES | La limite de lectures est atteinte. Saisissez les valeurs ou relancez plus tard.",
         "500 | ERREUR_INTERNE | La lecture a échoué. Saisissez les valeurs ou relancez la lecture.",
     })
-    void ca78_uneLectureEmpecheeMeneAuFormulaireVide(int statut, String code, String message) throws InterruptedException {
+    void uneLectureEmpecheeMeneAuFormulaireVide(int statut, String code, String message) throws InterruptedException {
         chrome.eval("window.fetchOrigine = window.fetch; window.fetch = async (chemin, options) => String(chemin) === '/api/lectures' ? new Response(JSON.stringify({ erreur: 'x', code: '" + code + "' }), { status: " + statut + " }) : window.fetchOrigine(chemin, options); true");
 
         allerALaValidationAvecDeuxPhotos();
 
         assertThat(chrome.eval("document.getElementById('message-lecture').textContent").asString()).isEqualTo(message);
         assertThat(visible("relancer-lecture")).isTrue();
+    }
+
+    /** Photo A lue, retour, remplacement par la photo B, Continuer : le montant lu sur A ne part pas avec B, et la saisie reste. */
+    @Test
+    void ca29_desPhotosChangeesInvalidentLeMontantLuEtProposentLaRelance() throws InterruptedException {
+        chrome.eval(ENREGISTRER_LES_ENVOIS);
+        modele.answer(Map.of("date", "2026-09-25", "fournisseur", "Unimage", "typeDepense", "Fournitures", "montantTotal", "304.68"));
+        chrome.chooseFiles("#importer", image1);
+        chrome.waitUntil(NOMBRE_DE_PHOTOS_AU_DEPART + " === 1");
+        cliquer("continuer");
+        chrome.waitUntil(NOMBRE_DE_PHOTOS_A_VALIDER + " === 1 && document.getElementById('validation').offsetParent !== null");
+        assertThat(visible("relancer-lecture")).isFalse();
+
+        cliquer("retour-photos");
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies button').length === 1");
+        chrome.eval("document.querySelector('#photos-choisies button').click(); true");
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies figure').length === 0");
+        chrome.chooseFiles("#importer", image2);
+        chrome.waitUntil(NOMBRE_DE_PHOTOS_AU_DEPART + " === 1");
+        cliquer("continuer");
+        chrome.waitUntil("document.getElementById('validation').offsetParent !== null");
+
+        assertThat(modele.calls).hasSize(1);
+        assertThat(valeur("fournisseur")).isEqualTo("Unimage");
+        assertThat(valeur("montantTotal")).isEqualTo("304,68");
+        assertThat(visible("relancer-lecture")).isTrue();
+        assertThat(chrome.eval("document.getElementById('message-lecture').textContent").asString())
+                .isEqualTo("Les photos ont changé : les valeurs affichées viennent des précédentes. Vérifiez-les ou relancez la lecture.");
+
+        cliquer("valider");
+        chrome.waitUntil("window.envois.length === 1 && document.getElementById('prise-de-vue').offsetParent !== null");
+        assertThat(chrome.eval("window.envois").get(0).get("recu").get("montantTotalLuCents").isNull()).isTrue();
+    }
+
+    /** Sans changement de photos, le montant lu reste envoyé. */
+    @Test
+    void ca29_unRetourSansChangementDePhotosGardeLeMontantLu() throws InterruptedException {
+        chrome.eval(ENREGISTRER_LES_ENVOIS);
+        modele.answer(Map.of("date", "2026-09-25", "fournisseur", "Unimage", "typeDepense", "Fournitures", "montantTotal", "304.68"));
+        chrome.chooseFiles("#importer", image1);
+        chrome.waitUntil(NOMBRE_DE_PHOTOS_AU_DEPART + " === 1");
+        cliquer("continuer");
+        chrome.waitUntil("document.getElementById('validation').offsetParent !== null");
+        cliquer("retour-photos");
+        chrome.waitUntil("document.getElementById('prise-de-vue').offsetParent !== null");
+        cliquer("continuer");
+        chrome.waitUntil("document.getElementById('validation').offsetParent !== null");
+
+        assertThat(visible("relancer-lecture")).isFalse();
+        cliquer("valider");
+        chrome.waitUntil("window.envois.length === 1 && document.getElementById('prise-de-vue').offsetParent !== null");
+        assertThat(chrome.eval("window.envois").get(0).get("recu").get("montantTotalLuCents").asInt()).isEqualTo(30468);
+    }
+
+    /** La clé reste la même après un changement de photos : si le premier envoi avait abouti, le renvoi est signalé en 409 et ne rend pas l'ancien reçu en silence. */
+    @Test
+    void ca18_desPhotosChangeesApresUneReponsePerdueSontSignalees() throws InterruptedException {
+        long avant = recus();
+        chrome.eval(ENREGISTRER_LES_ENVOIS);
+        chrome.eval(PERDRE_LA_PREMIERE_REPONSE);
+        allerALaValidationAvecDeuxPhotos();
+        saisirLesValeurs("Fournisseur photos changées");
+        cliquer("valider");
+        chrome.waitUntil("window.envois.length === 1 && document.getElementById('message-validation').textContent !== ''");
+
+        cliquer("retour-photos");
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies button').length === 2");
+        chrome.eval("document.querySelector('#photos-choisies button').click(); true");
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies figure').length === 1");
+        cliquer("continuer");
+        chrome.waitUntil("document.getElementById('validation').offsetParent !== null");
+        cliquer("valider");
+        chrome.waitUntil("window.envois.length === 2 && document.getElementById('message-validation').textContent.includes('pas été appliquée')");
+
+        JsonNode envois = chrome.eval("window.envois");
+        assertThat(envois.get(1).get("cle").asString()).isEqualTo(envois.get(0).get("cle").asString());
+        assertThat(envois.get(1).get("photos").asInt()).isEqualTo(1);
+        assertThat(recus()).isEqualTo(avant + 1);
+        assertThat(chrome.eval("document.getElementById('message-succes').textContent").asString()).isEmpty();
     }
 
     /** Le corps exact du serveur est couvert par les tests sur serveur réel ; ici, le texte que chaque code donne à l'écran. */

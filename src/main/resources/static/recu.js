@@ -52,6 +52,8 @@ let minuterieControle = null;
 let generationLecture = 0;
 let lectureFaite = false;
 let montantTotalLuCents = null;
+// Les photos sur lesquelles porte la lecture ; null dès qu'elles ont changé, jusqu'à une relance.
+let photosLues = null;
 
 async function chargerConfiguration() {
   const reponse = await fetch('/api/configuration', { credentials: 'same-origin' });
@@ -143,6 +145,7 @@ async function montrerValidation() {
 const MESSAGE_ECHEC_LECTURE = 'La lecture a échoué. Saisissez les valeurs ou relancez la lecture.';
 const MESSAGE_ILLISIBLE = "Ce reçu n'a pas pu être lu. Saisissez les valeurs ou relancez la lecture.";
 const MESSAGE_LIMITE_LECTURES = 'La limite de lectures est atteinte. Saisissez les valeurs ou relancez plus tard.';
+const MESSAGE_PHOTOS_CHANGEES = 'Les photos ont changé : les valeurs affichées viennent des précédentes. Vérifiez-les ou relancez la lecture.';
 const MESSAGE_SESSION_EXPIREE = 'Votre session a expiré. Reconnectez-vous dans un autre onglet, puis relancez : vos photos sont conservées.';
 
 /** Rend le corps d'une lecture, ou le refus à afficher : une photo refusée se retire, une session expirée se rouvre, le reste mène à la saisie manuelle. */
@@ -207,12 +210,25 @@ function afficherLecture({ lecture, empechee }) {
   }
   elements['relancer-lecture'].hidden = lue;
   lectureFaite = true;
+  photosLues = [...photos];
+}
+
+/** Le montant lu ne vaut que pour les photos lues (R-13) ; la saisie reste, et rien n'est relu sans le demander. */
+function invaliderLectureSiPhotosChangees() {
+  const inchangees = photosLues && photosLues.length === photos.length && photos.every((photo, indice) => photo === photosLues[indice]);
+  if (!inchangees) {
+    photosLues = null;
+    montantTotalLuCents = null;
+    elements['message-lecture'].textContent = MESSAGE_PHOTOS_CHANGEES;
+    elements['relancer-lecture'].hidden = false;
+  }
 }
 
 /** Après un retour aux photos, la saisie reste telle quelle : pas de nouvelle lecture sans le demander. */
 async function continuer() {
   cleIdempotence = cleIdempotence || crypto.randomUUID();
   if (lectureFaite) {
+    invaliderLectureSiPhotosChangees();
     await montrerValidation();
     return;
   }
@@ -268,6 +284,7 @@ function revenirAuDepart() {
   generationLecture += 1;
   lectureFaite = false;
   montantTotalLuCents = null;
+  photosLues = null;
   elements['message-lecture'].textContent = '';
   elements['relancer-lecture'].hidden = true;
   photos = [];
