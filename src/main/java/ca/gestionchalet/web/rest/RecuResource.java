@@ -1,6 +1,8 @@
 package ca.gestionchalet.web.rest;
 
 import ca.gestionchalet.service.RecuService;
+import ca.gestionchalet.service.dto.RecuCheckDTO;
+import ca.gestionchalet.service.dto.RecuCheckResultDTO;
 import ca.gestionchalet.service.dto.RecuDTO;
 import ca.gestionchalet.service.dto.RecuValidationDTO;
 import ca.gestionchalet.service.dto.RecuValidationResult;
@@ -10,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,6 +27,12 @@ public class RecuResource {
 
     public RecuResource(RecuService recuService) {
         this.recuService = recuService;
+    }
+
+    /** Les alertes avant la validation : n'enregistre rien (R-16). */
+    @PostMapping(path = "/controles", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public RecuCheckResultDTO check(@Valid @RequestBody RecuCheckDTO check) {
+        return recuService.check(check);
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

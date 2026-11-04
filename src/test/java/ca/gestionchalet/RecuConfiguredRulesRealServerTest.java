@@ -17,7 +17,8 @@ import org.springframework.test.context.TestPropertySource;
 
 /** Une configuration modifiée suffit à changer les règles : la liste n'est pas une constante. */
 @RealServerTest
-@TestPropertySource(properties = {"recus.types-depense[0]=Bois de chauffage", "recus.types-depense[1]=Déneigement"})
+@TestPropertySource(properties = {"recus.types-depense[0]=Bois de chauffage", "recus.types-depense[1]=Déneigement",
+    "recus.alertes.seuil-numeros-inscription-cents=3000", "recus.alertes.seuil-piece-a-verifier-cents=3500", "recus.alertes.ecart-tolere-cents=0"})
 class RecuConfiguredRulesRealServerTest {
 
     @LocalServerPort
@@ -49,4 +50,17 @@ class RecuConfiguredRulesRealServerTest {
         assertThat(refuse.json().get("champs")).isEqualTo(List.of(Map.of("champ", "typeDepense", "code", "HORS_LISTE")));
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void ca21_ca23_ca24_lesSeuilsModifiesSontSuivis() {
+        Map<String, Object> valeurs = RecuRequests.valeurs();
+        valeurs.put("fournisseur", "Seuils " + UUID.randomUUID());
+        valeurs.put("typeDepense", "Déneigement");
+        valeurs.put("montantAvantTaxesCents", 3499);
+
+        Reponse reponse = RecuRequests.valider(client, RecuRequests.corps(valeurs), RecuRequests.png());
+
+        assertThat((List<Map<String, Object>>) reponse.json().get("alertes")).extracting(alerte -> alerte.get("code"))
+                .containsExactly("NUMEROS_INSCRIPTION_MANQUANTS", "PIECE_A_VERIFIER", "ECART_CALCUL");
+    }
 }

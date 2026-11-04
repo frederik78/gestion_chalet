@@ -8,6 +8,8 @@ import ca.gestionchalet.domain.Recu;
 import ca.gestionchalet.domain.Valeurs;
 import ca.gestionchalet.repository.PhotoStorage;
 import ca.gestionchalet.repository.RecuRepository;
+import ca.gestionchalet.service.dto.RecuCheckDTO;
+import ca.gestionchalet.service.dto.RecuCheckResultDTO;
 import ca.gestionchalet.service.dto.RecuValidationDTO;
 import ca.gestionchalet.service.dto.RecuValidationResult;
 import ca.gestionchalet.service.mapper.RecuMapper;
@@ -18,6 +20,7 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -58,6 +61,19 @@ public class RecuService {
         return transactionTemplate.execute(status -> findOrCreate(validation, valeurs, fingerprint, files, formats));
     }
 
+    /** Les alertes de ces valeurs, sans rien enregistrer. */
+    public RecuCheckResultDTO check(RecuCheckDTO check) {
+        Valeurs valeurs = recuMapper.toValeurs(check.valeurs());
+        return new RecuCheckResultDTO(recuMapper.toAlerteDtos(
+                alertRules.evaluate(valeurs, check.montantTotalLuCents(), hasPossibleDuplicate(valeurs, check.recuId()))));
+    }
+
+    /** Le fournisseur se compare en Java : SQLite ne sait ni retirer les accents ni replier la casse hors ASCII (R-15). */
+    private boolean hasPossibleDuplicate(Valeurs valeurs, UUID excludedRecuId) {
+        return recuRepository.findByValeursDateAndValeursMontantTotalCents(valeurs.date(), valeurs.montantTotalCents()).stream()
+                .anyMatch(other -> !other.getId().equals(excludedRecuId) && other.getValeurs().hasSameSupplier(valeurs));
+    }
+
     /** Un envoi simultané attend le lien avant d'entrer ici, puis voit le reçu du premier. */
     private RecuValidationResult findOrCreate(RecuValidationDTO validation, Valeurs valeurs, String fingerprint, List<MultipartFile> files, List<PhotoFormat> formats) {
         Optional<Recu> known = recuRepository.findByCleIdempotence(validation.cleIdempotence());
@@ -76,7 +92,7 @@ public class RecuService {
         }
         Recu recu = Recu.valider(validation.cleIdempotence(), valeurs, fingerprint,
                 validation.montantTotalLuCents(), clock.instant(), photos,
-                alertRules.evaluate(valeurs, validation.montantTotalLuCents(), false));
+                alertRules.evaluate(valeurs, validation.montantTotalLuCents(), hasPossibleDuplicate(valeurs, null)));
         return new RecuValidationResult(recuMapper.toDto(recuRepository.saveAndFlush(recu)), true);
     }
 
