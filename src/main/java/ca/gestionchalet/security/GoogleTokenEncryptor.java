@@ -43,12 +43,12 @@ public final class GoogleTokenEncryptor implements TextEncryptor {
         return Base64.getEncoder().encodeToString(encryptor.encrypt(token.getBytes(StandardCharsets.UTF_8)));
     }
 
-    /** @throws UnreadableTokenException si le jeton n'a pas été chiffré avec cette clé */
+    /** @throws UnreadableTokenException si le jeton n'a pas été chiffré avec cette clé, ou s'il est trop court pour contenir son vecteur d'initialisation */
     @Override
     public String decrypt(String encrypted) {
         try {
             return new String(encryptor.decrypt(Base64.getDecoder().decode(encrypted)), StandardCharsets.UTF_8);
-        } catch (IllegalArgumentException | IllegalStateException e) {
+        } catch (IllegalArgumentException | IllegalStateException | ArrayIndexOutOfBoundsException e) {
             // Sans message ni cause : rien du chiffrement ne doit pouvoir atteindre un journal.
             throw new UnreadableTokenException();
         }
