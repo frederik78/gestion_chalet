@@ -66,10 +66,13 @@
   </Match>
   <!-- Seul est journalisé le résultat de GoogleErrorCodes.loggable : un code de sa liste blanche ou AUTRE, jamais la valeur reçue (ca65_unCodeInconnu, avec retour à la ligne). -->
   <Match>
-    <Or>
-      <Class name="ca.gestionchalet.web.rest.GoogleResource"/>
-      <Class name="ca.gestionchalet.service.GoogleTokenService"/>
-    </Or>
+    <Class name="ca.gestionchalet.web.rest.GoogleResource"/>
+    <Method name="callback"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
+  <Match>
+    <Class name="ca.gestionchalet.service.GoogleTokenService"/>
+    <Method name="accessToken"/>
     <Bug pattern="CRLF_INJECTION_LOGS"/>
   </Match>
 </FindBugsFilter>
