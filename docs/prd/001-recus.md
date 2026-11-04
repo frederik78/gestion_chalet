@@ -206,7 +206,7 @@ Pas de suppression ni d'annulation d'un reçu dans la première version. Pour é
 | montant avant taxes, TPS, TVQ | facultatifs, cents entiers ; vide différent de 0 |
 | montant total | obligatoire, cents entiers, strictement positif |
 | montant total lu | facultatif, cents entiers, non modifiable après la validation |
-| numéro d'inscription TPS, TVQ | facultatifs, 30 caractères au plus, en base seulement |
+| numéro d'inscription TPS, TVQ | facultatifs, 30 caractères au plus, en base seulement ; un numéro fait d'espaces devient vide (D-41) |
 | alertes | calculées |
 | état de la copie, motif de blocage | calculés |
 | clé d'idempotence | UUID fourni par le client, unique |
@@ -369,7 +369,7 @@ Un fichier par photo, photo d'origine (R-36), dans le dossier de l'application (
 | Quota ou limitation Google (429) | panne passagère, en respectant `Retry-After` |
 | Onglet renommé ou absent | `FICHIER_INACCESSIBLE` |
 | TYPE refusé par une liste déroulante modifiée dans le Sheet | `STRUCTURE_SHEET` |
-| Fichier à format valide mais contenu corrompu | 400 `IMAGE_ILLISIBLE` |
+| Fichier à format valide mais contenu corrompu | 400 `IMAGE_ILLISIBLE` si l'en-tête est illisible ; une image tronquée après son en-tête est acceptée, le corps n'étant pas décodé (D-41) |
 | Session expirée pendant la validation | 401 ; la page garde photos et valeurs, l'utilisateur se reconnecte et renvoie avec la même clé |
 
 ## 9. Valeurs par défaut (configuration)
@@ -381,8 +381,8 @@ Acceptées par l'utilisateur (Q-14). Aucune n'est figée dans le code.
 | Formats acceptés (Q-11) | JPEG, PNG | formats courants ; HEIC à convertir par le navigateur |
 | Taille maximale d'une photo | 15 Mo | photo de téléphone courante |
 | Photos par reçu | 5 | D-08, reçu long en plusieurs vues |
-| Requête totale | 75 Mo | 5 x 15 Mo, sous la limite de 100 Mo que le rédacteur attribue à Cloudflare (non vérifié ici) |
-| Dimensions maximales | 64 mégapixels | protection contre les images piégées |
+| Requête totale | 76 Mo | 5 x 15 Mo et les séparateurs du multipart (D-41), sous la limite de 100 Mo que le rédacteur attribue à Cloudflare (non vérifié ici) |
+| Dimensions maximales | 64 mégapixels, `recus.dimensions-max-megapixels` | protection contre les images piégées |
 | Délai de lecture | 60 secondes | |
 | Lectures par heure | 60 | maîtrise du coût |
 | Blocage de connexion | 5 échecs par source, 15 minutes | ADR 0001 |

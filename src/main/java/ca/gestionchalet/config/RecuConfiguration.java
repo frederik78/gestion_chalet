@@ -20,7 +20,7 @@ public class RecuConfiguration {
     @Bean
     RecuRules recuRules(ApplicationProperties properties, MultipartProperties multipart) {
         return new RecuRules(properties.typesDepense(), properties.photosParRecuMax(),
-                multipart.getMaxFileSize().toBytes(), properties.formats());
+                multipart.getMaxFileSize().toBytes(), properties.formats(), properties.dimensionsMaxMegapixels());
     }
 
     /** {@code @PastOrPresent} compare à la date du jour dans ce fuseau, et non dans celui de la machine. */

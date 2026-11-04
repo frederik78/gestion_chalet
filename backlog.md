@@ -72,6 +72,10 @@ Vue d'ensemble des besoins. Détail dans `docs/prd/`, suivi de la livraison dans
 | D-37 | 2026-11-03 | Tests d'écran en CI avec le Chrome de l'image du runner, sans téléchargement ; sa version suit l'image ; `sysctl` AppArmor gardé tant qu'un passage réel n'a pas montré qu'il est inutile | F-01 |
 | D-38 | 2026-11-03 | `service/validation` inscrit à la structure de l'ADR 0001, pour les validateurs Bean Validation propres au métier | F-01 |
 | D-39 | 2026-11-03 | `spring-boot-starter-data-jpa-test` (Apache-2.0), scope test, pour `@DataJpaTest` exigé par l'ADR 0001 | F-01 |
+| D-40 | 2026-11-03 | `POST /api/recus` sécurisé sans attendre 001-03 : contenu réel, nombre, taille et dimensions des photos contrôlés avant toute écriture, sur tous les chemins ; textes reçus en JSON strictement en chaînes, caractères de format refusés ; 001-06 dépend de 001-03 | F-01 |
+| D-41 | 2026-11-04 | Image tronquée après son en-tête acceptée, sans décodage ; image valide suivie d'un autre contenu conservée, à servir plus tard sous le type de son format avec `nosniff` ; requête totale à 76 Mo ; numéro d'inscription fait d'espaces rendu vide ; bouton de retour de l'écran de validation dans 001-03 | F-01 |
+| D-42 | 2026-11-04 | Sans identifiants Google, l'application démarre en `ABSENTE` ; la clé de chiffrement reste obligatoire. Consentement partiel : `A_RENOUVELER`, jetons effacés. Clé de chiffrement changée : `A_RENOUVELER` | F-01 |
+| D-43 | 2026-11-04 | Saisie sans session : `server.tomcat.connection-timeout` raccourci à 20 s, après mesure ; le reste de la protection (proxy) relève de NF-03, à traiter avant toute exposition publique | F-01 |
 
 ## À trancher
 

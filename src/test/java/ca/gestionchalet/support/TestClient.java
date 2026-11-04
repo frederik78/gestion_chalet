@@ -24,6 +24,7 @@ public final class TestClient {
     private final String source;
     private final HttpClient http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build();
     private final Map<String, String> cookies = new LinkedHashMap<>();
+    private Reponse derniereReponse;
 
     public TestClient(int port, String source) {
         this.base = "http://localhost:" + port;
@@ -81,7 +82,8 @@ public final class TestClient {
             HttpResponse<String> reponse = http.send(requete, HttpResponse.BodyHandlers.ofString());
             Map<String, List<String>> enTetes = reponse.headers().map();
             enTetes.getOrDefault("set-cookie", List.of()).forEach(this::retenirCookie);
-            return new Reponse(reponse.statusCode(), reponse.body(), enTetes);
+            derniereReponse = new Reponse(reponse.statusCode(), reponse.body(), enTetes);
+            return derniereReponse;
         } catch (IOException e) {
             throw new IllegalStateException(e);
         } catch (InterruptedException e) {
@@ -108,7 +110,7 @@ public final class TestClient {
         if (cookie("XSRF-TOKEN") == null) {
             get("/actuator/health");
         }
-        return appelSansJeton(methode, chemin, corpsJson, cookie("XSRF-TOKEN"));
+        return appelSansJeton(methode, chemin, corpsJson, jetonXsrf());
     }
 
     /** Envoie un corps JSON avec cet en-tête CSRF ({@code null} : pas d'en-tête). */
@@ -134,8 +136,16 @@ public final class TestClient {
     public HttpRequest.Builder requeteConnexion(String motDePasse) {
         return requete("/api/connexion")
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .header("X-XSRF-TOKEN", cookie("XSRF-TOKEN"))
+                .header("X-XSRF-TOKEN", jetonXsrf())
                 .POST(HttpRequest.BodyPublishers.ofString("motDePasse=" + URLEncoder.encode(motDePasse, StandardCharsets.UTF_8)));
+    }
+
+    private String jetonXsrf() {
+        String jeton = cookie("XSRF-TOKEN");
+        if (jeton == null) {
+            throw new AssertionError("Cookie XSRF-TOKEN absent ; dernière réponse : " + derniereReponse);
+        }
+        return jeton;
     }
 
     public Reponse deconnecter() {

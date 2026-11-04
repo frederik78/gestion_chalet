@@ -1,11 +1,16 @@
 package ca.gestionchalet.web.rest.errors;
 
 import ca.gestionchalet.domain.IdempotencyKeyConflictException;
+import ca.gestionchalet.domain.ImageTooLargeException;
 import ca.gestionchalet.domain.MissingPhotoException;
+import ca.gestionchalet.domain.TooManyPhotosException;
+import ca.gestionchalet.domain.UnreadableImageException;
 import ca.gestionchalet.domain.UnsupportedPhotoFormatException;
 import ca.gestionchalet.web.rest.errors.ErrorDTO.InvalidFieldDTO;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
+import org.apache.tomcat.util.http.fileupload.impl.FileCountLimitExceededException;
+import org.apache.tomcat.util.http.fileupload.impl.SizeException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -19,6 +24,7 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
@@ -63,7 +69,25 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<Object> handleMultipartException(MultipartException ex, WebRequest request) {
-        return handleExceptionInternal(ex, null, new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
+        ErrorCode code = codeOf(ex);
+        return handleExceptionInternal(ex, ErrorDTO.of(code), new HttpHeaders(), HttpStatusCode.valueOf(code.status()), request);
+    }
+
+    /** Spring classe en dépassement de taille toute limite de Tomcat, celle du nombre de parties comprise : la cause décide, ici aussi. */
+    @Override
+    protected ResponseEntity<Object> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        return handleMultipartException(ex, request);
+    }
+
+    /**
+     * Tomcat signale une limite franchie par la cause. Spring ne la reconnaît que si les photos sont lues d'abord : par un {@code @RequestPart}
+     * sur une partie JSON, il lève une simple {@link MultipartException} (mesuré sur Spring 7.0.10 et Tomcat 11.0.21).
+     */
+    private static ErrorCode codeOf(MultipartException ex) {
+        if (ex.contains(FileCountLimitExceededException.class)) {
+            return ErrorCode.TROP_DE_PHOTOS;
+        }
+        return ex.contains(SizeException.class) ? ErrorCode.TAILLE_EXCESSIVE : ErrorCode.REQUETE_INVALIDE;
     }
 
     @ExceptionHandler(IdempotencyKeyConflictException.class)
@@ -74,6 +98,21 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
     @ExceptionHandler(MissingPhotoException.class)
     public ResponseEntity<Object> handleMissingPhoto(MissingPhotoException ex, WebRequest request) {
         return handleExceptionInternal(ex, ErrorDTO.of(ErrorCode.PHOTO_MANQUANTE), new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
+    }
+
+    @ExceptionHandler(TooManyPhotosException.class)
+    public ResponseEntity<Object> handleTooManyPhotos(TooManyPhotosException ex, WebRequest request) {
+        return handleExceptionInternal(ex, ErrorDTO.of(ErrorCode.TROP_DE_PHOTOS), new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
+    }
+
+    @ExceptionHandler(UnreadableImageException.class)
+    public ResponseEntity<Object> handleUnreadableImage(UnreadableImageException ex, WebRequest request) {
+        return handleExceptionInternal(ex, ErrorDTO.of(ErrorCode.IMAGE_ILLISIBLE), new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
+    }
+
+    @ExceptionHandler(ImageTooLargeException.class)
+    public ResponseEntity<Object> handleImageTooLarge(ImageTooLargeException ex, WebRequest request) {
+        return handleExceptionInternal(ex, ErrorDTO.of(ErrorCode.IMAGE_TROP_GRANDE), new HttpHeaders(), HttpStatus.BAD_REQUEST, request);
     }
 
     @ExceptionHandler(UnsupportedPhotoFormatException.class)

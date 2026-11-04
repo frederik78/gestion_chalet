@@ -1,11 +1,9 @@
 package ca.gestionchalet.service;
 
 import ca.gestionchalet.domain.IdempotencyKeyConflictException;
-import ca.gestionchalet.domain.MissingPhotoException;
 import ca.gestionchalet.domain.Photo;
 import ca.gestionchalet.domain.PhotoFormat;
 import ca.gestionchalet.domain.Recu;
-import ca.gestionchalet.domain.UnsupportedPhotoFormatException;
 import ca.gestionchalet.domain.Valeurs;
 import ca.gestionchalet.repository.PhotoStorage;
 import ca.gestionchalet.repository.RecuRepository;
@@ -20,9 +18,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 /** Enregistre un reçu et ses photos à la validation. */
@@ -32,25 +30,34 @@ public class RecuService {
     private final RecuRepository recuRepository;
     private final PhotoStorage photoStorage;
     private final RecuMapper recuMapper;
+    private final PhotoValidationService photoValidationService;
+    private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
-    public RecuService(RecuRepository recuRepository, PhotoStorage photoStorage, RecuMapper recuMapper, Clock clock) {
+    public RecuService(RecuRepository recuRepository, PhotoStorage photoStorage, RecuMapper recuMapper,
+            PhotoValidationService photoValidationService, TransactionTemplate transactionTemplate, Clock clock) {
         this.recuRepository = recuRepository;
         this.photoStorage = photoStorage;
         this.recuMapper = recuMapper;
+        this.photoValidationService = photoValidationService;
+        this.transactionTemplate = transactionTemplate;
         this.clock = clock;
     }
 
-    @Transactional
+    /**
+     * Le contrôle et l'empreinte passent avant la transaction : le lien unique vers la base (hikari.maximum-pool-size) y est pris à l'ouverture et tenu jusqu'au
+     * commit, écriture comprise (mesuré). Une photo refusée ne l'attend donc jamais, et n'atteint ni l'empreinte, ni le disque, ni la recherche de la clé.
+     */
     public RecuValidationResult validate(RecuValidationDTO validation, List<MultipartFile> files) {
-        if (files == null || files.isEmpty() || files.stream().anyMatch(MultipartFile::isEmpty)) {
-            throw new MissingPhotoException();
-        }
-        // Le lien unique vers la base (hikari.maximum-pool-size) est pris à l'ouverture de la transaction et tenu jusqu'au commit, hachage et
-        // écriture compris (mesuré) : un envoi simultané attend avant d'entrer dans cette méthode, puis voit le reçu du premier.
-        Optional<Recu> known = recuRepository.findByCleIdempotence(validation.cleIdempotence());
+        List<PhotoFormat> formats = photoValidationService.check(files);
         Valeurs valeurs = recuMapper.toValeurs(validation.valeurs());
         String fingerprint = ContentFingerprint.of(valeurs, files);
+        return transactionTemplate.execute(status -> findOrCreate(validation, valeurs, fingerprint, files, formats));
+    }
+
+    /** Un envoi simultané attend le lien avant d'entrer ici, puis voit le reçu du premier. */
+    private RecuValidationResult findOrCreate(RecuValidationDTO validation, Valeurs valeurs, String fingerprint, List<MultipartFile> files, List<PhotoFormat> formats) {
+        Optional<Recu> known = recuRepository.findByCleIdempotence(validation.cleIdempotence());
         if (known.isPresent()) {
             if (!known.get().hasContent(fingerprint)) {
                 throw new IdempotencyKeyConflictException();
@@ -60,7 +67,7 @@ public class RecuService {
         List<Photo> photos = new ArrayList<>();
         discardFilesOnRollback(photos);
         for (MultipartFile file : files) {
-            Photo photo = Photo.of(photos.size() + 1, formatOf(file), file.getSize());
+            Photo photo = Photo.of(photos.size() + 1, formats.get(photos.size()), file.getSize());
             photos.add(photo);
             store(photo, file);
         }
@@ -79,10 +86,6 @@ public class RecuService {
                 }
             }
         });
-    }
-
-    private static PhotoFormat formatOf(MultipartFile file) {
-        return PhotoFormat.ofMediaType(file.getContentType()).orElseThrow(UnsupportedPhotoFormatException::new);
     }
 
     private void store(Photo photo, MultipartFile file) {

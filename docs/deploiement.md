@@ -24,7 +24,7 @@ Le lien unique vers la base (`maximum-pool-size: 1`) garantit l'idempotence de d
 - Derrière Cloudflare Tunnel, toutes les requêtes semblent venir de la même source : le blocage devra lire l'en-tête de confiance du tunnel, sans quoi il deviendrait global. Aucun en-tête `X-Forwarded-*` n'est lu aujourd'hui.
 - HSTS n'est pas émis : à ajouter avec HTTPS.
 - Le blocage et les sessions sont en mémoire : ils sont perdus au redémarrage.
-- 200 connexions sans session qui annoncent un corps jamais envoyé rendent `/actuator/health` injoignable (mesuré : délai de 15 s dépassé). Cause probable, non lue dans le code : Tomcat consomme le reste du corps après la réponse. À traiter avec le proxy et `connection-timeout`.
+- Limite à reprendre avec NF-03 : 250 connexions sans session qui annoncent un corps jamais envoyé rendent `/actuator/health` injoignable le temps de `server.tomcat.connection-timeout` (mesuré : 58 s avec le défaut de 60 s, 20 s au réglage de 20 s, puis reprise seule) ; une pause de plus de 20 s dans un envoi le fait échouer.
 
 ## Essai réel du modèle (hors suite de tests)
 La clé ne s'écrit jamais en clair dans la ligne de commande, qui resterait dans l'historique du shell. Sous macOS, depuis le trousseau :
