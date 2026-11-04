@@ -4,7 +4,7 @@ titre: Copie vers Drive et le Sheet
 prd: docs/prd/001-recus.md
 besoin: F-01
 statut: À faire
-depend_de: [001-05]
+depend_de: [001-03, 001-05]
 criteres: [CA13, CA17, CA30, CA31, CA32, CA38, CA39, CA40, CA41, CA42, CA43, CA44, CA45, CS12, CS16, CS26]
 branche: feat/001-06-copie-drive-sheet
 commits: []
@@ -29,3 +29,4 @@ Tests rouges puis verts avec un Sheet doublé en mémoire, `scripts/verify-clean
 
 ## Notes
 - 2026-11-01 : Q-07 reste à confirmer sur un fichier d'essai (section 13 du PRD).
+- 2026-11-03 : Dépend aussi de 001-03 : aucune photo ne part vers Drive tant que le contenu des images n'est pas contrôlé sur toutes les routes (D-40).
