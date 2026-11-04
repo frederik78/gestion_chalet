@@ -2,21 +2,14 @@
 spring:
   datasource:
     url: jdbc:sqlite:target/test-data/${random.uuid}.db?foreign_keys=true
-  # Faux identifiants : un test qui parle à « Google » pointe sur un serveur local (GoogleStub), aucun appel ne quitte la machine.
-  security:
-    oauth2:
-      client:
-        registration:
-          google:
-            client-id: client-essai
-            client-secret: secret-essai
-        provider:
-          google:
-            authorization-uri: http://localhost:9/consentement
-            token-uri: http://localhost:9/jeton
 recus:
   dossier-donnees: target/test-data
   dossier-photos: target/test-data/photos-${random.uuid}
   google:
+    # Faux identifiants : un test qui parle à « Google » pointe sur un serveur local (GoogleStub), aucun appel ne quitte la machine.
+    client-id: client-essai
+    client-secret: secret-essai
+    adresse-consentement: http://localhost:9/consentement
+    adresse-jeton: http://localhost:9/jeton
     # 32 octets d'essai, en base 64, sans valeur hors des tests.
     cle-chiffrement: Y2xlLWQtZXNzYWktc2Fucy12YWxldXItaG9ycy10ZXM=

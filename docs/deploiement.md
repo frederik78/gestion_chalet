@@ -6,8 +6,8 @@ Le déploiement lui-même est reporté (backlog, NF-03). Ce fichier liste ce que
 | Variable | Rôle | Défaut |
 |---|---|---|
 | `RECUS_SECURITE_CONDENSE_MOT_DE_PASSE` | Condensé bcrypt du mot de passe du compte local, de coût 10 à 31 | aucun : l'application refuse de démarrer |
-| `RECUS_GOOGLE_CLIENT_ID`, `RECUS_GOOGLE_CLIENT_SECRET` | Identifiants du client OAuth2 du projet Google, dont l'adresse de rappel autorisée est `<adresse de la PWA>/api/google/rappel` | aucun : l'application refuse de démarrer |
-| `RECUS_GOOGLE_CLE_CHIFFREMENT` | Clé des jetons Google au repos : 32 octets aléatoires en base 64 (`openssl rand -base64 32`). La perdre ou la changer oblige à autoriser Google de nouveau | aucun : l'application refuse de démarrer |
+| `RECUS_GOOGLE_CLIENT_ID`, `RECUS_GOOGLE_CLIENT_SECRET` | Identifiants du client OAuth2 du projet Google, dont l'adresse de rappel autorisée est `<adresse de la PWA>/api/google/rappel`. Facultatifs : sans eux, l'autorisation reste `ABSENTE`, les reçus sont enregistrés et bloqués, et `GET /api/google/autorisation` répond 503 | aucun |
+| `RECUS_GOOGLE_CLE_CHIFFREMENT` | Clé des jetons Google au repos : 32 octets aléatoires en base 64 (`openssl rand -base64 32`). La perdre ou la changer fait passer l'autorisation à `A_RENOUVELER` au premier usage du jeton : il faut autoriser Google de nouveau | aucun : l'application refuse de démarrer |
 | `RECUS_SECURITE_COOKIE_SECURISE` | `false` seulement sur le poste local en HTTP | `true` |
 | `RECUS_DOSSIER_DONNEES` | Dossier de la base SQLite et, par défaut, des photos (`photos/`) ; à placer sur un volume conservé, hors de la racine web | `data` |
 | `ANTHROPIC_API_KEY` | Clé du modèle, lue par le client au moment de l'appel | aucune : le démarrage n'en dépend pas |

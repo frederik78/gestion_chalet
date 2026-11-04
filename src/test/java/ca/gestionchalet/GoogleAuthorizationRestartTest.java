@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import ca.gestionchalet.service.GoogleTokenService;
 import ca.gestionchalet.support.GoogleStub;
+import ca.gestionchalet.support.RecuRequests;
 import ca.gestionchalet.support.TestClient;
 import ca.gestionchalet.support.TestDoublesConfiguration;
 import java.net.URI;
@@ -14,13 +15,21 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.web.util.UriComponentsBuilder;
 
 /** L'application complète, démarrée pour de bon : l'autorisation survit à un redémarrage, et la clé de chiffrement est exigée. */
+@ExtendWith(OutputCaptureExtension.class)
 class GoogleAuthorizationRestartTest {
+
+    private static final String AUTRE_CLE = "dW5lLWF1dHJlLWNsZS1kZS10cmVudGUtZGV1eC1vY3Q=";
 
     private static String[] arguments(Path base, GoogleStub google, String... autres) {
         String[] communs = {
@@ -28,8 +37,8 @@ class GoogleAuthorizationRestartTest {
             "--recus.securite.condense-mot-de-passe=" + TestDoublesConfiguration.CONDENSE,
             "--recus.securite.cookie-securise=false",
             "--spring.datasource.url=jdbc:sqlite:" + base.resolve("base.db") + "?foreign_keys=true",
-            "--spring.security.oauth2.client.provider.google.authorization-uri=" + google.adresseConsentement(),
-            "--spring.security.oauth2.client.provider.google.token-uri=" + google.adresseJeton()};
+            "--recus.google.adresse-consentement=" + google.adresseConsentement(),
+            "--recus.google.adresse-jeton=" + google.adresseJeton()};
         String[] tous = new String[communs.length + autres.length];
         System.arraycopy(communs, 0, tous, 0, communs.length);
         System.arraycopy(autres, 0, tous, communs.length, autres.length);
@@ -88,5 +97,105 @@ class GoogleAuthorizationRestartTest {
     void cs23_laCleDeLaConfigurationPrincipaleNeVientQueDeLEnvironnement() throws Exception {
         String principale = new String(GoogleAuthorizationRestartTest.class.getResourceAsStream("/application.yml").readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
         assertThat(principale).doesNotContain("cle-chiffrement:");
+    }
+
+    private static ConfigurableApplicationContext demarrerAvec(Path base, GoogleStub google, String... autres) {
+        return new SpringApplicationBuilder(GestionChaletApplication.class).run(arguments(base, google, autres));
+    }
+
+    private static String autoriser(TestClient client) {
+        String demande = client.get("/api/google/autorisation").enTete("Location");
+        String state = UriComponentsBuilder.fromUri(URI.create(demande)).build().getQueryParams().getFirst("state");
+        client.get("/api/google/rappel?code=code-temoin&state=" + state);
+        return client.get("/api/google/etat").corps();
+    }
+
+    private static TestClient.Reponse valider(TestClient client) {
+        return RecuRequests.valider(client, RecuRequests.corps(RecuRequests.valeurs()), RecuRequests.png());
+    }
+
+    /** D-42 : un seul identifiant manquant suffit, l'application démarre et rien ne part vers Google. */
+    @ParameterizedTest
+    @CsvSource({"'',''", "client-essai,''", "'',secret-essai"})
+    void ca64_sansIdentifiantsLApplicationDemarreEtResteABSENTE(String id, String secret, @TempDir Path base) throws Exception {
+        try (GoogleStub google = new GoogleStub();
+                ConfigurableApplicationContext application = demarrerAvec(base, google,
+                        "--recus.google.client-id=" + id, "--recus.google.client-secret=" + secret)) {
+            TestClient client = connecte(application);
+
+            assertThat(client.get("/api/google/etat").corps()).isEqualTo("{\"etat\":\"ABSENTE\"}");
+            TestClient.Reponse recu = valider(client);
+            assertThat(recu.statut()).isEqualTo(201);
+            assertThat(recu.json()).containsEntry("etatCopie", "BLOQUEE").containsEntry("motifBlocage", "AUTORISATION_GOOGLE");
+
+            TestClient.Reponse demande = client.get("/api/google/autorisation");
+            assertThat(demande.statut()).isEqualTo(503);
+            assertThat(demande.enTete("Location")).isNull();
+            assertThat(demande.json()).containsExactlyInAnyOrderEntriesOf(java.util.Map.of(
+                    "erreur", "L'autorisation Google n'est pas configurée.", "code", "GOOGLE_NON_CONFIGURE"));
+
+            TestClient.Reponse rappel = client.get("/api/google/rappel?code=code-pirate&state=faux");
+            assertThat(rappel.statut()).isEqualTo(302);
+            assertThat(rappel.enTete("Location")).isEqualTo("/");
+            assertThat(client.get("/api/google/etat").corps()).isEqualTo("{\"etat\":\"ABSENTE\"}");
+            assertThat(application.getBean(GoogleTokenService.class).accessToken()).isEmpty();
+
+            TestClient anonyme = new TestClient(application.getEnvironment().getRequiredProperty("local.server.port", Integer.class), "source-" + UUID.randomUUID());
+            assertThat(anonyme.get("/api/google/autorisation").statut()).isEqualTo(401);
+            assertThat(anonyme.get("/api/google/rappel?code=c&state=s").statut()).isEqualTo(401);
+            assertThat(google.requetes()).isEmpty();
+        }
+    }
+
+    /** Une autorisation déjà donnée ne sert plus sans identifiants : l'état le dit, et le retour des identifiants la rend utilisable, sans nouveau consentement. */
+    @Test
+    void ca64_desIdentifiantsRetiresRendentLEtatABSENTESansEffacerLAutorisation(@TempDir Path base) throws Exception {
+        try (GoogleStub google = new GoogleStub()) {
+            try (ConfigurableApplicationContext application = demarrer(base, google)) {
+                assertThat(autoriser(connecte(application))).isEqualTo("{\"etat\":\"VALIDE\"}");
+            }
+            google.reinitialiser();
+            try (ConfigurableApplicationContext application = demarrerAvec(base, google, "--recus.google.client-id=", "--recus.google.client-secret=")) {
+                TestClient client = connecte(application);
+                assertThat(client.get("/api/google/etat").corps()).isEqualTo("{\"etat\":\"ABSENTE\"}");
+                assertThat(application.getBean(GoogleTokenService.class).accessToken()).isEmpty();
+            }
+            try (ConfigurableApplicationContext application = demarrer(base, google)) {
+                assertThat(connecte(application).get("/api/google/etat").corps()).isEqualTo("{\"etat\":\"VALIDE\"}");
+            }
+            assertThat(google.requetes()).isEmpty();
+        }
+    }
+
+    /** D-42 : comme CA66, sans perte, sans réutiliser le jeton illisible, sans détail du chiffrement au journal. */
+    @Test
+    void ca66_uneCleChangeePasseARenouvelerEtBloqueLesRecusEnAttente(@TempDir Path base, CapturedOutput journal) throws Exception {
+        try (GoogleStub google = new GoogleStub()) {
+            String recu;
+            try (ConfigurableApplicationContext application = demarrer(base, google)) {
+                TestClient client = connecte(application);
+                autoriser(client);
+                recu = (String) valider(client).json().get("id");
+            }
+            google.reinitialiser();
+            int debut = journal.getOut().length();
+
+            try (ConfigurableApplicationContext application = demarrerAvec(base, google, "--recus.google.cle-chiffrement=" + AUTRE_CLE)) {
+                TestClient client = connecte(application);
+
+                assertThat(application.getBean(GoogleTokenService.class).accessToken()).isEmpty();
+
+                assertThat(client.get("/api/google/etat").corps()).isEqualTo("{\"etat\":\"A_RENOUVELER\"}");
+                JdbcTemplate lignes = application.getBean(JdbcTemplate.class);
+                assertThat(lignes.queryForMap("select etat_copie, motif_blocage from recu where id = ?", recu))
+                        .containsEntry("etat_copie", "BLOQUEE").containsEntry("motif_blocage", "AUTORISATION_GOOGLE");
+                assertThat(lignes.queryForMap("select * from autorisation_google"))
+                        .containsEntry("jeton_acces_chiffre", null).containsEntry("jeton_renouvellement_chiffre", null);
+                assertThat(valider(client).statut()).isEqualTo(201);
+            }
+            assertThat(google.requetes()).isEmpty();
+            assertThat(journal.getOut().substring(debut)).doesNotContainIgnoringCase("cipher").doesNotContainIgnoringCase("padding")
+                    .doesNotContainIgnoringCase("tag mismatch").contains("Autorisation Google : A_RENOUVELER");
+        }
     }
 }

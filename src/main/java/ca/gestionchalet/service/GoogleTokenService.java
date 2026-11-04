@@ -30,6 +30,10 @@ public class GoogleTokenService {
      * @throws org.springframework.security.oauth2.core.OAuth2AuthorizationException sur une panne passagère de Google : l'autorisation reste valide
      */
     public Optional<String> accessToken() {
+        // Le gestionnaire exige un client configuré : sans identifiants, il n'est pas appelé.
+        if (!googleAuthorizationService.isValid()) {
+            return Optional.empty();
+        }
         OAuth2AuthorizeRequest request = OAuth2AuthorizeRequest.withClientRegistrationId(REGISTRATION_ID).principal(APPLICATION).build();
         OAuth2AuthorizedClient client;
         try {

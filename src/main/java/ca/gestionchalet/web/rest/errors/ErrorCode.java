@@ -16,7 +16,8 @@ public enum ErrorCode {
     TAILLE_EXCESSIVE(413, "La requête est trop volumineuse."),
     FORMAT_NON_ACCEPTE(415, "Format non accepté."),
     TROP_DE_TENTATIVES(429, "Trop de tentatives. Réessayez plus tard."),
-    ERREUR_INTERNE(500, "Une erreur interne est survenue.");
+    ERREUR_INTERNE(500, "Une erreur interne est survenue."),
+    GOOGLE_NON_CONFIGURE(503, "L'autorisation Google n'est pas configurée.");
 
     private final int status;
     private final String message;

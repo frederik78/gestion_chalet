@@ -2,6 +2,8 @@ package ca.gestionchalet.web.rest;
 
 import ca.gestionchalet.service.GoogleAuthorizationService;
 import ca.gestionchalet.service.dto.GoogleAuthorizationStateDTO;
+import ca.gestionchalet.web.rest.errors.ErrorCode;
+import ca.gestionchalet.web.rest.errors.ErrorDTO;
 import java.net.URI;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +25,13 @@ public class GoogleResource {
 
     public GoogleResource(GoogleAuthorizationService googleAuthorizationService) {
         this.googleAuthorizationService = googleAuthorizationService;
+    }
+
+    /** Atteinte seulement sans identifiants configurés : sinon, le filtre de Spring Security a déjà redirigé vers le consentement. */
+    @GetMapping("/autorisation")
+    public ResponseEntity<ErrorDTO> authorization() {
+        ErrorCode code = ErrorCode.GOOGLE_NON_CONFIGURE;
+        return ResponseEntity.status(code.status()).body(ErrorDTO.of(code));
     }
 
     /**

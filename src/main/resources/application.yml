@@ -26,19 +26,6 @@ spring:
       accept-float-as-int: false
     mapper:
       allow-coercion-of-scalars: false
-  # Autorisation Google (PRD, section 7.6). Sans identifiants fournis par l'environnement, l'application refuse de démarrer.
-  security:
-    oauth2:
-      client:
-        registration:
-          google:
-            client-id: ${RECUS_GOOGLE_CLIENT_ID}
-            client-secret: ${RECUS_GOOGLE_CLIENT_SECRET}
-            # Édition des feuilles de calcul, et les seuls fichiers Drive créés par l'application : aucun autre droit.
-            scope:
-              - https://www.googleapis.com/auth/spreadsheets
-              - https://www.googleapis.com/auth/drive.file
-            redirect-uri: "{baseUrl}/api/google/rappel"
   # Un seul lien vers SQLite : les écritures passent l'une après l'autre, sans « database is locked ». Les clés étrangères, désactivées par défaut par SQLite, sont activées.
   datasource:
     url: jdbc:sqlite:${recus.dossier-donnees}/gestion-chalet.db?foreign_keys=true
@@ -128,7 +115,15 @@ recus:
     ecart-tolere-cents: 2
   google:
     # Aucune clé par défaut : RECUS_GOOGLE_CLE_CHIFFREMENT, 32 octets en base 64 (openssl rand -base64 32), sinon l'application refuse de démarrer.
+    # Identifiants facultatifs, RECUS_GOOGLE_CLIENT_ID et RECUS_GOOGLE_CLIENT_SECRET : sans eux, l'autorisation reste ABSENTE (D-42).
     delai-appel: 10s
+    adresse-consentement: https://accounts.google.com/o/oauth2/v2/auth
+    adresse-jeton: https://oauth2.googleapis.com/token
+    adresse-rappel: "{baseUrl}/api/google/rappel"
+    # Édition des feuilles de calcul, et les seuls fichiers Drive créés par l'application : aucun autre droit.
+    droits:
+      - https://www.googleapis.com/auth/spreadsheets
+      - https://www.googleapis.com/auth/drive.file
   securite:
     # Aucun condensé par défaut : à fournir par l'environnement (RECUS_SECURITE_CONDENSE_MOT_DE_PASSE), sinon l'application refuse de démarrer.
     echecs-avant-blocage: 5

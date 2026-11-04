@@ -56,8 +56,8 @@ class GoogleAuthorizationRealServerTest {
 
     @DynamicPropertySource
     static void adressesDeGoogle(DynamicPropertyRegistry registre) {
-        registre.add("spring.security.oauth2.client.provider.google.authorization-uri", GOOGLE::adresseConsentement);
-        registre.add("spring.security.oauth2.client.provider.google.token-uri", GOOGLE::adresseJeton);
+        registre.add("recus.google.adresse-consentement", GOOGLE::adresseConsentement);
+        registre.add("recus.google.adresse-jeton", GOOGLE::adresseJeton);
         registre.add("recus.google.delai-appel", () -> "3s");
     }
 

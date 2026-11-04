@@ -10,7 +10,7 @@ import ca.gestionchalet.repository.RecuRepository;
 import ca.gestionchalet.service.dto.GoogleAuthorizationStateDTO;
 import ca.gestionchalet.service.mapper.GoogleAuthorizationMapper;
 import ca.gestionchalet.security.GoogleTokenEncryptor;
-import java.util.Objects;
+import ca.gestionchalet.security.UnreadableTokenException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
@@ -33,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class GoogleAuthorizationService implements OAuth2AuthorizedClientService {
 
     private static final Logger LOG = LoggerFactory.getLogger(GoogleAuthorizationService.class);
+    private static final String REGISTRATION_ID = "google";
 
     private final AutorisationGoogleRepository autorisationRepository;
     private final RecuRepository recuRepository;
@@ -51,27 +52,33 @@ public class GoogleAuthorizationService implements OAuth2AuthorizedClientService
 
     @Transactional(readOnly = true)
     public GoogleAuthorizationStateDTO state() {
-        return mapper.toDto(current().getEtat());
+        return mapper.toDto(currentState());
     }
 
     @Transactional(readOnly = true)
     public boolean isValid() {
-        return current().getEtat() == EtatAutorisationGoogle.VALIDE;
+        return currentState() == EtatAutorisationGoogle.VALIDE;
     }
 
+    /** Un jeton illisible, après un changement de clé, se traite comme un {@code invalid_grant} : il n'est pas réutilisé. */
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     @SuppressWarnings("unchecked")
     public <T extends OAuth2AuthorizedClient> T loadAuthorizedClient(String clientRegistrationId, String principalName) {
+        ClientRegistration registration = clientRegistrations.findByRegistrationId(clientRegistrationId);
         AutorisationGoogle autorisation = current();
-        if (autorisation.getEtat() != EtatAutorisationGoogle.VALIDE) {
+        if (registration == null || autorisation.getEtat() != EtatAutorisationGoogle.VALIDE) {
             return null;
         }
-        ClientRegistration registration = Objects.requireNonNull(clientRegistrations.findByRegistrationId(clientRegistrationId));
-        OAuth2AccessToken accessToken = new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER, encryptor.decrypt(autorisation.getJetonAccesChiffre()),
-                null, autorisation.getJetonAccesExpireLe(), registration.getScopes());
-        OAuth2RefreshToken refreshToken = new OAuth2RefreshToken(encryptor.decrypt(autorisation.getJetonRenouvellementChiffre()), null);
-        return (T) new OAuth2AuthorizedClient(registration, principalName, accessToken, refreshToken);
+        try {
+            OAuth2AccessToken accessToken = new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER, encryptor.decrypt(autorisation.getJetonAccesChiffre()),
+                    null, autorisation.getJetonAccesExpireLe(), registration.getScopes());
+            OAuth2RefreshToken refreshToken = new OAuth2RefreshToken(encryptor.decrypt(autorisation.getJetonRenouvellementChiffre()), null);
+            return (T) new OAuth2AuthorizedClient(registration, principalName, accessToken, refreshToken);
+        } catch (UnreadableTokenException e) {
+            requireRenewal(autorisation);
+            return null;
+        }
     }
 
     @Override
@@ -102,6 +109,11 @@ public class GoogleAuthorizationService implements OAuth2AuthorizedClientService
         recuRepository.findByEtatCopie(EtatCopie.A_COPIER).forEach(recu -> recu.bloquer(MotifBlocage.AUTORISATION_GOOGLE));
         autorisationRepository.save(autorisation);
         LOG.warn("Autorisation Google : A_RENOUVELER");
+    }
+
+    /** Sans identifiants configurés, une autorisation conservée ne peut pas servir : l'état est {@code ABSENTE} (D-42), et elle resservira à leur retour. */
+    private EtatAutorisationGoogle currentState() {
+        return clientRegistrations.findByRegistrationId(REGISTRATION_ID) == null ? EtatAutorisationGoogle.ABSENTE : current().getEtat();
     }
 
     private AutorisationGoogle current() {

@@ -2,6 +2,7 @@ package ca.gestionchalet.config;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import java.nio.file.Path;
@@ -50,11 +51,20 @@ public record ApplicationProperties(@Valid @NotNull Security securite, @Valid @N
     }
 
     /**
-     * La clé de chiffrement, elle, est lue par {@code GoogleTokenEncryptor} ; les droits et l'adresse de rappel sont dans {@code spring.security.oauth2.client}.
+     * La clé de chiffrement et les identifiants du client, secrets, sont lus à part : un record les écrirait dans son {@code toString}.
      *
      * @param delaiAppel délai maximal d'un appel à Google pour obtenir un jeton
+     * @param adresseConsentement adresse du consentement Google
+     * @param adresseJeton adresse des jetons Google
+     * @param adresseRappel adresse de rappel
+     * @param droits droits demandés (PRD, section 7.6)
      */
-    public record Google(@NotNull Duration delaiAppel) {
+    public record Google(@NotNull Duration delaiAppel, @NotBlank String adresseConsentement, @NotBlank String adresseJeton,
+            @NotBlank String adresseRappel, @NotEmpty List<String> droits) {
+
+        public Google {
+            droits = droits == null ? List.of() : List.copyOf(droits);
+        }
     }
 
     /**
