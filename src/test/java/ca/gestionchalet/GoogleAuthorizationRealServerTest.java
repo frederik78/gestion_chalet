@@ -13,6 +13,7 @@ import ca.gestionchalet.support.TestDoublesConfiguration;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -381,5 +383,55 @@ class GoogleAuthorizationRealServerTest {
         assertThat(client.get("/api/google/rappel?redirect=https://exemple.invalid").enTete("Location")).isEqualTo("/");
         assertThat(client.get("/api/google/rappel?code=c&state=faux&redirect=https://exemple.invalid").enTete("Location")).isEqualTo("/");
         assertThat(GOOGLE.requetes()).extracting(GoogleStub.Requete::chemin).containsExactly("/jeton");
+    }
+
+    /** Toutes les adresses de redirection d'un rappel, du filtre de Spring Security à la sortie vers la PWA. */
+    private List<String> chaineDeRedirections(String chemin) {
+        List<String> adresses = new ArrayList<>();
+        String origine = "http://localhost:" + port;
+        Reponse reponse = client.get(chemin);
+        while (reponse.statut() == 302) {
+            String adresse = reponse.enTete("Location");
+            adresses.add(adresse);
+            if (!adresse.startsWith(origine + "/api/google/rappel")) {
+                break;
+            }
+            reponse = client.get(adresse.substring(origine.length()));
+        }
+        return adresses;
+    }
+
+    private String nouveauState() {
+        return parametres(client.get("/api/google/autorisation").enTete("Location")).get("state");
+    }
+
+    private void assertSansTexteTechnique(List<String> adresses) {
+        assertThat(adresses).isNotEmpty().last().isEqualTo("/");
+        assertThat(adresses).allSatisfy(adresse -> assertThat(URLDecoder.decode(adresse, StandardCharsets.UTF_8))
+                .doesNotContain("error_description").doesNotContain("error_uri")
+                .doesNotContain("Unauthorized").doesNotContain("OAuth2").doesNotContain("Exception")
+                .doesNotContain(GOOGLE.adresseJeton()).doesNotContain(GoogleStub.JETON_ACCES));
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+        "401 | ''",
+        "401 | {\"error\":\"invalid_client\",\"error_description\":\"Unauthorized\",\"error_uri\":\"https://exemple.invalid\"}",
+        "200 | ceci n'est pas du JSON",
+        "200 | {\"access_token\":\"jeton-acces-temoin\"}"
+    })
+    void cs24_unEchangeEnEchecNeLaisseAucunTexteTechniqueDansLesRedirections(int statut, String corps) {
+        String state = nouveauState();
+        GOOGLE.repondre(statut, corps);
+
+        assertSansTexteTechnique(chaineDeRedirections("/api/google/rappel?code=code-temoin&state=" + state));
+    }
+
+    @Test
+    void cs24_unRefusNeRecopiePasLaDescriptionRecueDansLesRedirections() {
+        String state = nouveauState();
+
+        assertSansTexteTechnique(chaineDeRedirections("/api/google/rappel?error=access_denied"
+                + "&error_description=Exception-recopiee&error_uri=https://exemple.invalid&state=" + state));
     }
 }

@@ -1,5 +1,6 @@
 package ca.gestionchalet.config;
 
+import ca.gestionchalet.security.GoogleAuthorizationErrorSanitizer;
 import ca.gestionchalet.security.GoogleAuthorizationRequestResolver;
 import ca.gestionchalet.security.LoginRateLimiter;
 import ca.gestionchalet.web.rest.errors.SecurityErrorHandler;
@@ -110,9 +111,11 @@ public class SecurityConfiguration {
                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/api/google/rappel")))
             .authorizeHttpRequests(authz -> authz.anyRequest().authenticated())
             .exceptionHandling(exceptionHandling -> exceptionHandling.authenticationEntryPoint(errorHandler).accessDeniedHandler(errorHandler))
-            .oauth2Client(oauth2 -> oauth2.authorizationCodeGrant(grant -> grant
-                .authorizationRequestResolver(new GoogleAuthorizationRequestResolver(clientRegistrations))
-                .accessTokenResponseClient(tokenResponseClient)))
+            .oauth2Client(oauth2 -> oauth2
+                .withObjectPostProcessor(new GoogleAuthorizationErrorSanitizer())
+                .authorizationCodeGrant(grant -> grant
+                    .authorizationRequestResolver(new GoogleAuthorizationRequestResolver(clientRegistrations))
+                    .accessTokenResponseClient(tokenResponseClient)))
             .headers(AbstractHttpConfigurer::disable) // posés par SecurityHeadersFilter, avant le pare-feu HTTP
             .requestCache(AbstractHttpConfigurer::disable);
         return http.build();
