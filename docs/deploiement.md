@@ -20,6 +20,8 @@ Blocage : 5 échecs par source, 15 minutes. Inactivité de session : 8 heures (`
 ## Concurrence des validations
 Le lien unique vers la base (`maximum-pool-size: 1`) garantit l'idempotence de deux envois simultanés. Le hachage et l'écriture des photos ont lieu dans la transaction : le lien reste tenu 149 à 439 ms pour 5 photos de 14 Mo (mesuré). Un refus d'unicité arrive en `JpaSystemException` avec le dialecte SQLite, et non en `DataIntegrityViolationException`. Ces choix sont à revoir si SQLite est remplacé.
 
+Ce même lien unique permet à deux validations simultanées de se voir comme doublons possibles : relever ce réglage ou remplacer SQLite demande de revoir cette détection, faute de quoi aucune alerte de doublon ne serait levée entre elles (D-56, 15 tours de 4 validations simultanées mesurés).
+
 ## À reprendre avec NF-03
 - Derrière Cloudflare Tunnel, toutes les requêtes semblent venir de la même source : le blocage devra lire l'en-tête de confiance du tunnel, sans quoi il deviendrait global. Aucun en-tête `X-Forwarded-*` n'est lu aujourd'hui.
 - HSTS n'est pas émis : à ajouter avec HTTPS.

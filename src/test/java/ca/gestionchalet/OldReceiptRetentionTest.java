@@ -52,7 +52,7 @@ class OldReceiptRetentionTest {
             Valeurs valeurs = new Valeurs(LocalDate.of(2018, 1, 15), "Ancien", null, "Fournitures", null, null, null, 1000L, null, null);
             contexte.getBean(PhotoStorage.class).write(photo, new ByteArrayInputStream(OCTETS));
             contexte.getBean(RecuRepository.class).saveAndFlush(
-                    Recu.valider(UUID.randomUUID(), valeurs, "empreinte", null, Instant.parse("2018-01-15T12:00:00Z"), List.of(photo)));
+                    Recu.valider(UUID.randomUUID(), valeurs, "empreinte", null, Instant.parse("2018-01-15T12:00:00Z"), List.of(photo), List.of()));
         }
 
         try (ConfigurableApplicationContext contexte = demarrer()) {

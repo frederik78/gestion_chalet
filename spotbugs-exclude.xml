@@ -49,4 +49,9 @@
     <Class name="~ca\.gestionchalet\.service\.mapper\.[A-Za-z]+MapperImpl"/>
     <Bug pattern="NP_LOAD_OF_KNOWN_NULL_VALUE"/>
   </Match>
+  <!-- R-15 : la normalisation du fournisseur sert à lever une alerte non bloquante ; elle ne décide d'aucun accès. Collator écarté : au niveau primaire, il ignore aussi les espaces intérieurs. -->
+  <Match>
+    <Class name="ca.gestionchalet.domain.Valeurs"/>
+    <Bug pattern="IMPROPER_UNICODE"/>
+  </Match>
 </FindBugsFilter>

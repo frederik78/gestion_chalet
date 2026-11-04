@@ -23,6 +23,7 @@ import org.springframework.validation.annotation.Validated;
  * @param formats types de média acceptés pour une photo
  * @param dimensionsMaxMegapixels dimensions maximales d'une image, en mégapixels
  * @param fuseauHoraire fuseau de la date du jour, à laquelle une date de reçu ne peut être postérieure
+ * @param alertes seuils des alertes ({@code recus.alertes.*})
  */
 @Validated
 @ConfigurationProperties("recus")
@@ -31,11 +32,20 @@ public record ApplicationProperties(@Valid @NotNull Security securite, @NotNull 
         @Min(1) int photosParRecuMax,
         @NotEmpty List<String> formats,
         @Min(1) long dimensionsMaxMegapixels,
-        @NotNull ZoneId fuseauHoraire) {
+        @NotNull ZoneId fuseauHoraire,
+        @Valid @NotNull Alerts alertes) {
 
     public ApplicationProperties {
         typesDepense = typesDepense == null ? List.of() : List.copyOf(typesDepense);
         formats = formats == null ? List.of() : List.copyOf(formats);
+    }
+
+    /**
+     * @param seuilNumerosInscriptionCents montant de référence à partir duquel les numéros d'inscription sont exigés
+     * @param seuilPieceAVerifierCents montant de référence à partir duquel la pièce est à vérifier
+     * @param ecartTolereCents écart de calcul au-delà duquel l'alerte est levée
+     */
+    public record Alerts(@Min(1) long seuilNumerosInscriptionCents, @Min(1) long seuilPieceAVerifierCents, @Min(0) long ecartTolereCents) {
     }
 
     /**

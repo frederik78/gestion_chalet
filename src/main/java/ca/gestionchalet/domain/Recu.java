@@ -2,8 +2,10 @@ package ca.gestionchalet.domain;
 
 import ca.gestionchalet.domain.converter.InstantTextConverter;
 import jakarta.persistence.CascadeType;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -12,6 +14,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
+import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -56,10 +59,15 @@ public class Recu {
     @OrderBy("rang")
     private List<Photo> photos = new ArrayList<>();
 
+    @ElementCollection
+    @CollectionTable(name = "recu_alerte", joinColumns = @JoinColumn(name = "recu_id"))
+    @OrderColumn(name = "rang")
+    private List<Alerte> alertes = new ArrayList<>();
+
     protected Recu() {
     }
 
-    private Recu(UUID cleIdempotence, Valeurs valeurs, String empreinteContenu, Long montantTotalLuCents, Instant valideLe, List<Photo> photos) {
+    private Recu(UUID cleIdempotence, Valeurs valeurs, String empreinteContenu, Long montantTotalLuCents, Instant valideLe, List<Photo> photos, List<Alerte> alertes) {
         this.id = UUID.randomUUID();
         this.cleIdempotence = cleIdempotence;
         this.valeurs = valeurs;
@@ -69,10 +77,11 @@ public class Recu {
         this.version = FIRST_VERSION;
         this.valideLe = valideLe;
         this.photos.addAll(photos);
+        this.alertes.addAll(alertes);
     }
 
-    public static Recu valider(UUID cleIdempotence, Valeurs valeurs, String empreinteContenu, Long montantTotalLuCents, Instant valideLe, List<Photo> photos) {
-        return new Recu(cleIdempotence, valeurs, empreinteContenu, montantTotalLuCents, valideLe, photos);
+    public static Recu valider(UUID cleIdempotence, Valeurs valeurs, String empreinteContenu, Long montantTotalLuCents, Instant valideLe, List<Photo> photos, List<Alerte> alertes) {
+        return new Recu(cleIdempotence, valeurs, empreinteContenu, montantTotalLuCents, valideLe, photos, alertes);
     }
 
     public boolean hasContent(String empreinte) {
@@ -101,6 +110,10 @@ public class Recu {
 
     public Instant getValideLe() {
         return valideLe;
+    }
+
+    public List<Alerte> getAlertes() {
+        return List.copyOf(alertes);
     }
 
     public List<Photo> getPhotos() {

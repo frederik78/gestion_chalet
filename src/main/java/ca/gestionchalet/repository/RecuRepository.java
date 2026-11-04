@@ -1,6 +1,8 @@
 package ca.gestionchalet.repository;
 
 import ca.gestionchalet.domain.Recu;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.repository.Repository;
@@ -9,6 +11,8 @@ import org.springframework.data.repository.Repository;
 public interface RecuRepository extends Repository<Recu, UUID> {
 
     Recu saveAndFlush(Recu recu);
+
+    List<Recu> findByValeursDateAndValeursMontantTotalCents(LocalDate date, Long montantTotalCents);
 
     Optional<Recu> findByCleIdempotence(UUID cleIdempotence);
 }
