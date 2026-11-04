@@ -444,29 +444,47 @@ class RecuScreensChromeTest {
         assertThat(chrome.eval("document.getElementById('valider').disabled").asBoolean()).isFalse();
     }
 
+    /** La première réponse attend {@code window.libererLePremier()} ; {@code window.premierLu} dit que la page l'a lue : elle l'a traitée à la tâche suivante. */
+    private static final String RETENIR_LE_PREMIER_CONTROLE = """
+            window.fetch = async () => {
+              const numero = (window.controles = (window.controles || 0) + 1);
+              if (numero === 1) {
+                await new Promise((liberer) => { window.libererLePremier = liberer; });
+                return { ok: true, status: 200, json: async () => {
+                  window.premierLu = true;
+                  return { alertes: [{ code: 'X', message: 'ancienne' }] };
+                } };
+              }
+              return new Response(JSON.stringify({ alertes: [{ code: 'X', message: 'récente' }] }), { status: 200 });
+            };
+            true""";
+
     @Test
-    void ca80_uneReponseEnRetardNeRemplacePasLaPlusRecenteEtNeSurvitPasALAbandon() throws InterruptedException {
+    void ca80_uneReponseEnRetardNeRemplacePasLaPlusRecente() throws InterruptedException {
         allerALaValidationAvecDeuxPhotos();
-        chrome.eval("""
-                window.fetch = async (chemin, options) => {
-                  const numero = (window.controles = (window.controles || 0) + 1);
-                  if (numero === 1) {
-                    await new Promise((liberer) => { window.libererLePremier = liberer; });
-                    return new Response(JSON.stringify({ alertes: [{ code: 'X', message: 'ancienne' }] }), { status: 200 });
-                  }
-                  return new Response(JSON.stringify({ alertes: [{ code: 'X', message: 'récente' }] }), { status: 200 });
-                };
-                true""");
+        chrome.eval(RETENIR_LE_PREMIER_CONTROLE);
         saisirUnRecuAAlertes("Fournisseur en retard");
         chrome.waitUntil("!!window.libererLePremier");
         signalerLaSaisie();
         chrome.waitUntil("document.querySelectorAll('#alertes li').length === 1");
 
         chrome.eval("window.libererLePremier(); true");
-        Thread.sleep(200);
+        chrome.waitUntil("window.premierLu === true");
+
         assertThat(alertes()).isEqualTo("récente");
+    }
+
+    @Test
+    void ca80_uneReponseEnVolNeSurvitPasALAbandon() throws InterruptedException {
+        allerALaValidationAvecDeuxPhotos();
+        chrome.eval(RETENIR_LE_PREMIER_CONTROLE);
+        saisirUnRecuAAlertes("Fournisseur abandonné en vol");
+        chrome.waitUntil("!!window.libererLePremier");
 
         cliquer("abandonner");
-        assertThat(nombre("document.querySelectorAll('#alertes li').length")).isZero();
+        chrome.eval("window.libererLePremier(); true");
+        chrome.waitUntil("window.premierLu === true");
+
+        assertThat(alertes()).isEmpty();
     }
 }
