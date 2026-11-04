@@ -84,15 +84,16 @@ public class PhotoCopyService {
             int subsampling = Math.max(1, longSide / rules.coteMaxPixels());
             param.setSourceSubsampling(subsampling, subsampling, 0, 0);
             BufferedImage decoded = reader.read(0, param);
-            double scale = Math.min(1.0, (double) rules.coteMaxPixels() / longSide);
-            return Optional.of(encode(oriented(decoded, scaled(width, scale), scaled(height, scale), orientation)));
+            int targetLongSide = Math.min(longSide, rules.coteMaxPixels());
+            return Optional.of(encode(oriented(decoded, scaled(width, targetLongSide, longSide), scaled(height, targetLongSide, longSide), orientation)));
         } finally {
             reader.dispose();
         }
     }
 
-    private static int scaled(int side, double scale) {
-        return Math.max(1, (int) Math.round(side * scale));
+    /** Arrondi au plus proche, en entiers. */
+    private static int scaled(int side, int targetLongSide, int longSide) {
+        return (int) Math.max(1, ((long) side * targetLongSide + longSide / 2) / longSide);
     }
 
     /** Sur fond blanc : le JPEG n'a pas de transparence. */
