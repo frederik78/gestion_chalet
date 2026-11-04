@@ -122,10 +122,18 @@ class PhotoSizeRealServerTest {
         assertThat(reponse.json()).isEqualTo(TROP_LOURD);
     }
 
-    /** Cinq photos de 15 Mio, chacune permise : avec leurs séparateurs, la requête dépasse 75 Mio. */
+    /** D-41 : le maximum annoncé passe entier, malgré les séparateurs et la partie {@code recu}. */
+    @Test
+    void ca70_cinqPhotosDeLaTailleMaximaleSontAcceptees() {
+        Reponse reponse = envoyer("/api/recus", PHOTO_MAX, 5, true);
+
+        assertThat(reponse.statut()).isEqualTo(201);
+    }
+
+    /** Six photos permises une à une : 90 Mio, au-delà des 76 Mio de la requête totale, que Tomcat refuse avant de compter les photos. */
     @Test
     void ca70_uneRequeteTotaleTropLourdeDonne413EnJson() {
-        Reponse reponse = envoyer("/api/recus", PHOTO_MAX, 5, true);
+        Reponse reponse = envoyer("/api/recus", PHOTO_MAX, 6, true);
 
         assertThat(reponse.statut()).isEqualTo(413);
         assertThat(reponse.json()).isEqualTo(TROP_LOURD);

@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.TestPropertySource;
 
-/** La limite est abaissée pour la franchir sans allouer 75 Mo ; DefaultValuesTest garde la valeur par défaut. */
+/** La limite est abaissée pour la franchir sans allouer 76 Mo ; DefaultValuesTest garde la valeur par défaut. */
 @RealServerTest
 @TestPropertySource(properties = "spring.servlet.multipart.max-request-size=1KB")
 class MultipartLimitRealServerTest {

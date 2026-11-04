@@ -4,7 +4,7 @@ spring:
   servlet:
     multipart:
       max-file-size: 15MB
-      max-request-size: 75MB
+      max-request-size: 76MB
       # Analysé seulement par une route qui lit un multipart, jamais par le seul passage dans Spring MVC.
       resolve-lazily: true
   # Ces filtres liraient le corps d'un formulaire avant la sécurité, sans la borne de RequestBodyLimitFilter. Aucune route n'en a besoin.
@@ -56,7 +56,7 @@ server:
     # Le formulaire de connexion est lu par Tomcat, avant RequestBodyLimitFilter (2 Mo par défaut).
     max-http-form-post-size: ${recus.securite.corps-requete-max}
     # Ce que Tomcat lit et jette après un refus, pour que le client reçoive la réponse au lieu d'une connexion coupée (2 Mo par défaut). Au-delà de la requête
-    # totale de 75 Mo : une requête encore plus lourde reçoit le 413 ; passé 100 Mo, sa connexion est coupée, sans mémoire consommée dans les deux cas.
+    # totale de 76 Mo : une requête encore plus lourde reçoit le 413 ; passé 100 Mo, sa connexion est coupée, sans mémoire consommée dans les deux cas.
     max-swallow-size: 100MB
   servlet:
     session:
