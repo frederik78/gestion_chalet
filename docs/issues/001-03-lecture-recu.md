@@ -3,7 +3,7 @@ id: 001-03
 titre: Lecture du reçu
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: À faire
+statut: En cours
 depend_de: [001-02]
 criteres: [CA01, CA02, CA03, CA04, CA05, CA06, CA07, CA08, CA84, CA69, CA70, CA77, CA78, CS10, CS11, CS13, CS19]
 branche: feat/001-03-lecture-recu
