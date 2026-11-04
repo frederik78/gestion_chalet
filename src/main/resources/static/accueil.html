@@ -56,9 +56,12 @@
           <label for="numeroTvq">Numéro d'inscription TVQ</label>
           <input id="numeroTvq" type="text" maxlength="30" autocomplete="off">
           <ul id="alertes" class="alertes" role="status"></ul>
+          <p id="message-lecture" role="status"></p>
+          <button id="relancer-lecture" class="secondaire" type="button" hidden>Relancer la lecture</button>
           <p id="message-validation" role="alert"></p>
           <div class="actions">
             <button id="valider" type="submit">Valider</button>
+            <button id="retour-photos" class="secondaire" type="button">Retour aux photos</button>
             <button id="abandonner" class="secondaire" type="button">Abandonner</button>
           </div>
         </form>
