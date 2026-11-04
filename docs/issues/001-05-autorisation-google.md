@@ -3,7 +3,7 @@ id: 001-05
 titre: Autorisation Google
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: À faire
+statut: En cours
 depend_de: [001-02]
 criteres: [CA64, CA65, CA66, CA67, CA68, CS22, CS23, CS24]
 branche: feat/001-05-autorisation-google
