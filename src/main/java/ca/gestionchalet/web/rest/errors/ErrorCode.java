@@ -5,6 +5,7 @@ public enum ErrorCode {
     VALIDATION(400, "Certains champs sont invalides."),
     REQUETE_INVALIDE(400, "La requête est invalide."),
     PHOTO_MANQUANTE(400, "Au moins une photo est requise."),
+    TROP_DE_PHOTOS(400, "Ce reçu compte trop de photos."),
     IMAGE_ILLISIBLE(400, "Cette image est illisible."),
     IMAGE_TROP_GRANDE(400, "Les dimensions de cette image sont trop grandes."),
     NON_AUTHENTIFIE(401, "Authentification requise."),

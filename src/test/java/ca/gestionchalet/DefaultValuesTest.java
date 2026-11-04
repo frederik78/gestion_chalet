@@ -27,6 +27,7 @@ class DefaultValuesTest {
         "spring.mvc.hiddenmethod.filter.enabled, false",
         "spring.servlet.multipart.max-file-size, 15MB",
         "spring.servlet.multipart.max-request-size, 75MB",
+        "server.tomcat.max-swallow-size, 100MB",
         "logging.level.org.hibernate.orm.jdbc.error, OFF",
         "recus.photos-par-recu-max, 5",
         "recus.dimensions-max-megapixels, 64",

@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -197,5 +198,32 @@ class PhotoContentRealServerTest {
         List<Path> nouveaux = new ArrayList<>(etat().fichiers());
         nouveaux.removeAll(avant.fichiers());
         assertThat(Files.readAllBytes(nouveaux.getFirst())).isEqualTo(contenu);
+    }
+
+    private static byte[][] photos(int nombre) {
+        byte[][] photos = new byte[nombre][];
+        Arrays.fill(photos, RecuRequests.png());
+        return photos;
+    }
+
+    @Test
+    void ca70_leNombreMaximalDePhotosEstAccepte() {
+        Reponse reponse = RecuRequests.valider(client, RecuRequests.corps(RecuRequests.valeurs()), photos(5));
+
+        assertThat(reponse.statut()).isEqualTo(201);
+        assertThat((List<?>) reponse.json().get("photos")).hasSize(5);
+    }
+
+    /** 50 et 600 franchissent aussi la limite de parties de Tomcat, qui répond avant le service. */
+    @ParameterizedTest
+    @ValueSource(ints = {6, 49, 50, 600})
+    void ca70_auDelaDuNombreMaximalLaValidationEstRefuseeSansRienEnregistrer(int nombre) throws IOException {
+        Etat avant = etat();
+
+        Reponse reponse = RecuRequests.valider(client, RecuRequests.corps(RecuRequests.valeurs()), photos(nombre));
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Ce reçu compte trop de photos.", "code", "TROP_DE_PHOTOS"));
+        assertThat(etat()).isEqualTo(avant);
     }
 }

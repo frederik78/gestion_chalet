@@ -4,6 +4,7 @@ import ca.gestionchalet.domain.ImageTooLargeException;
 import ca.gestionchalet.domain.MissingPhotoException;
 import ca.gestionchalet.domain.PhotoFormat;
 import ca.gestionchalet.domain.RecuRules;
+import ca.gestionchalet.domain.TooManyPhotosException;
 import ca.gestionchalet.domain.UnreadableImageException;
 import ca.gestionchalet.domain.UnsupportedPhotoFormatException;
 import java.io.ByteArrayInputStream;
@@ -39,6 +40,9 @@ public class PhotoValidationService {
     public List<PhotoFormat> check(List<MultipartFile> files) {
         if (files == null || files.isEmpty() || files.stream().anyMatch(MultipartFile::isEmpty)) {
             throw new MissingPhotoException();
+        }
+        if (files.size() > rules.photosParRecuMax()) {
+            throw new TooManyPhotosException();
         }
         List<PhotoFormat> formats = new ArrayList<>();
         for (MultipartFile file : files) {
