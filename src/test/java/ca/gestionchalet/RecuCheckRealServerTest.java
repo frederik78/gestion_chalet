@@ -14,10 +14,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -240,12 +242,18 @@ class RecuCheckRealServerTest {
         assertRequeteInvalide("{\"valeurs\":{\"date\":\"2026-06-16\",\"fournisseur\":{\"@class\":\"java.lang.Runtime\"},\"typeDepense\":\"Fournitures\",\"montantTotalCents\":2500}}");
     }
 
-    /** Sous la limite de 64 Ko : c'est la profondeur ou la longueur du nombre qui doit être refusée, sans débordement de pile. */
-    @Test
-    void uneProfondeurOuUnNombreDemesuresSontRefuses() {
-        assertRequeteInvalide("[".repeat(30_000));
-        assertRequeteInvalide("{\"a\":".repeat(9_000));
-        assertRequeteInvalide("{\"montantTotalLuCents\":" + "9".repeat(60_000) + "," + VALEURS_VALIDES + "}");
+    /**
+     * Corps fermés, sous les 64 Ko, et valides hors de leur champ inconnu {@code z}, normalement ignoré : seules les limites par défaut de
+     * Jackson ({@code StreamReadConstraints} : profondeur, longueur d'un nombre) les refusent. Sans elles, la réponse serait 200.
+     */
+    @ParameterizedTest
+    @MethodSource("corpsDemesures")
+    void uneProfondeurOuUnNombreDemesuresSontRefuses(String champInconnu) {
+        assertRequeteInvalide("{\"z\":" + champInconnu + "," + VALEURS_VALIDES + "}");
+    }
+
+    static Stream<String> corpsDemesures() {
+        return Stream.of("[".repeat(30_000) + "]".repeat(30_000), "9".repeat(60_000));
     }
 
     private void assertRequeteInvalide(String corps) {
