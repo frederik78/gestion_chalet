@@ -6,6 +6,7 @@ import ca.gestionchalet.client.RecuExtractor;
 import ca.gestionchalet.domain.ReadingRules;
 import ca.gestionchalet.domain.RecuRules;
 import ca.gestionchalet.repository.PhotoStorage;
+import ca.gestionchalet.security.ReadingRateLimiter;
 import java.time.Clock;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.boot.servlet.autoconfigure.MultipartProperties;
@@ -43,6 +44,11 @@ public class RecuConfiguration {
     ReadingRules readingRules(ApplicationProperties properties) {
         ApplicationProperties.Reading reading = properties.lecture();
         return new ReadingRules(reading.coteMaxPixels(), reading.coteSourceMaxPixels(), reading.decodagesSimultanes());
+    }
+
+    @Bean
+    ReadingRateLimiter readingRateLimiter(ApplicationProperties properties, Clock clock) {
+        return new ReadingRateLimiter(properties.lecture().lecturesParHeure(), clock);
     }
 
     /** {@code @PastOrPresent} compare à la date du jour dans ce fuseau, et non dans celui de la machine. */

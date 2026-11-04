@@ -6,7 +6,9 @@ import ca.gestionchalet.domain.PhotoFormat;
 import ca.gestionchalet.domain.ReadingResult;
 import ca.gestionchalet.domain.RecuReading;
 import ca.gestionchalet.domain.RecuRules;
+import ca.gestionchalet.domain.TooManyReadingsException;
 import ca.gestionchalet.domain.Valeurs;
+import ca.gestionchalet.security.ReadingRateLimiter;
 import ca.gestionchalet.service.dto.RecuReadingDTO;
 import ca.gestionchalet.service.mapper.RecuReadingMapper;
 import java.util.ArrayList;
@@ -30,19 +32,25 @@ public class RecuReadingService {
     private final ModelFieldsValidationService validation;
     private final PhotoValidationService photoValidationService;
     private final PhotoCopyService photoCopyService;
+    private final ReadingRateLimiter rateLimiter;
 
     public RecuReadingService(RecuExtractor recuExtractor, RecuRules rules, RecuReadingMapper mapper, ModelFieldsValidationService validation,
-            PhotoValidationService photoValidationService, PhotoCopyService photoCopyService) {
+            PhotoValidationService photoValidationService, PhotoCopyService photoCopyService,
+            ReadingRateLimiter rateLimiter) {
         this.recuExtractor = recuExtractor;
         this.rules = rules;
         this.mapper = mapper;
         this.validation = validation;
         this.photoValidationService = photoValidationService;
         this.photoCopyService = photoCopyService;
+        this.rateLimiter = rateLimiter;
     }
 
     public RecuReadingDTO read(List<MultipartFile> files) {
         List<PhotoFormat> formats = photoValidationService.check(files);
+        rateLimiter.reserve().ifPresent(wait -> {
+            throw new TooManyReadingsException(wait);
+        });
         List<byte[]> images = new ArrayList<>();
         for (int i = 0; i < files.size(); i++) {
             Optional<byte[]> image = photoCopyService.copy(files.get(i), formats.get(i));

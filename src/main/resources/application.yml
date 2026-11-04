@@ -18,8 +18,13 @@ spring:
   # Modèle fixé par recus.modele ; aucun réglage temperature, top_p ni top_k (ADR 0001). La clé vient de ANTHROPIC_API_KEY, lue par le client.
   ai:
     anthropic:
+      # Délai de lecture ; aucun nouvel essai automatique : la PWA propose de relancer (PRD, section 7.3).
+      timeout: ${recus.lecture.delai}
+      max-retries: 0
       chat:
         model: ${recus.modele}
+        # Borne la réponse, donnée non fiable ; une réponse coupée n'est plus du JSON et donne ECHEC.
+        max-tokens: 1024
   # Un montant est un entier en cents (PRD, section 11.4) : ni décimal, ni texte, que Jackson convertirait sinon.
   jackson:
     deserialization:
@@ -44,6 +49,8 @@ spring:
 
 logging:
   level:
+    # Spring AI y recopie le message envoyé et les blocs de réponse qu'il ne reconnaît pas : du contenu de reçu (D-12).
+    org.springframework.ai.anthropic: ERROR
     # Il recopierait le message de la base, qui peut citer une valeur de reçu ; ExceptionTranslator journalise la panne sans son message.
     org.hibernate.orm.jdbc.error: "OFF"
 
@@ -99,9 +106,9 @@ recus:
     lectures-par-heure: 60
     # Long côté de la copie envoyée, celui jusqu'auquel le service n'applique aucune réduction.
     cote-max-pixels: 1568
-    # Protections du décodage : voir la mesure dans le rapport de 001-03.
+    # Protections du décodage : sous -Xmx256m, un PNG de 9,8 Mpx sur 16 bits échoue parfois à 2 décodages simultanés, jamais à 1 (mesuré).
     cote-source-max-pixels: 20000
-    decodages-simultanes: 2
+    decodages-simultanes: 1
   formats:
     - image/jpeg
     - image/png

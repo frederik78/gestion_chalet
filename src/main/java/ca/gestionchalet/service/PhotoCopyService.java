@@ -54,6 +54,10 @@ public class PhotoCopyService {
         } catch (IOException | RuntimeException e) {
             LOG.warn("Copie d'une photo impossible : {}", e.getClass().getName());
             return Optional.empty();
+        } catch (OutOfMemoryError e) {
+            // Une seule allocation démesurée d'un fichier hostile, déjà abandonnée ici : la lecture échoue, le serveur continue (mesuré sous -Xmx256m).
+            LOG.error("Copie d'une photo impossible : mémoire insuffisante");
+            return Optional.empty();
         } finally {
             decodings.release();
         }
