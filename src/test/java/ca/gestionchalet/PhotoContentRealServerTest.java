@@ -13,6 +13,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -225,5 +229,59 @@ class PhotoContentRealServerTest {
         assertThat(reponse.statut()).isEqualTo(400);
         assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Ce reçu compte trop de photos.", "code", "TROP_DE_PHOTOS"));
         assertThat(etat()).isEqualTo(avant);
+    }
+
+    private static Stream<Arguments> refusSurUneCleConnue() {
+        Map<String, Object> illisible = Map.of("erreur", "Cette image est illisible.", "code", "IMAGE_ILLISIBLE");
+        Map<String, Object> tropGrande = Map.of("erreur", "Les dimensions de cette image sont trop grandes.", "code", "IMAGE_TROP_GRANDE");
+        Map<String, Object> tropDePhotos = Map.of("erreur", "Ce reçu compte trop de photos.", "code", "TROP_DE_PHOTOS");
+        return Stream.of(
+                Arguments.of("HTML", 415, FORMAT_REFUSE, new byte[][] {texte("<html></html>")}),
+                Arguments.of("en-tête illisible", 400, illisible, new byte[][] {Arrays.copyOf(RecuRequests.png(4), 12)}),
+                Arguments.of("image énorme", 400, tropGrande, new byte[][] {RecuRequests.entetePng(8000, 8001)}),
+                Arguments.of("trop de photos", 400, tropDePhotos, photos(6)));
+    }
+
+    /** Sans le contrôle préalable, le contenu différent recevrait 409 : c'est le refus de la photo qui prime, et le reçu ne change pas. */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("refusSurUneCleConnue")
+    void ca18_cs10_uneCleConnueNEvitePasLeControleDesPhotos(String nature, int statut, Map<String, Object> corpsAttendu, byte[][] contenus) throws IOException {
+        Map<String, Object> corps = RecuRequests.corps(RecuRequests.valeurs());
+        byte[] image = RecuRequests.png();
+        assertThat(RecuRequests.valider(client, corps, image).statut()).isEqualTo(201);
+        Etat avant = etat();
+
+        Reponse reponse = RecuRequests.validerDeclare(client, corps, "image/jpeg", "recu.jpg", contenus);
+
+        assertThat(reponse.statut()).isEqualTo(statut);
+        assertThat(reponse.json()).isEqualTo(corpsAttendu);
+        assertThat(etat()).isEqualTo(avant);
+    }
+
+    /** R-11 ne change pas de sens : seul le contenu compte. Les mêmes octets déclarés autrement sont le même reçu, d'autres octets valides un conflit. */
+    @Test
+    void ca18_surUneCleConnueLeTypeDeclareNeCompteMemeContenu200ContenuDifferent409() {
+        Map<String, Object> corps = RecuRequests.corps(RecuRequests.valeurs());
+        byte[] image = RecuRequests.png();
+        assertThat(RecuRequests.valider(client, corps, image).statut()).isEqualTo(201);
+
+        assertThat(RecuRequests.validerDeclare(client, corps, "text/html", "x.html", image).statut()).isEqualTo(200);
+        assertThat(RecuRequests.validerDeclare(client, corps, "image/png", "recu.png", RecuRequests.png(5)).statut()).isEqualTo(409);
+    }
+
+    /** Le seul lien vers la base est tenu ici : le refus ne l'attend pas, il n'y a donc ni transaction ouverte ni attente pour une photo refusée. */
+    @Test
+    void cs10_unePhotoRefuseeNAttendPasLeLienVersLaBase() throws SQLException {
+        Map<String, Object> corps = RecuRequests.corps(RecuRequests.valeurs());
+        Instant debut = Instant.now();
+
+        Reponse reponse;
+        try (Connection lienUnique = base.getDataSource().getConnection()) {
+            assertThat(lienUnique.isClosed()).isFalse();
+            reponse = RecuRequests.validerDeclare(client, corps, "image/jpeg", "recu.jpg", texte("<html></html>"));
+        }
+
+        assertThat(reponse.statut()).isEqualTo(415);
+        assertThat(Duration.between(debut, Instant.now())).isLessThan(Duration.ofSeconds(10));
     }
 }

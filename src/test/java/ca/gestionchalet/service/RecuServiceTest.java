@@ -37,9 +37,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionSynchronizationUtils;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 class RecuServiceTest {
@@ -51,7 +53,8 @@ class RecuServiceTest {
     private final RecuMapper mapper = new RecuMapperImpl();
     private final Clock horloge = Clock.fixed(Instant.parse("2026-10-11T12:00:00Z"), ZoneOffset.UTC);
     private final RecuService service = new RecuService(depot, stockage, mapper,
-            new PhotoValidationService(new RecuRules(List.of("Fournitures"), 5, 1_000_000L, List.of("image/jpeg", "image/png"), 64L)), horloge);
+            new PhotoValidationService(new RecuRules(List.of("Fournitures"), 5, 1_000_000L, List.of("image/jpeg", "image/png"), 64L)),
+            new TransactionTemplate(mock(PlatformTransactionManager.class)), horloge);
     private final ValeursDTO valeurs = new ValeursDTO(LocalDate.of(2026, 10, 11), "F", null, "Fournitures", null, null, null, 1150L, null, null);
 
     /** Le service compte sur une transaction pour retirer les fichiers : sa synchronisation est ouverte à la main, sans Spring. */
