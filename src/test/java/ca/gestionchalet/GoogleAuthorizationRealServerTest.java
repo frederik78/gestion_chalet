@@ -664,4 +664,31 @@ class GoogleAuthorizationRealServerTest {
 
         assertThat(etat()).isEqualTo("VALIDE");
     }
+
+    @Test
+    void cs24_unCodeInconnuDuServeurDeJetonsNEstPasRecopieDansLesRedirections() {
+        String state = nouveauState();
+        GOOGLE.repondre(400, "{\"error\":\"Unauthorized http://secret.invalid Exception\"}");
+
+        List<String> redirections = chaineDeRedirections("/api/google/rappel?code=code-temoin&state=" + state);
+
+        assertSansTexteTechnique(redirections);
+        assertThat(redirections).first().asString().contains("error=AUTRE").doesNotContain("secret.invalid");
+    }
+
+    @Test
+    void ca66_uneConnexionRefuseeGardeLAutorisation() throws IOException {
+        Object enAttente = autoriserPuisValiderUnRecu();
+        Map<String, Object> avant = ligneAutorisation();
+        GOOGLE.arreter();
+        try {
+            assertThatThrownBy(() -> jetons.accessToken()).isInstanceOf(OAuth2AuthorizationException.class);
+        } finally {
+            GOOGLE.redemarrer();
+        }
+
+        assertThat(etat()).isEqualTo("VALIDE");
+        assertThat(etatCopie(enAttente)).isEqualTo("A_COPIER");
+        assertThat(ligneAutorisation()).isEqualTo(avant);
+    }
 }

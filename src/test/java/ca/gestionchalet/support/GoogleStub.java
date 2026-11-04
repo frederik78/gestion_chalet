@@ -11,6 +11,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 /** Serveur HTTP local qui double Google : il répond ce que le test choisit, et garde chaque requête reçue. Aucun appel ne quitte la machine. */
@@ -25,7 +27,14 @@ public final class GoogleStub implements AutoCloseable {
     public record Requete(String chemin, Map<String, String> parametres) {
     }
 
-    private final HttpServer serveur;
+    private HttpServer serveur;
+    private final int port;
+    /** Plusieurs fils : une réponse retardée ne retient pas les requêtes du test suivant. */
+    private final ExecutorService fils = Executors.newCachedThreadPool(tache -> {
+        Thread fil = new Thread(tache);
+        fil.setDaemon(true);
+        return fil;
+    });
     private final List<Requete> requetes = new CopyOnWriteArrayList<>();
     private volatile int statut;
     private volatile String reponse;
@@ -33,14 +42,30 @@ public final class GoogleStub implements AutoCloseable {
     private volatile String typeReponse;
 
     public GoogleStub() throws IOException {
-        serveur = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
-        serveur.createContext("/", this::traiter);
-        serveur.start();
+        serveur = ecouter(0);
+        port = serveur.getAddress().getPort();
         reinitialiser();
     }
 
+    private HttpServer ecouter(int portDemande) throws IOException {
+        HttpServer nouveau = HttpServer.create(new InetSocketAddress("localhost", portDemande), 0);
+        nouveau.createContext("/", this::traiter);
+        nouveau.setExecutor(fils);
+        nouveau.start();
+        return nouveau;
+    }
+
+    /** Plus personne n'écoute : la connexion est refusée. */
+    public void arreter() {
+        serveur.stop(0);
+    }
+
+    public void redemarrer() throws IOException {
+        serveur = ecouter(port);
+    }
+
     public String adresse() {
-        return "http://localhost:" + serveur.getAddress().getPort();
+        return "http://localhost:" + port;
     }
 
     public String adresseConsentement() {
@@ -126,5 +151,6 @@ public final class GoogleStub implements AutoCloseable {
     @Override
     public void close() {
         serveur.stop(0);
+        fils.shutdownNow();
     }
 }
