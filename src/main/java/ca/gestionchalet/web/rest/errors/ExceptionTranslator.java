@@ -128,7 +128,7 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
         if (response == null) {
             return null;
         }
-        long seconds = Math.max(1, ex.retryAfter().toSeconds() + (ex.retryAfter().toNanosPart() > 0 ? 1 : 0));
+        long seconds = ex.retryAfter().plusNanos(999_999_999L).toSeconds();
         return ResponseEntity.status(response.getStatusCode()).headers(response.getHeaders())
                 .header(HttpHeaders.RETRY_AFTER, Long.toString(seconds)).body(response.getBody());
     }
