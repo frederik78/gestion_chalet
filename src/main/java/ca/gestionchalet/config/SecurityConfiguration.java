@@ -17,6 +17,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.client.endpoint.OAuth2AccessTokenResponseClient;
+import org.springframework.security.oauth2.client.endpoint.OAuth2AuthorizationCodeGrantRequest;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -56,7 +58,8 @@ public class SecurityConfiguration {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, LoginRateLimiter rateLimiter, ClientRegistrationRepository clientRegistrations) {
+    public SecurityFilterChain filterChain(HttpSecurity http, LoginRateLimiter rateLimiter, ClientRegistrationRepository clientRegistrations,
+            OAuth2AccessTokenResponseClient<OAuth2AuthorizationCodeGrantRequest> tokenResponseClient) {
         RequestMatcher loginMatcher = PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, LOGIN_ROUTE);
         SecurityErrorHandler errorHandler = new SecurityErrorHandler(loginMatcher);
         CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
@@ -83,7 +86,8 @@ public class SecurityConfiguration {
                 .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT))
                 .permitAll()) // alignement JHipster, sans effet mesuré
             .oauth2Client(oauth2 -> oauth2.authorizationCodeGrant(grant -> grant
-                .authorizationRequestResolver(new GoogleAuthorizationRequestResolver(clientRegistrations))))
+                .authorizationRequestResolver(new GoogleAuthorizationRequestResolver(clientRegistrations))
+                .accessTokenResponseClient(tokenResponseClient)))
             .addFilterBefore(
                 new LoginGuardFilter(loginMatcher, rateLimiter, applicationProperties.securite().corpsRequeteMax().toBytes()),
                 UsernamePasswordAuthenticationFilter.class)

@@ -41,7 +41,35 @@ public class AutorisationGoogle {
         return autorisation;
     }
 
+    /** Tous les droits sont accordés : les jetons, déjà chiffrés, remplacent les précédents. */
+    public void accorder(String jetonAcces, Instant expireLe, String jetonRenouvellement) {
+        etat = EtatAutorisationGoogle.VALIDE;
+        jetonAccesChiffre = jetonAcces;
+        jetonAccesExpireLe = expireLe;
+        jetonRenouvellementChiffre = jetonRenouvellement;
+    }
+
+    /** Droits incomplets, expiration ou révocation : aucun jeton n'est gardé, une nouvelle autorisation est nécessaire. */
+    public void demanderRenouvellement() {
+        etat = EtatAutorisationGoogle.A_RENOUVELER;
+        jetonAccesChiffre = null;
+        jetonAccesExpireLe = null;
+        jetonRenouvellementChiffre = null;
+    }
+
     public EtatAutorisationGoogle getEtat() {
         return etat;
+    }
+
+    public String getJetonAccesChiffre() {
+        return jetonAccesChiffre;
+    }
+
+    public Instant getJetonAccesExpireLe() {
+        return jetonAccesExpireLe;
+    }
+
+    public String getJetonRenouvellementChiffre() {
+        return jetonRenouvellementChiffre;
     }
 }

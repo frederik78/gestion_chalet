@@ -17,6 +17,7 @@ import org.springframework.validation.annotation.Validated;
  * inconnues restent permises, car {@code recus.modele} et le condensé du mot de passe sont lus ailleurs.
  *
  * @param securite réglages de sécurité ({@code recus.securite.*})
+ * @param google réglages de l'autorisation Google ({@code recus.google.*})
  * @param dossierPhotos dossier des photos, hors de la base et de la racine web
  * @param typesDepense liste fermée des types de dépense, dans l'orthographe du Sheet
  * @param photosParRecuMax nombre maximal de photos d'un reçu
@@ -27,7 +28,7 @@ import org.springframework.validation.annotation.Validated;
  */
 @Validated
 @ConfigurationProperties("recus")
-public record ApplicationProperties(@Valid @NotNull Security securite, @NotNull Path dossierPhotos,
+public record ApplicationProperties(@Valid @NotNull Security securite, @Valid @NotNull Google google, @NotNull Path dossierPhotos,
         @NotEmpty List<String> typesDepense,
         @Min(1) int photosParRecuMax,
         @NotEmpty List<String> formats,
@@ -46,6 +47,14 @@ public record ApplicationProperties(@Valid @NotNull Security securite, @NotNull 
      * @param ecartTolereCents écart de calcul au-delà duquel l'alerte est levée
      */
     public record Alerts(@Min(1) long seuilNumerosInscriptionCents, @Min(1) long seuilPieceAVerifierCents, @Min(0) long ecartTolereCents) {
+    }
+
+    /**
+     * La clé de chiffrement, elle, est lue par {@code GoogleTokenEncryptor} ; les droits et l'adresse de rappel sont dans {@code spring.security.oauth2.client}.
+     *
+     * @param delaiAppel délai maximal d'un appel à Google pour obtenir un jeton
+     */
+    public record Google(@NotNull Duration delaiAppel) {
     }
 
     /**

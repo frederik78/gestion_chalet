@@ -29,6 +29,7 @@ public final class GoogleStub implements AutoCloseable {
     private final List<Requete> requetes = new CopyOnWriteArrayList<>();
     private volatile int statut;
     private volatile String reponse;
+    private volatile long attenteMillis;
 
     public GoogleStub() throws IOException {
         serveur = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
@@ -56,6 +57,7 @@ public final class GoogleStub implements AutoCloseable {
     /** Tous les droits accordés, avec un jeton de renouvellement. */
     public void reinitialiser() {
         requetes.clear();
+        attenteMillis = 0;
         repondreJeton(3600, SHEETS + " " + DRIVE_FILE, JETON_RENOUVELLEMENT);
     }
 
@@ -76,6 +78,11 @@ public final class GoogleStub implements AutoCloseable {
         repondre(200, "{" + corps + ",\"expires_in\":" + expireDans + "}");
     }
 
+    /** La prochaine réponse n'arrive qu'après ce délai. */
+    public void retarder(long millis) {
+        attenteMillis = millis;
+    }
+
     public void repondre(int statut, String corps) {
         this.statut = statut;
         this.reponse = corps;
@@ -85,10 +92,19 @@ public final class GoogleStub implements AutoCloseable {
         try (echange) {
             String corps = new String(echange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             requetes.add(new Requete(echange.getRequestURI().getPath(), formulaire(corps)));
+            attendre();
             byte[] octets = reponse.getBytes(StandardCharsets.UTF_8);
             echange.getResponseHeaders().add("Content-Type", "application/json");
             echange.sendResponseHeaders(statut, octets.length);
             echange.getResponseBody().write(octets);
+        }
+    }
+
+    private void attendre() {
+        try {
+            Thread.sleep(attenteMillis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 

@@ -96,6 +96,15 @@ public class Recu {
         motifBlocage = motif;
     }
 
+    /** Le blocage est levé : la copie est à refaire (PRD, section 4.2). */
+    public void reprendre() {
+        if (etatCopie != EtatCopie.BLOQUEE) {
+            throw new IllegalStateException("Transition refusée : " + etatCopie + " vers A_COPIER");
+        }
+        etatCopie = EtatCopie.A_COPIER;
+        motifBlocage = null;
+    }
+
     public boolean hasContent(String empreinte) {
         return empreinteContenu.equals(empreinte);
     }
