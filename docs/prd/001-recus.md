@@ -266,7 +266,7 @@ Valeurs fictives pour les numéros et le type.
 
 | Méthode et chemin | Entrée | Réponse |
 |---|---|---|
-| `POST /api/connexion` | formulaire `application/x-www-form-urlencoded`, paramètre `motDePasse` | 204 et nouvelle session ; 401, y compris mot de passe absent ou vide, tentative comptée ; 429 ; 400 avec un paramètre d'URL ; 415 pour un autre format, JSON compris ; 413 au-delà de 64 Ko ou sans longueur déclarée ; corps jamais terminé : fermeture sans réponse à 60 s, tentative comptée (à revoir avec NF-03) |
+| `POST /api/connexion` | formulaire `application/x-www-form-urlencoded`, paramètre `motDePasse` | 204 et nouvelle session ; 401, y compris mot de passe absent ou vide, tentative comptée ; 429 ; 400 avec un paramètre d'URL ; 415 pour un autre format, JSON compris ; 413 au-delà de 64 Ko ou sans longueur déclarée ; corps jamais terminé : fermeture sans réponse à 20 s, tentative comptée (à revoir avec NF-03) |
 | `POST /api/deconnexion` | | 204, avec ou sans session |
 | `GET /api/configuration` | | 200 : `{ "typesDepense": […], "photosParRecuMax": 5, "tailleParPhotoMaxOctets": …, "formats": ["image/jpeg", "image/png"] }` |
 | `POST /api/lectures` | multipart, parties `photos` | 200 : objet lecture ; 400, 413, 415, 429 |
