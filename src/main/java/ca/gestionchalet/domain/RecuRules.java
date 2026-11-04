@@ -19,5 +19,8 @@ public record RecuRules(
     public RecuRules {
         typesDepense = List.copyOf(typesDepense);
         formats = List.copyOf(formats);
+        // Annoncer aux écrans un format que le contrôle du contenu ne saurait pas reconnaître serait une promesse fausse.
+        formats.forEach(format -> PhotoFormat.ofMediaType(format)
+                .orElseThrow(() -> new IllegalArgumentException("Format de photo inconnu dans recus.formats : " + format)));
     }
 }

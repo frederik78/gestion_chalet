@@ -46,8 +46,20 @@ public final class RecuRequests {
     }
 
     public static byte[] png(int cote) {
+        return image("png", cote);
+    }
+
+    public static byte[] jpeg(int cote) {
+        return image("jpeg", cote);
+    }
+
+    public static byte[] gif(int cote) {
+        return image("gif", cote);
+    }
+
+    private static byte[] image(String format, int cote) {
         try (ByteArrayOutputStream octets = new ByteArrayOutputStream()) {
-            ImageIO.write(new BufferedImage(cote, cote, BufferedImage.TYPE_INT_RGB), "png", octets);
+            ImageIO.write(new BufferedImage(cote, cote, BufferedImage.TYPE_INT_RGB), format, octets);
             return octets.toByteArray();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -66,12 +78,21 @@ public final class RecuRequests {
         return envoyer(client, corpsJson, "image/png", photos);
     }
 
+    /** Le type et le nom déclarés par le client, que le serveur ne doit pas croire. */
+    public static Reponse validerDeclare(TestClient client, Map<String, Object> corps, String type, String nom, byte[]... photos) {
+        return envoyer(client, JSON.writeValueAsString(corps), type, nom, photos);
+    }
+
     private static Reponse envoyer(TestClient client, String corpsJson, String type, byte[]... photos) {
+        return envoyer(client, corpsJson, type, "recu.png", photos);
+    }
+
+    private static Reponse envoyer(TestClient client, String corpsJson, String type, String nom, byte[]... photos) {
         List<byte[]> morceaux = new ArrayList<>();
         morceaux.add(("--" + BOUNDARY + "\r\nContent-Disposition: form-data; name=\"recu\"\r\nContent-Type: application/json\r\n\r\n"
                 + corpsJson + "\r\n").getBytes(StandardCharsets.UTF_8));
         for (byte[] photo : photos) {
-            morceaux.add(("--" + BOUNDARY + "\r\nContent-Disposition: form-data; name=\"photos\"; filename=\"recu.png\"\r\nContent-Type: " + type + "\r\n\r\n")
+            morceaux.add(("--" + BOUNDARY + "\r\nContent-Disposition: form-data; name=\"photos\"; filename=\"" + nom + "\"\r\nContent-Type: " + type + "\r\n\r\n")
                     .getBytes(StandardCharsets.UTF_8));
             morceaux.add(photo);
             morceaux.add("\r\n".getBytes(StandardCharsets.UTF_8));

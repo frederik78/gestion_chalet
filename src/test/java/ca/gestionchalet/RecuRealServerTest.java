@@ -537,7 +537,7 @@ class RecuRealServerTest {
 
     @Test
     void ca69_unePhotoDeFormatHorsListeEstRefusee() {
-        Reponse reponse = RecuRequests.validerAvecType(client, RecuRequests.corps(RecuRequests.valeurs()), "image/gif", RecuRequests.png());
+        Reponse reponse = RecuRequests.validerAvecType(client, RecuRequests.corps(RecuRequests.valeurs()), "image/gif", RecuRequests.gif(4));
 
         assertThat(reponse.statut()).isEqualTo(415);
         assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Format non accepté.", "code", "FORMAT_NON_ACCEPTE"));

@@ -108,16 +108,21 @@ class RecuPhotoReadFailureRealServerTest {
     }
 
     @Test
-    void ca19_lEchecDeLectureDUnePhotoNeLaisseNiRecuNiFichierEtLaMemeCleReussitEnsuite(CapturedOutput journaux) throws IOException {
+    void ca19_lEchecDeLectureAuControleNeLaisseNiRecuNiFichierEtLaMemeCleReussitEnsuite(CapturedOutput journaux) throws IOException {
         verifierQuUneLectureEnEchecNeLaisseRien(0, journaux);
     }
 
     @Test
-    void ca19_lEchecDeLaSecondeLectureAuStockageNeLaisseNiRecuNiFichierEtLaMemeCleReussitEnsuite(CapturedOutput journaux) throws IOException {
+    void ca19_lEchecDeLectureDUnePhotoNeLaisseNiRecuNiFichierEtLaMemeCleReussitEnsuite(CapturedOutput journaux) throws IOException {
         verifierQuUneLectureEnEchecNeLaisseRien(1, journaux);
     }
 
-    /** La première lecture d'une photo calcule l'empreinte, la seconde l'écrit. */
+    @Test
+    void ca19_lEchecDeLaSecondeLectureAuStockageNeLaisseNiRecuNiFichierEtLaMemeCleReussitEnsuite(CapturedOutput journaux) throws IOException {
+        verifierQuUneLectureEnEchecNeLaisseRien(2, journaux);
+    }
+
+    /** La première lecture d'une photo la contrôle, la deuxième calcule l'empreinte, la troisième l'écrit. */
     private void verifierQuUneLectureEnEchecNeLaisseRien(int readsBeforeFailure, CapturedOutput journaux) throws IOException {
         TestClient client = new TestClient(port, "source-" + UUID.randomUUID());
         assertThat(client.connecter(TestDoublesConfiguration.MOT_DE_PASSE).statut()).isEqualTo(204);
