@@ -11,6 +11,8 @@ import java.util.function.Supplier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -58,8 +60,7 @@ public class SecurityConfiguration {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, LoginRateLimiter rateLimiter, ClientRegistrationRepository clientRegistrations,
-            OAuth2AccessTokenResponseClient<OAuth2AuthorizationCodeGrantRequest> tokenResponseClient) {
+    public SecurityFilterChain filterChain(HttpSecurity http, LoginRateLimiter rateLimiter) {
         RequestMatcher loginMatcher = PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, LOGIN_ROUTE);
         SecurityErrorHandler errorHandler = new SecurityErrorHandler(loginMatcher);
         CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
@@ -85,12 +86,31 @@ public class SecurityConfiguration {
                 .deleteCookies("JSESSIONID")
                 .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT))
                 .permitAll()) // alignement JHipster, sans effet mesuré
-            .oauth2Client(oauth2 -> oauth2.authorizationCodeGrant(grant -> grant
-                .authorizationRequestResolver(new GoogleAuthorizationRequestResolver(clientRegistrations))
-                .accessTokenResponseClient(tokenResponseClient)))
             .addFilterBefore(
                 new LoginGuardFilter(loginMatcher, rateLimiter, applicationProperties.securite().corpsRequeteMax().toBytes()),
                 UsernamePasswordAuthenticationFilter.class)
+            .headers(AbstractHttpConfigurer::disable) // posés par SecurityHeadersFilter, avant le pare-feu HTTP
+            .requestCache(AbstractHttpConfigurer::disable);
+        return http.build();
+    }
+
+    /**
+     * Le client OAuth2 sur ses seules routes : son filtre de rappel lit les paramètres de toute requête qu'il voit, donc le corps d'un formulaire
+     * ou d'un multipart, avant le contrôle d'accès (mesuré : cs01 et cs08 en délai dépassé dans la chaîne principale).
+     */
+    @Bean
+    @Order(Ordered.HIGHEST_PRECEDENCE)
+    public SecurityFilterChain googleFilterChain(HttpSecurity http, ClientRegistrationRepository clientRegistrations,
+            OAuth2AccessTokenResponseClient<OAuth2AuthorizationCodeGrantRequest> tokenResponseClient) {
+        SecurityErrorHandler errorHandler = new SecurityErrorHandler(request -> false);
+        http
+            .securityMatcher(PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/api/google/autorisation"),
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/api/google/rappel"))
+            .authorizeHttpRequests(authz -> authz.anyRequest().authenticated())
+            .exceptionHandling(exceptionHandling -> exceptionHandling.authenticationEntryPoint(errorHandler).accessDeniedHandler(errorHandler))
+            .oauth2Client(oauth2 -> oauth2.authorizationCodeGrant(grant -> grant
+                .authorizationRequestResolver(new GoogleAuthorizationRequestResolver(clientRegistrations))
+                .accessTokenResponseClient(tokenResponseClient)))
             .headers(AbstractHttpConfigurer::disable) // posés par SecurityHeadersFilter, avant le pare-feu HTTP
             .requestCache(AbstractHttpConfigurer::disable);
         return http.build();
