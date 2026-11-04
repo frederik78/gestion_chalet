@@ -565,6 +565,45 @@ class RecuScreensChromeTest {
         assertThat(chrome.eval("document.getElementById('message-succes').textContent").asString()).isEmpty();
     }
 
+    /** L'écran annonce l'alerte que le serveur figera : le contrôle porte le montant lu, tant qu'il vaut pour les photos affichées. */
+    @Test
+    void ca29_leControleEnvoieLeMontantLuPuisPlusApresUnChangementDePhotos() throws InterruptedException {
+        chrome.eval("""
+                window.controles = [];
+                window.fetchAvantControle = window.fetch;
+                window.fetch = async (chemin, options) => {
+                  if (String(chemin) === '/api/recus/controles') {
+                    window.controles.push(JSON.parse(options.body));
+                  }
+                  return window.fetchAvantControle(chemin, options);
+                };
+                true""");
+        modele.answer(Map.of("date", "2026-09-25", "fournisseur", "Unimage", "typeDepense", "Fournitures", "montantTotal", "120.00"));
+        chrome.chooseFiles("#importer", image1);
+        chrome.waitUntil(NOMBRE_DE_PHOTOS_AU_DEPART + " === 1");
+        cliquer("continuer");
+        chrome.waitUntil("document.getElementById('validation').offsetParent !== null");
+        chrome.waitUntil("window.controles.length >= 1 && document.querySelectorAll('#alertes li').length === 1");
+
+        chrome.eval("const total = document.getElementById('montantTotal'); total.value = '40,00'; total.dispatchEvent(new Event('input', { bubbles: true })); true");
+        chrome.waitUntil("window.controles.at(-1).valeurs.montantTotalCents === 4000");
+        assertThat(chrome.eval("window.controles.at(-1).montantTotalLuCents").asInt()).isEqualTo(12000);
+        chrome.waitUntil("document.querySelectorAll('#alertes li').length === 1");
+        assertThat(chrome.eval("document.querySelector('#alertes li').textContent").asString()).isEqualTo("Numéros d'inscription manquants : TPS, TVQ");
+
+        cliquer("retour-photos");
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies button').length === 1");
+        chrome.eval("document.querySelector('#photos-choisies button').click(); true");
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies figure').length === 0");
+        chrome.chooseFiles("#importer", image2);
+        chrome.waitUntil(NOMBRE_DE_PHOTOS_AU_DEPART + " === 1");
+        int avant = nombre("window.controles.length");
+        cliquer("continuer");
+        chrome.waitUntil("window.controles.length > " + avant + " && document.querySelectorAll('#alertes li').length === 0");
+
+        assertThat(chrome.eval("'montantTotalLuCents' in window.controles.at(-1)").asBoolean()).isFalse();
+    }
+
     /** Le corps exact du serveur est couvert par les tests sur serveur réel ; ici, le texte que chaque code donne à l'écran. */
     @ParameterizedTest
     @CsvSource(delimiter = '|', value = {

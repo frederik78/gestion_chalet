@@ -211,6 +211,7 @@ function afficherLecture({ lecture, empechee }) {
   elements['relancer-lecture'].hidden = lue;
   lectureFaite = true;
   photosLues = [...photos];
+  planifierControle();
 }
 
 /** Le montant lu ne vaut que pour les photos lues (R-13) ; la saisie reste, et rien n'est relu sans le demander. */
@@ -221,6 +222,7 @@ function invaliderLectureSiPhotosChangees() {
     montantTotalLuCents = null;
     elements['message-lecture'].textContent = MESSAGE_PHOTOS_CHANGEES;
     elements['relancer-lecture'].hidden = false;
+    planifierControle();
   }
 }
 
@@ -377,7 +379,7 @@ async function controler(numero) {
   }
   let textes;
   try {
-    const reponse = await ecrireApi('/api/recus/controles', { valeurs });
+    const reponse = await ecrireApi('/api/recus/controles', montantTotalLuCents === null ? { valeurs } : { valeurs, montantTotalLuCents });
     if (reponse.ok) {
       textes = (await reponse.json()).alertes.map((alerte) => alerte.message);
     } else {
