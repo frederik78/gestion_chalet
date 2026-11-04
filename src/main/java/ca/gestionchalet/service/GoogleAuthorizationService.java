@@ -10,6 +10,7 @@ import ca.gestionchalet.repository.RecuRepository;
 import ca.gestionchalet.service.dto.GoogleAuthorizationStateDTO;
 import ca.gestionchalet.service.mapper.GoogleAuthorizationMapper;
 import ca.gestionchalet.security.GoogleTokenEncryptor;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
@@ -66,7 +67,7 @@ public class GoogleAuthorizationService implements OAuth2AuthorizedClientService
         if (autorisation.getEtat() != EtatAutorisationGoogle.VALIDE) {
             return null;
         }
-        ClientRegistration registration = clientRegistrations.findByRegistrationId(clientRegistrationId);
+        ClientRegistration registration = Objects.requireNonNull(clientRegistrations.findByRegistrationId(clientRegistrationId));
         OAuth2AccessToken accessToken = new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER, encryptor.decrypt(autorisation.getJetonAccesChiffre()),
                 null, autorisation.getJetonAccesExpireLe(), registration.getScopes());
         OAuth2RefreshToken refreshToken = new OAuth2RefreshToken(encryptor.decrypt(autorisation.getJetonRenouvellementChiffre()), null);
@@ -83,7 +84,7 @@ public class GoogleAuthorizationService implements OAuth2AuthorizedClientService
             autorisation.accorder(encryptor.encrypt(accessToken.getTokenValue()), accessToken.getExpiresAt(), encryptor.encrypt(refreshToken.getTokenValue()));
             recuRepository.findByEtatCopieAndMotifBlocage(EtatCopie.BLOQUEE, MotifBlocage.AUTORISATION_GOOGLE).forEach(Recu::reprendre);
             autorisationRepository.save(autorisation);
-            LOG.info("Autorisation Google : {}", autorisation.getEtat());
+            LOG.info("Autorisation Google : VALIDE");
         } else {
             requireRenewal(autorisation);
         }
@@ -100,7 +101,7 @@ public class GoogleAuthorizationService implements OAuth2AuthorizedClientService
         autorisation.demanderRenouvellement();
         recuRepository.findByEtatCopie(EtatCopie.A_COPIER).forEach(recu -> recu.bloquer(MotifBlocage.AUTORISATION_GOOGLE));
         autorisationRepository.save(autorisation);
-        LOG.warn("Autorisation Google : {}", autorisation.getEtat());
+        LOG.warn("Autorisation Google : A_RENOUVELER");
     }
 
     private AutorisationGoogle current() {
