@@ -28,6 +28,7 @@ class DefaultValuesTest {
         "spring.servlet.multipart.max-file-size, 15MB",
         "spring.servlet.multipart.max-request-size, 76MB",
         "server.tomcat.max-swallow-size, 100MB",
+        "server.tomcat.connection-timeout, 20s",
         "logging.level.org.hibernate.orm.jdbc.error, OFF",
         "recus.photos-par-recu-max, 5",
         "recus.dimensions-max-megapixels, 64",

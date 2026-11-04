@@ -53,6 +53,8 @@ server:
   mime-mappings:
     webmanifest: application/manifest+json
   tomcat:
+    # Attente maximale entre deux lectures, pas durée totale (60 s par défaut) : borne le temps qu'une connexion muette tient un fil (mesuré, D-43).
+    connection-timeout: 20s
     # Le formulaire de connexion est lu par Tomcat, avant RequestBodyLimitFilter (2 Mo par défaut).
     max-http-form-post-size: ${recus.securite.corps-requete-max}
     # Ce que Tomcat lit et jette après un refus, pour que le client reçoive la réponse au lieu d'une connexion coupée (2 Mo par défaut). Au-delà de la requête

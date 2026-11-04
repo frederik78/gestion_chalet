@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
-/** Le délai de lecture est abaissé à 1 s pour le franchir vite ; le délai réel de Tomcat, sans réglage, est de 60 s. */
+/** Le délai de lecture est abaissé à 1 s pour le franchir vite ; le délai réel est de 20 s (application.yml). */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "recus.securite.condense-mot-de-passe=" + TestDoublesConfiguration.CONDENSE,
     "server.tomcat.connection-timeout=1s"
