@@ -12,6 +12,7 @@ Package racine : `ca.gestionchalet`, à plat.
 
 ## Commandes (toujours via le wrapper du build)
 - `./mvnw test` : tests
+- Couverture : `./mvnw test` produit le rapport JaCoCo dans `target/site/jacoco/index.html` (sans seuil)
 - `./mvnw -B verify` : tests (dont tests d'architecture) + analyse statique de sécurité ; le job `verify` de la CI y ajoute `-Dessai.chrome` et le contrôle du rapport ; sans cette propriété, les tests d'écran sont ignorés
 - `scripts/verify-clean.sh` : la même vérification dans une copie propre du dépôt, hors IDE (à utiliser par les agents et chaque fois qu'un IDE est ouvert)
 - `scripts/verify-clean.sh -- "-Dessai.chrome=<chemin de Chrome>"` : la même vérification avec les tests d'écran dans un vrai Chrome, comme le job `verify`, sans son contrôle du rapport (sous macOS : `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`) ; sans cette propriété, ils sont ignorés ; avec un binaire absent ou inutilisable, ils échouent

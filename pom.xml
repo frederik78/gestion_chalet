@@ -27,6 +27,7 @@
     <build-helper-plugin.version>3.6.2</build-helper-plugin.version>
     <exec-plugin.version>3.6.4</exec-plugin.version>
     <mapstruct.version>1.6.3</mapstruct.version>
+    <jacoco.version>0.8.15</jacoco.version>
   </properties>
 
   <dependencyManagement>
@@ -120,6 +121,27 @@
             </path>
           </annotationProcessorPaths>
         </configuration>
+      </plugin>
+      <!-- Couverture des tests, sans seuil : rapport dans target/site/jacoco/. -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco.version}</version>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>test</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
       <!-- Analyse statique de sécurité dans verify : le build échoue sur une faille. Exclusions ciblées et justifiées dans spotbugs-exclude.xml. -->
       <plugin>
