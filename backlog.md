@@ -76,6 +76,10 @@ Vue d'ensemble des besoins. Détail dans `docs/prd/`, suivi de la livraison dans
 | D-41 | 2026-11-04 | Image tronquée après son en-tête acceptée, sans décodage ; image valide suivie d'un autre contenu conservée, à servir plus tard sous le type de son format avec `nosniff` ; requête totale à 76 Mo ; numéro d'inscription fait d'espaces rendu vide ; bouton de retour de l'écran de validation dans 001-03 | F-01 |
 | D-42 | 2026-11-04 | Sans identifiants Google, l'application démarre en `ABSENTE` ; la clé de chiffrement reste obligatoire. Consentement partiel : `A_RENOUVELER`, jetons effacés. Clé de chiffrement changée : `A_RENOUVELER` | F-01 |
 | D-43 | 2026-11-04 | Saisie sans session : `server.tomcat.connection-timeout` raccourci à 20 s, après mesure ; le reste de la protection (proxy) relève de NF-03, à traiter avant toute exposition publique | F-01 |
+| D-44 | 2026-11-04 | Échec de renouvellement Google qui n'est pas une panne passagère au sens de R-20 (`invalid_client`, par exemple) : l'autorisation passe à `A_RENOUVELER`, avec un journal d'erreur | F-01 |
+| D-45 | 2026-11-04 | Identifiants Google retirés après autorisation : jetons conservés et chiffrés, état `ABSENTE`, retour à `VALIDE` sans nouveau consentement quand ils reviennent | F-01 |
+| D-46 | 2026-11-04 | Reçus bloqués pendant ce retrait : ils restent `BLOQUEE` jusqu'à la reprise de 001-08 | F-01 |
+| D-47 | 2026-11-04 | Clé de chiffrement changée : détectée au premier usage et non au démarrage, l'autorisation passe alors à `A_RENOUVELER` | F-01 |
 
 ## À trancher
 
