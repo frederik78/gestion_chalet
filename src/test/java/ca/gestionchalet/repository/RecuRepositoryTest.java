@@ -40,7 +40,7 @@ class RecuRepositoryTest {
 
     private static Recu recu(UUID cle) {
         Valeurs valeurs = new Valeurs(LocalDate.of(2026, 10, 11), "F", null, "Fournitures", null, null, null, 1150L, null, null);
-        return Recu.valider(cle, valeurs, "empreinte", null, Instant.parse("2026-10-11T12:00:00Z"), List.of(Photo.of(1, PhotoFormat.PNG, 10L)));
+        return Recu.valider(cle, valeurs, "empreinte", null, Instant.parse("2026-10-11T12:00:00Z"), List.of(Photo.of(1, PhotoFormat.PNG, 10L)), List.of());
     }
 
     @Test

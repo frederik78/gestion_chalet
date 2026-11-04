@@ -1,5 +1,6 @@
 package ca.gestionchalet.service.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -23,6 +24,8 @@ public record RecuDTO(
         photos = List.copyOf(photos);
     }
 
+    /** {@code ecartCents} n'existe que pour {@code ECART_CALCUL} (PRD, section 7.1). */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public record AlerteDTO(String code, String message, Long ecartCents) {
     }
 

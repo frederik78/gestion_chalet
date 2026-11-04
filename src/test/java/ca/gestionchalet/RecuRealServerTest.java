@@ -426,8 +426,9 @@ class RecuRealServerTest {
         Reponse reponse = RecuRequests.valider(client, corps, RecuRequests.png());
 
         assertThat(reponse.statut()).isEqualTo(201);
-        assertThat(reponse.json()).containsEntry("etatCopie", "A_COPIER").containsEntry("alertes", List.of())
+        assertThat(reponse.json()).containsEntry("etatCopie", "A_COPIER")
                 .containsEntry("motifBlocage", null).containsEntry("version", 1);
+        assertThat(reponse.corps()).doesNotContain("FAUSSE");
         assertThat(reponse.json().get("id")).isNotEqualTo(idDuClient.toString());
         assertThat(base.queryForObject("select count(*) from recu where id = ?", Long.class, idDuClient.toString())).isZero();
     }
@@ -516,8 +517,9 @@ class RecuRealServerTest {
         assertThat(recu).containsOnlyKeys("id", "version", "valeurs", "montantTotalLuCents", "alertes", "etatCopie",
                 "motifBlocage", "prochaineTentative", "photos", "valideLe", "corrigeLe");
         assertThat(UUID.fromString((String) recu.get("id"))).isNotNull();
+        assertThat(recu.get("alertes")).isInstanceOf(List.class);
         assertThat(recu).containsEntry("version", 1).containsEntry("montantTotalLuCents", 30468)
-                .containsEntry("alertes", List.of()).containsEntry("etatCopie", "A_COPIER")
+                .containsEntry("etatCopie", "A_COPIER")
                 .containsEntry("motifBlocage", null).containsEntry("prochaineTentative", null).containsEntry("corrigeLe", null);
         assertThat((String) recu.get("valideLe")).isEqualTo(horloge.instant().toString());
 

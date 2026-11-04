@@ -1,5 +1,6 @@
 package ca.gestionchalet.config;
 
+import ca.gestionchalet.domain.AlertRules;
 import ca.gestionchalet.domain.RecuRules;
 import ca.gestionchalet.repository.PhotoStorage;
 import java.time.Clock;
@@ -21,6 +22,12 @@ public class RecuConfiguration {
     RecuRules recuRules(ApplicationProperties properties, MultipartProperties multipart) {
         return new RecuRules(properties.typesDepense(), properties.photosParRecuMax(),
                 multipart.getMaxFileSize().toBytes(), properties.formats(), properties.dimensionsMaxMegapixels());
+    }
+
+    @Bean
+    AlertRules alertRules(ApplicationProperties properties) {
+        ApplicationProperties.Alerts alertes = properties.alertes();
+        return new AlertRules(alertes.seuilNumerosInscriptionCents(), alertes.seuilPieceAVerifierCents(), alertes.ecartTolereCents());
     }
 
     /** {@code @PastOrPresent} compare à la date du jour dans ce fuseau, et non dans celui de la machine. */

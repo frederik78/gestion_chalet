@@ -108,6 +108,11 @@ recus:
     - Frais de voyage
     - Intérêts
     - Administration
+  # Montants en cents (D-03, D-23).
+  alertes:
+    seuil-numeros-inscription-cents: 10000
+    seuil-piece-a-verifier-cents: 50000
+    ecart-tolere-cents: 2
   securite:
     # Aucun condensé par défaut : à fournir par l'environnement (RECUS_SECURITE_CONDENSE_MOT_DE_PASSE), sinon l'application refuse de démarrer.
     echecs-avant-blocage: 5

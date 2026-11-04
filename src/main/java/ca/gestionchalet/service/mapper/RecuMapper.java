@@ -9,11 +9,10 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
 
-/** Les champs ignorés ne seront renseignés qu'avec les issues qui les calculent : alertes, copie et correction. */
+/** Les champs ignorés ne seront renseignés qu'avec les issues qui les calculent : copie et correction. */
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.ERROR)
 public interface RecuMapper {
 
-    @Mapping(target = "alertes", expression = "java(java.util.List.of())")
     @Mapping(target = "motifBlocage", ignore = true)
     @Mapping(target = "prochaineTentative", ignore = true)
     @Mapping(target = "corrigeLe", ignore = true)

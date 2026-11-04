@@ -35,6 +35,9 @@ class DefaultValuesTest {
         "'recus.formats[0]', image/jpeg",
         "'recus.formats[1]', image/png",
         "recus.fuseau-horaire, America/Montreal",
+        "recus.alertes.seuil-numeros-inscription-cents, 10000",
+        "recus.alertes.seuil-piece-a-verifier-cents, 50000",
+        "recus.alertes.ecart-tolere-cents, 2",
         "'recus.types-depense[0]', Honoraires professionnel",
         "'recus.types-depense[10]', Administration",
     })

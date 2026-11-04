@@ -1,5 +1,6 @@
 package ca.gestionchalet.service;
 
+import ca.gestionchalet.domain.AlertRules;
 import ca.gestionchalet.domain.IdempotencyKeyConflictException;
 import ca.gestionchalet.domain.Photo;
 import ca.gestionchalet.domain.PhotoFormat;
@@ -33,15 +34,17 @@ public class RecuService {
     private final PhotoValidationService photoValidationService;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
+    private final AlertRules alertRules;
 
     public RecuService(RecuRepository recuRepository, PhotoStorage photoStorage, RecuMapper recuMapper,
-            PhotoValidationService photoValidationService, TransactionTemplate transactionTemplate, Clock clock) {
+            PhotoValidationService photoValidationService, TransactionTemplate transactionTemplate, Clock clock, AlertRules alertRules) {
         this.recuRepository = recuRepository;
         this.photoStorage = photoStorage;
         this.recuMapper = recuMapper;
         this.photoValidationService = photoValidationService;
         this.transactionTemplate = transactionTemplate;
         this.clock = clock;
+        this.alertRules = alertRules;
     }
 
     /**
@@ -72,7 +75,8 @@ public class RecuService {
             store(photo, file);
         }
         Recu recu = Recu.valider(validation.cleIdempotence(), valeurs, fingerprint,
-                validation.montantTotalLuCents(), clock.instant(), photos);
+                validation.montantTotalLuCents(), clock.instant(), photos,
+                alertRules.evaluate(valeurs, validation.montantTotalLuCents(), false));
         return new RecuValidationResult(recuMapper.toDto(recuRepository.saveAndFlush(recu)), true);
     }
 
