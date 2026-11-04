@@ -31,6 +31,7 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.csrf.CsrfTokenRequestHandler;
 import org.springframework.security.web.csrf.XorCsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.util.StringUtils;
 
@@ -104,8 +105,9 @@ public class SecurityConfiguration {
             OAuth2AccessTokenResponseClient<OAuth2AuthorizationCodeGrantRequest> tokenResponseClient) {
         SecurityErrorHandler errorHandler = new SecurityErrorHandler(request -> false);
         http
-            .securityMatcher(PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/api/google/autorisation"),
-                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/api/google/rappel"))
+            .securityMatcher(new OrRequestMatcher(
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/api/google/autorisation"),
+                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/api/google/rappel")))
             .authorizeHttpRequests(authz -> authz.anyRequest().authenticated())
             .exceptionHandling(exceptionHandling -> exceptionHandling.authenticationEntryPoint(errorHandler).accessDeniedHandler(errorHandler))
             .oauth2Client(oauth2 -> oauth2.authorizationCodeGrant(grant -> grant
