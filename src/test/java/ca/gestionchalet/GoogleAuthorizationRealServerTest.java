@@ -591,7 +591,7 @@ class GoogleAuthorizationRealServerTest {
 
     @ParameterizedTest
     @CsvSource(delimiter = '|', value = {"400 | invalid_grant", "401 | invalid_grant", "400 | invalid_token"})
-    void ca66_uneRevocationEffaceLeJeton(int statut, String code) {
+    void ca66_uneRevocationEffaceLeJeton(int statut, String code, CapturedOutput journal) {
         Object enAttente = autoriserPuisValiderUnRecu();
         GOOGLE.repondre(statut, "{\"error\":\"" + code + "\"}");
 
@@ -600,6 +600,7 @@ class GoogleAuthorizationRealServerTest {
         assertThat(etat()).isEqualTo("A_RENOUVELER");
         assertThat(etatCopie(enAttente)).isEqualTo("BLOQUEE");
         assertThat(ligneAutorisation()).containsEntry("jeton_renouvellement_chiffre", null).containsEntry("jeton_acces_chiffre", null);
+        assertThat(journal.getOut()).doesNotContain("Renouvellement Google refusé");
     }
 
     @Test
@@ -623,8 +624,6 @@ class GoogleAuthorizationRealServerTest {
         "200 | ceci n'est pas du JSON",
         "200 | <html>proxy</html>",
         "200 | ''",
-        "401 | ''",
-        "403 | <html>proxy</html>",
         "400 | <html>proxy</html>",
         "400 | {}",
         "400 | {\"error\":\"temporarily_unavailable\"}",
@@ -691,5 +690,38 @@ class GoogleAuthorizationRealServerTest {
         assertThat(etat()).isEqualTo("VALIDE");
         assertThat(etatCopie(enAttente)).isEqualTo("A_COPIER");
         assertThat(ligneAutorisation()).isEqualTo(avant);
+    }
+
+    /** D-59 : un 401 ou un 403 sans code lisible est un refus, sans révocation prouvée : le jeton reste. */
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {"401 | ''", "403 | ''", "401 | <html>proxy</html>", "403 | <html>proxy</html>", "401 | ceci n'est pas du JSON"})
+    void ca66_unRefus401Ou403SansCodeLisiblePasseARenouvelerSansEffacerLeJeton(int statut, String corps, CapturedOutput journal) {
+        Object enAttente = autoriserPuisValiderUnRecu();
+        Map<String, Object> avant = ligneAutorisation();
+        GOOGLE.repondre(statut, corps);
+
+        assertThat(jetons.accessToken()).isEmpty();
+
+        assertThat(etat()).isEqualTo("A_RENOUVELER");
+        assertThat(etatCopie(enAttente)).isEqualTo("BLOQUEE");
+        assertThat(ligneAutorisation().get("jeton_renouvellement_chiffre")).isEqualTo(avant.get("jeton_renouvellement_chiffre")).isNotNull();
+        assertThat(journal.getOut()).contains("ERROR").contains("Renouvellement Google refusé : invalid_token_response").doesNotContain("proxy");
+    }
+
+    /** Une validation sans autorisation passe par la même route que les autres : ses alertes sont figées avec le reçu. */
+    @Test
+    void ca64_unRecuBloqueGardeSesAlertesFigees() {
+        Map<String, Object> valeurs = RecuRequests.valeurs();
+        valeurs.put("montantTotalCents", 12000);
+
+        Reponse reponse = RecuRequests.valider(client, RecuRequests.corps(valeurs), RecuRequests.png());
+
+        assertThat(reponse.statut()).isEqualTo(201);
+        assertThat(reponse.json()).containsEntry("etatCopie", "BLOQUEE").containsEntry("motifBlocage", "AUTORISATION_GOOGLE");
+        assertThat((List<?>) reponse.json().get("alertes")).isNotEmpty();
+        assertThat(base.queryForObject("select count(*) from recu_alerte", Long.class)).isEqualTo(((List<?>) reponse.json().get("alertes")).size());
+        autoriser();
+        assertThat(etatCopie(reponse.json().get("id"))).isEqualTo("A_COPIER");
+        assertThat(base.queryForObject("select count(*) from recu_alerte", Long.class)).isEqualTo(((List<?>) reponse.json().get("alertes")).size());
     }
 }

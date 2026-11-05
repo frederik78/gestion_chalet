@@ -4,11 +4,13 @@ import ca.gestionchalet.security.GoogleErrorCodes;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.client.ClientAuthorizationException;
 import org.springframework.security.oauth2.client.OAuth2AuthorizeRequest;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientManager;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientResponseException;
 
 /**
  * Le jeton d'accès pour appeler Google, renouvelé au besoin par Spring Security. À appeler hors transaction : un renouvellement attend Google,
@@ -47,7 +49,7 @@ public class GoogleTokenService {
             client = authorizedClientManager.authorize(request);
         } catch (ClientAuthorizationException e) {
             String code = e.getError().getErrorCode();
-            if (GoogleErrorCodes.isTransient(code)) {
+            if (GoogleErrorCodes.isTransient(code) && !isUnreadableRefusal(e)) {
                 throw e;
             }
             if (!GoogleErrorCodes.isRevocation(code)) {
@@ -58,5 +60,15 @@ public class GoogleTokenService {
         }
         // Un renouvellement réussi peut avoir perdu des droits : l'état fait foi, pas la seule présence d'un jeton.
         return client == null || !googleAuthorizationService.isValid() ? Optional.empty() : Optional.of(client.getAccessToken().getTokenValue());
+    }
+
+    /** D-59 : un 401 ou un 403 dont le corps n'est pas un code d'erreur lisible est un refus, non une panne ; un 200 illisible, lui, reste passager. */
+    private static boolean isUnreadableRefusal(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof RestClientResponseException response) {
+                return response.getStatusCode().isSameCodeAs(HttpStatus.UNAUTHORIZED) || response.getStatusCode().isSameCodeAs(HttpStatus.FORBIDDEN);
+            }
+        }
+        return false;
     }
 }
