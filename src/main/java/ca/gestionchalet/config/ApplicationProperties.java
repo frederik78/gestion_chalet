@@ -19,6 +19,7 @@ import org.springframework.validation.annotation.Validated;
  *
  * @param securite réglages de sécurité ({@code recus.securite.*})
  * @param google réglages de l'autorisation Google ({@code recus.google.*})
+ * @param copie réglages de la copie vers Drive et le Sheet ({@code recus.copie.*})
  * @param dossierPhotos dossier des photos, hors de la base et de la racine web
  * @param typesDepense liste fermée des types de dépense, dans l'orthographe du Sheet
  * @param photosParRecuMax nombre maximal de photos d'un reçu
@@ -30,7 +31,7 @@ import org.springframework.validation.annotation.Validated;
  */
 @Validated
 @ConfigurationProperties("recus")
-public record ApplicationProperties(@Valid @NotNull Security securite, @Valid @NotNull Google google, @NotNull Path dossierPhotos,
+public record ApplicationProperties(@Valid @NotNull Security securite, @Valid @NotNull Google google, @Valid @NotNull Copy copie, @NotNull Path dossierPhotos,
         @NotEmpty List<String> typesDepense,
         @Min(1) int photosParRecuMax,
         @NotEmpty List<String> formats,
@@ -67,6 +68,23 @@ public record ApplicationProperties(@Valid @NotNull Security securite, @Valid @N
         public Google {
             droits = droits == null ? List.of() : List.copyOf(droits);
         }
+    }
+
+    /**
+     * Le fichier et l'onglet sont ceux de l'unique copie d'avant la structure du Sheet (001-11) : vides, aucune ligne n'est écrite et la copie est bloquée.
+     *
+     * @param automatique vrai : un fil copie les reçus validés, dès qu'ils le sont puis à chaque passage périodique ; faux : seul un appel direct copie
+     * @param intervalle attente entre deux passages périodiques
+     * @param delaiAppel délai maximal d'un appel à Drive ou à Sheets
+     * @param dossierDrive nom du dossier que l'application crée dans Drive (R-28)
+     * @param fichier identifiant du fichier du Sheet
+     * @param onglet titre de l'onglet où s'écrivent les lignes
+     * @param adresseDrive adresse de l'API de Drive
+     * @param adresseSheets adresse de l'API de Sheets
+     * @param adresseLienFichier adresse d'un fichier Drive, où {@code {id}} est l'identifiant renvoyé par Drive
+     */
+    public record Copy(boolean automatique, @NotNull Duration intervalle, @NotNull Duration delaiAppel, @NotBlank String dossierDrive,
+            String fichier, String onglet, @NotBlank String adresseDrive, @NotBlank String adresseSheets, @NotBlank String adresseLienFichier) {
     }
 
     /**
