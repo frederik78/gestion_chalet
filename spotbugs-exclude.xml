@@ -51,7 +51,7 @@
   </Match>
   <!-- R-15 : la normalisation du fournisseur sert à lever une alerte non bloquante ; elle ne décide d'aucun accès. Collator écarté : au niveau primaire, il ignore aussi les espaces intérieurs. -->
   <Match>
-    <Class name="ca.gestionchalet.domain.Valeurs"/>
+    <Class name="ca.gestionchalet.domain.ReceiptText"/>
     <Bug pattern="IMPROPER_UNICODE"/>
   </Match>
   <!-- Code généré par MapStruct : son test de nullité d'entrée est redondant quand la source est un enum déjà lu. -->

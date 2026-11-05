@@ -1,6 +1,7 @@
 package ca.gestionchalet.service;
 
 import ca.gestionchalet.domain.ReadingResult;
+import ca.gestionchalet.domain.ReceiptText;
 import ca.gestionchalet.domain.RecuReading;
 import ca.gestionchalet.domain.Valeurs;
 import ca.gestionchalet.service.dto.ValeursDTO;
@@ -82,13 +83,13 @@ public class ModelFieldsValidationService {
             this.fields = fields;
         }
 
-        /** Absent, {@code null} ou fait d'espaces : le modèle n'a rien relevé, ce n'est pas un rejet. */
+        /** Absent, {@code null} ou fait de séparateurs (D-61) : le modèle n'a rien relevé, ce n'est pas un rejet. */
         private <T> T read(String modelName, String property, Function<String, Optional<T>> conversion) {
             Object raw = fields.get(modelName);
-            if (raw == null || raw instanceof String text && text.isBlank()) {
+            if (raw == null || raw instanceof String text && ReceiptText.isEmpty(text)) {
                 return null;
             }
-            Optional<T> value = raw instanceof String text ? conversion.apply(text.strip()) : Optional.empty();
+            Optional<T> value = raw instanceof String text ? conversion.apply(ReceiptText.normalize(text)) : Optional.empty();
             if (value.isEmpty() || !validator.validateValue(ValeursDTO.class, property, value.get()).isEmpty()) {
                 rejected.add(property);
                 return null;

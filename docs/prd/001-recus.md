@@ -156,7 +156,7 @@ Calculées à la validation et à chaque correction, jamais bloquantes. Les seui
 
 - **R-13** Le montant de référence est le plus élevé du montant total validé et du montant total lu, s'il existe. Un reçu de 120 $ ramené à 40 $ pour la part du chalet reste soumis à la règle des 100 $ (Q-09).
 - **R-14** Écart de calcul = |montant avant taxes + TPS + TVQ - montant total|. Une taxe vide compte pour 0 dans cette seule comparaison, sans être modifiée. Sans montant avant taxes, l'alerte n'est pas calculée.
-- **R-15** Le fournisseur est comparé sans tenir compte de la casse, des accents ni des espaces en bordure. Une correction ne compare jamais un reçu à lui-même.
+- **R-15** Le fournisseur est comparé sans tenir compte de la casse, des accents ni des séparateurs en bordure (espace insécable compris), et en tenant `œ` pour `oe`, `æ` pour `ae` et l'apostrophe courbe `’` pour l'apostrophe droite `'` (D-55, D-61). Aucune autre règle n'est ajoutée : ni la ponctuation (`Inc.` et `Inc` diffèrent), ni un séparateur au milieu du nom. Le passage par les majuscules puis les minuscules peut toutefois égaler quelques formes (`ß` = `ss`, `ı` = `i`, `ﬁ` = `fi`). La valeur enregistrée et affichée ne change pas. Une correction ne compare jamais un reçu à lui-même.
 - **R-16** Les alertes sont consultables avant la validation, sans rien enregistrer (`POST /api/recus/controles`), pour que l'utilisateur puisse encore abandonner.
 - **R-17** L'alerte de 500 $ reste active après vérification : la première version n'offre pas de moyen de la lever.
 
@@ -313,10 +313,12 @@ Une photo JPEG à structure inattendue ou à trop de balayages est refusée par 
 | `date` | `AAAA-MM-JJ`, date réelle, non future | vide, signalé |
 | `fournisseur` | texte de 1 à 120 caractères, sans caractère de contrôle | vide, signalé |
 | `objet` | texte de 200 caractères au plus, sans caractère de contrôle | vide, signalé |
-| `typeDepense` | élément exact de la liste | vide, signalé |
+| `typeDepense` | élément exact de la liste ; texte vide ou fait de séparateurs : non relevé, sans signalement | vide, signalé |
 | `montantAvantTaxes`, `tps`, `tvq`, `montantTotal` | chaîne `^\d{1,7}(\.\d{1,2})?$`, dans les bornes de R-10, convertie en cents sans flottant | vide, signalé |
 | `numeroInscriptionTps`, `numeroInscriptionTvq` | lettres, chiffres, espaces et tirets, 30 caractères au plus | vide, signalé |
 | tout autre champ | | ignoré |
+
+Un texte absent, `null`, vide ou fait seulement de séparateurs (espace insécable compris) est un champ non relevé, comme s'il était absent : il n'est pas signalé comme rejeté et ne compte pas pour un résultat `LU` (D-61).
 
 Une réponse qui n'est pas du JSON conforme, ou qui ne répond pas sous 60 secondes, donne `ECHEC`. Pas de nouvel essai automatique : la PWA propose de relancer. Les réponses du modèle ne sont ni enregistrées ni journalisées.
 
