@@ -32,6 +32,13 @@ public class TestDoublesConfiguration {
         return new TestRecuExtractor();
     }
 
+    /** Drive et le Sheet en mémoire, à la place des adaptateurs : aucun test n'appelle Google. */
+    @Bean
+    @Primary
+    InMemoryGoogle googleEnMemoire() {
+        return new InMemoryGoogle();
+    }
+
     @Bean
     @Primary
     TestClock horlogeEssai() {
