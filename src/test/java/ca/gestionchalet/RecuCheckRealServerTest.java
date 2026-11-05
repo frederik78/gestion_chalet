@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.gestionchalet.support.RealServerTest;
 import ca.gestionchalet.support.RecuRequests;
-import ca.gestionchalet.support.TestClient;
 import ca.gestionchalet.support.TestClient.Reponse;
+import ca.gestionchalet.support.TestClient;
 import ca.gestionchalet.support.TestDoublesConfiguration;
 import java.io.ByteArrayInputStream;
 import java.net.http.HttpRequest;
@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -111,7 +112,7 @@ class RecuCheckRealServerTest {
 
     /** D-61 : comparaison des fournisseurs (R-15), de bout en bout par le contrôle préalable. */
     @ParameterizedTest(name = "[{index}] {0} / {1}")
-    @org.junit.jupiter.params.provider.CsvSource(delimiter = '|', value = {
+    @CsvSource(delimiter = '|', value = {
         "Cœur de Lac|COEUR DE LAC", "Coeur de Lac|CŒUR DE LAC", "Æther|Aether", "Aether|ÆTHER", "L’Épicerie|L'Epicerie", "L'Epicerie|L’EPICERIE"})
     void ca27_d61_laLigatureEtLApostropheCourbeNeCompterPasPourDesFournisseursDifferents(String enregistre, String controle) {
         String suffixe = " " + UUID.randomUUID();

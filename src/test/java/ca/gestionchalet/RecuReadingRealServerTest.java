@@ -5,19 +5,27 @@ import static org.assertj.core.api.Assertions.assertThat;
 import ca.gestionchalet.config.ApplicationProperties;
 import ca.gestionchalet.support.RealServerTest;
 import ca.gestionchalet.support.RecuRequests;
-import ca.gestionchalet.support.TestClient;
 import ca.gestionchalet.support.TestClient.Reponse;
+import ca.gestionchalet.support.TestClient;
 import ca.gestionchalet.support.TestDoublesConfiguration;
 import ca.gestionchalet.support.TestRecuExtractor;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -88,7 +96,7 @@ class RecuReadingRealServerTest {
     private static final Map<String, Object> VALEURS_VIDES = valeursVides();
 
     private static Map<String, Object> valeursVides() {
-        Map<String, Object> vides = new java.util.HashMap<>();
+        Map<String, Object> vides = new HashMap<>();
         for (String champ : List.of("date", "fournisseur", "objet", "typeDepense", "montantAvantTaxesCents", "tpsCents", "tvqCents",
                 "montantTotalCents", "numeroInscriptionTps", "numeroInscriptionTvq")) {
             vides.put(champ, null);
@@ -98,7 +106,7 @@ class RecuReadingRealServerTest {
 
     @Test
     void ca03_sansValeurExploitableLeResultatEstIllisible() {
-        Map<String, Object> reponseModele = new java.util.HashMap<>();
+        Map<String, Object> reponseModele = new HashMap<>();
         reponseModele.put("date", null);
         reponseModele.put("fournisseur", "   ");
         modele.answer(reponseModele);
@@ -111,10 +119,10 @@ class RecuReadingRealServerTest {
     }
 
     /** D-61 : un fournisseur fait de séparateurs est vide, comme un champ absent : ni relevé, ni rejeté, et il ne fait pas un résultat {@code LU}. */
-    @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(strings = {"\u00A0", "\u00A0 \u00A0", "\u202F", "\u2007", "\u3000"})
+    @ParameterizedTest
+    @ValueSource(strings = {"\u00A0", "\u00A0 \u00A0", "\u202F", "\u2007", "\u3000"})
     void ca03_unFournisseurFaitDeSeparateursEstVideSansRejetNiResultatLu(String separateurs) {
-        Map<String, Object> reponseModele = new java.util.HashMap<>();
+        Map<String, Object> reponseModele = new HashMap<>();
         reponseModele.put("fournisseur", separateurs);
         modele.answer(reponseModele);
 
@@ -133,6 +141,20 @@ class RecuReadingRealServerTest {
 
         assertThat(reponse.json()).containsEntry("resultat", "LU").containsEntry("champsRejetes", List.of());
         assertThat(valeurs(reponse)).containsEntry("fournisseur", null).containsEntry("date", "2026-09-25");
+    }
+
+    /** D-61 : tout champ texte fait de séparateurs est non relevé, jamais rejeté, et ne fait pas un résultat {@code LU}. */
+    @ParameterizedTest
+    @ValueSource(strings = {"typeDepense", "objet", "numeroInscriptionTps", "numeroInscriptionTvq"})
+    void ca03_unChampTexteFaitDeSeparateursEstNonReleveEtNonRejete(String champ) {
+        Map<String, Object> reponseModele = new HashMap<>();
+        reponseModele.put(champ, "\u00A0\u3000");
+        modele.answer(reponseModele);
+
+        Reponse reponse = RecuRequests.lire(client, RecuRequests.jpeg(8));
+
+        assertThat(reponse.json()).containsEntry("resultat", "ILLISIBLE").containsEntry("champsRejetes", List.of());
+        assertThat(valeurs(reponse)).isEqualTo(VALEURS_VIDES);
     }
 
     @Test
@@ -160,8 +182,8 @@ class RecuReadingRealServerTest {
         assertThat((List<String>) reponse.json().get("champsRejetes")).containsExactly("date", "typeDepense", "montantTotalCents");
     }
 
-    @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.CsvSource({
+    @ParameterizedTest
+    @CsvSource({
         "montantTotal, 0", "montantTotal, 1000000.01", "montantTotal, 35.001", "montantTotal, '35,00'", "montantTotal, 1e3", "tps, 12345678",
         "date, 2999-01-01", "date, 2026-1-1", "date, +2026-01-01", "typeDepense, fournitures",
         "numeroInscriptionTps, 'RT;0001'", "numeroInscriptionTvq, 1234567890123456789012345678901",
@@ -229,18 +251,18 @@ class RecuReadingRealServerTest {
         assertThat(fichiers()).isEqualTo(fichiers);
     }
 
-    private static final byte[] HTML = "<!doctype html><script>alert(1)</script>".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    private static final byte[] HTML = "<!doctype html><script>alert(1)</script>".getBytes(StandardCharsets.UTF_8);
 
-    private static Stream<org.junit.jupiter.params.provider.Arguments> contenusRefuses() {
+    private static Stream<Arguments> contenusRefuses() {
         return Stream.of(
-                org.junit.jupiter.params.provider.Arguments.of("GIF", RecuRequests.gif(4)),
-                org.junit.jupiter.params.provider.Arguments.of("HEIC", new byte[] {0, 0, 0, 24, 'f', 't', 'y', 'p', 'h', 'e', 'i', 'c', 0, 0, 0, 0}),
-                org.junit.jupiter.params.provider.Arguments.of("SVG", "<svg xmlns=\"http://www.w3.org/2000/svg\"/>".getBytes(java.nio.charset.StandardCharsets.UTF_8)),
-                org.junit.jupiter.params.provider.Arguments.of("PDF", "%PDF-1.7\n".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                Arguments.of("GIF", RecuRequests.gif(4)),
+                Arguments.of("HEIC", new byte[] {0, 0, 0, 24, 'f', 't', 'y', 'p', 'h', 'e', 'i', 'c', 0, 0, 0, 0}),
+                Arguments.of("SVG", "<svg xmlns=\"http://www.w3.org/2000/svg\"/>".getBytes(StandardCharsets.UTF_8)),
+                Arguments.of("PDF", "%PDF-1.7\n".getBytes(StandardCharsets.UTF_8)));
     }
 
-    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
-    @org.junit.jupiter.params.provider.MethodSource("contenusRefuses")
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("contenusRefuses")
     void ca69_surLesLecturesUnFormatHorsListeDonne415SansAppelAuModele(String nature, byte[] contenu) {
         Reponse reponse = RecuRequests.lire(client, contenu);
 
@@ -320,7 +342,7 @@ class RecuReadingRealServerTest {
     }
 
     private static boolean contient(byte[] octets, String texte) {
-        return new String(octets, java.nio.charset.StandardCharsets.ISO_8859_1).contains(texte);
+        return new String(octets, StandardCharsets.ISO_8859_1).contains(texte);
     }
 
     private static java.awt.image.BufferedImage image(byte[] octets) throws IOException {
@@ -334,7 +356,7 @@ class RecuReadingRealServerTest {
     @Test
     void ca07_laCopieEnvoyeeNAPlusDeMetadonneesEtSonOrientationEstAppliquee() throws IOException {
         byte[] photo = RecuRequests.avecSegment(RecuRequests.jpegDeuxMoities(40, 20), 0xE1, RecuRequests.exif(6, false, "GPS-TEMOIN"));
-        photo = RecuRequests.avecSegment(photo, 0xFE, "COMMENTAIRE-TEMOIN".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+        photo = RecuRequests.avecSegment(photo, 0xFE, "COMMENTAIRE-TEMOIN".getBytes(StandardCharsets.US_ASCII));
 
         Reponse reponse = RecuRequests.lire(client, "image/jpeg", "facture-perso.jpg", photo);
 
@@ -351,8 +373,8 @@ class RecuReadingRealServerTest {
         assertThat(blanc(redressee.getRGB(10, 35))).isFalse();
     }
 
-    @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.CsvSource({
+    @ParameterizedTest
+    @CsvSource({
         // Le blanc (moitié gauche de la photo) après chaque orientation : x, y où il se trouve, x, y où se trouve le noir.
         "1, false, 40, 20, 5, 10, 35, 10",
         "1, true, 40, 20, 5, 10, 35, 10",
@@ -379,7 +401,7 @@ class RecuReadingRealServerTest {
 
     @Test
     void ca07_unExifHostileEstIgnoreEtLaLectureAboutit() {
-        byte[] coupe = java.util.Arrays.copyOf(RecuRequests.exif(6, false, ""), 12);
+        byte[] coupe = Arrays.copyOf(RecuRequests.exif(6, false, ""), 12);
 
         Reponse reponse = RecuRequests.lire(client, RecuRequests.avecSegment(RecuRequests.jpegDeuxMoities(40, 20), 0xE1, coupe));
 
@@ -410,15 +432,15 @@ class RecuReadingRealServerTest {
     @Test
     void ca07_unProfilIccUnMpfUnXmpEtDesDonneesApresLaFinDImageNeSontPasEnvoyes() {
         byte[] icc = java.awt.color.ICC_Profile.getInstance(java.awt.color.ColorSpace.CS_sRGB).getData();
-        byte[] entete = "ICC_PROFILE\0\1\1".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
-        byte[] segmentIcc = java.util.Arrays.copyOf(entete, entete.length + icc.length);
+        byte[] entete = "ICC_PROFILE\0\1\1".getBytes(StandardCharsets.ISO_8859_1);
+        byte[] segmentIcc = Arrays.copyOf(entete, entete.length + icc.length);
         System.arraycopy(icc, 0, segmentIcc, entete.length, icc.length);
         byte[] photo = RecuRequests.avecSegment(RecuRequests.jpegDeuxMoities(40, 20), 0xE2, segmentIcc);
-        photo = RecuRequests.avecSegment(photo, 0xE2, "MPF\0II*\0\0\0\0\0".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+        photo = RecuRequests.avecSegment(photo, 0xE2, "MPF\0II*\0\0\0\0\0".getBytes(StandardCharsets.ISO_8859_1));
 
-        photo = RecuRequests.avecSegment(photo, 0xE1, "http://ns.adobe.com/xap/1.0/\0XMP-TEMOIN".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
-        byte[] fin = "APRES-LA-FIN-TEMOIN".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
-        byte[] complete = java.util.Arrays.copyOf(photo, photo.length + fin.length);
+        photo = RecuRequests.avecSegment(photo, 0xE1, "http://ns.adobe.com/xap/1.0/\0XMP-TEMOIN".getBytes(StandardCharsets.ISO_8859_1));
+        byte[] fin = "APRES-LA-FIN-TEMOIN".getBytes(StandardCharsets.ISO_8859_1);
+        byte[] complete = Arrays.copyOf(photo, photo.length + fin.length);
         System.arraycopy(fin, 0, complete, photo.length, fin.length);
 
         Reponse reponse = RecuRequests.lire(client, complete);

@@ -147,6 +147,18 @@ class RecuRealServerTest {
         assertThat(reponse.corps()).contains(type);
     }
 
+    /** D-61 : le type est obligatoire (R-06) ; fait de séparateurs de tout genre, il est refusé, que le motif soit « obligatoire » ou « hors liste ». */
+    @ParameterizedTest
+    @ValueSource(strings = {"\u3000", "\u2003", "\u2000", "\u00A0", "\u202F", "\u00A0 \u00A0"})
+    void ca15_d61_unTypeFaitDeSeparateursEstRefuse(String type) throws IOException {
+        Etat avant = etat();
+
+        Reponse reponse = validerAvec("typeDepense", type);
+
+        assertThat(reponse.statut()).isEqualTo(400);
+        assertThat(etat()).isEqualTo(avant);
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"Autres", "fournitures", " Fournitures"})
     void ca15_unTypeHorsListeEstRefuse(String type) throws IOException {

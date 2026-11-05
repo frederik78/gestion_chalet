@@ -13,7 +13,6 @@ public final class ReceiptText {
 
     private static final Pattern ONLY_SEPARATORS = Pattern.compile("\\p{Z}*");
     private static final Pattern COMBINING_MARKS = Pattern.compile("\\p{M}+");
-    private static final Pattern EDGE_SEPARATORS = Pattern.compile("^[\\p{Z}\\s]+|[\\p{Z}\\s]+$");
 
     private ReceiptText() {
     }
@@ -40,8 +39,27 @@ public final class ReceiptText {
         return comparableSupplier(first).equals(comparableSupplier(second));
     }
 
+    /** Parcours linéaire des deux bordures : une expression régulière ancrée aux deux bouts est quadratique sur une longue suite de séparateurs. */
+    private static String trimSeparators(String text) {
+        int start = 0;
+        int end = text.length();
+        while (start < end && isSeparator(text.charAt(start))) {
+            start++;
+        }
+        while (end > start && isSeparator(text.charAt(end - 1))) {
+            end--;
+        }
+        return text.substring(start, end);
+    }
+
+    private static boolean isSeparator(char c) {
+        int type = Character.getType(c);
+        return type == Character.SPACE_SEPARATOR || type == Character.LINE_SEPARATOR || type == Character.PARAGRAPH_SEPARATOR
+                || c == ' ' || c == '\t' || c == '\n' || c == '\u000B' || c == '\f' || c == '\r';
+    }
+
     private static String comparableSupplier(String supplier) {
-        String bordered = EDGE_SEPARATORS.matcher(supplier).replaceAll("");
+        String bordered = trimSeparators(supplier);
         String withoutAccents = COMBINING_MARKS.matcher(Normalizer.normalize(bordered, Normalizer.Form.NFD)).replaceAll("");
         return withoutAccents.toUpperCase(Locale.ROOT).toLowerCase(Locale.ROOT)
                 .replace("œ", "oe")
