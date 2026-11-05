@@ -30,6 +30,7 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -304,6 +305,18 @@ class RecuCopyServiceTest {
 
         assertThat(etat(id)).isEqualTo("COPIEE");
         assertThat(google.rows()).hasSize(1);
+    }
+
+    @Test
+    void ca45_aucuneTransactionNEstOuvertePendantLesAppelsAGoogle() {
+        valider(simple("F", null));
+        List<Boolean> transactions = new java.util.concurrent.CopyOnWriteArrayList<>();
+        google.beforeEachDeposit(() -> transactions.add(TransactionSynchronizationManager.isActualTransactionActive()));
+        google.beforeEachWrite(() -> transactions.add(TransactionSynchronizationManager.isActualTransactionActive()));
+
+        copie.processNext();
+
+        assertThat(transactions).containsExactly(false, false);
     }
 
     @Test

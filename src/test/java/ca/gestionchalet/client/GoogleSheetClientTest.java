@@ -188,6 +188,13 @@ class GoogleSheetClientTest {
     }
 
     @Test
+    void a03_unIdentifiantDeFichierNeSortPasDeLAdresseDuLien() {
+        client().write(avec("F", null, null, "", List.of(new PhotoLink("Photo 1", "a/b?c=d#e"))));
+
+        assertThat(cellules().get(9).at("/textFormatRuns/0/format/link/uri").asString()).isEqualTo("https://drive.exemple.invalid/fichier/a%2Fb%3Fc=d%23e/voir");
+    }
+
+    @Test
     void ca44_unSeulLienNeLaisseAucunPassageSansLien() {
         client().write(avec("F", null, null, "", List.of(new PhotoLink("Photo 1", "fichier-a"))));
 

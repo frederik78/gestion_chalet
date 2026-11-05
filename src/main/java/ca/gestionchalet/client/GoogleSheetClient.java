@@ -3,6 +3,7 @@ package ca.gestionchalet.client;
 import ca.gestionchalet.client.SheetClient.PhotoLink;
 import ca.gestionchalet.domain.MotifBlocage;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,6 +14,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.util.UriUtils;
 import tools.jackson.databind.JsonNode;
 
 /**
@@ -162,7 +164,7 @@ public class GoogleSheetClient implements SheetClient {
             }
             Map<String, Object> run = new LinkedHashMap<>();
             run.put("startIndex", text.length());
-            run.put("format", Map.of("link", Map.of("uri", photoLinkTemplate.replace("{id}", link.driveFileId()))));
+            run.put("format", Map.of("link", Map.of("uri", photoLinkTemplate.replace("{id}", UriUtils.encodePathSegment(link.driveFileId(), StandardCharsets.UTF_8)))));
             runs.add(run);
             text.append(link.label());
         }
