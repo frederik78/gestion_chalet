@@ -34,7 +34,8 @@ const REFUS_DE_PHOTO = {
 const elements = (() => {
   const parId = {};
   for (const id of ['prise-de-vue', 'validation', 'photographier', 'importer', 'photos-choisies', 'photos-a-valider', 'continuer',
-    'message-depart', 'message-succes', 'message-validation', 'formulaire-recu', 'valider', 'abandonner', 'typeDepense', 'alertes']) {
+    'message-depart', 'message-succes', 'message-validation', 'message-lecture', 'relancer-lecture', 'retour-photos', 'formulaire-recu',
+    'valider', 'abandonner', 'typeDepense', 'alertes']) {
     parId[id] = document.getElementById(id);
   }
   return parId;
@@ -47,6 +48,12 @@ let cleIdempotence = null;
 // Seule la réponse au dernier contrôle demandé s'affiche : une réponse en retard décrirait des valeurs déjà changées.
 let dernierControle = 0;
 let minuterieControle = null;
+// Une lecture dont la réponse arrive après un abandon ou un retour aux photos est ignorée.
+let generationLecture = 0;
+let lectureFaite = false;
+let montantTotalLuCents = null;
+// Les photos sur lesquelles porte la lecture ; null dès qu'elles ont changé, jusqu'à une relance.
+let photosLues = null;
 
 async function chargerConfiguration() {
   const reponse = await fetch('/api/configuration', { credentials: 'same-origin' });
@@ -128,7 +135,6 @@ for (const champ of [elements.photographier, elements.importer]) {
 }
 
 async function montrerValidation() {
-  cleIdempotence = crypto.randomUUID();
   elements['message-validation'].textContent = '';
   const apercus = await Promise.all(photos.map((photo, indice) => creerApercu(photo, 'Photo ' + (indice + 1))));
   elements['photos-a-valider'].replaceChildren(...apercus);
@@ -136,7 +142,153 @@ async function montrerValidation() {
   elements.validation.hidden = false;
 }
 
+const MESSAGE_ECHEC_LECTURE = 'La lecture a échoué. Saisissez les valeurs ou relancez la lecture.';
+const MESSAGE_ILLISIBLE = "Ce reçu n'a pas pu être lu. Saisissez les valeurs ou relancez la lecture.";
+const MESSAGE_LIMITE_LECTURES = 'La limite de lectures est atteinte. Saisissez les valeurs ou relancez plus tard.';
+const MESSAGE_PHOTOS_CHANGEES = 'Les photos ont changé : les valeurs affichées viennent des précédentes. Vérifiez-les ou relancez la lecture.';
+const MESSAGE_SESSION_EXPIREE = 'Votre session a expiré. Reconnectez-vous dans un autre onglet, puis relancez : vos photos sont conservées.';
+
+/** Rend le corps d'une lecture, ou le refus à afficher : une photo refusée se retire, une session expirée se rouvre, le reste mène à la saisie manuelle. */
+async function demanderLecture() {
+  const formulaire = new FormData();
+  photos.forEach((photo) => formulaire.append('photos', photo));
+  try {
+    const reponse = await envoyerFormulaire('/api/lectures', formulaire);
+    const corps = await reponse.json().catch(() => null);
+    if (reponse.ok && corps) {
+      return { lecture: corps };
+    }
+    if (reponse.status === 401) {
+      return { refus: MESSAGE_SESSION_EXPIREE };
+    }
+    if (corps && REFUS_DE_PHOTO[corps.code]) {
+      return { refus: REFUS_DE_PHOTO[corps.code] };
+    }
+    return { empechee: reponse.status === 429 ? MESSAGE_LIMITE_LECTURES : MESSAGE_ECHEC_LECTURE };
+  } catch {
+    return { empechee: MESSAGE_ECHEC_LECTURE };
+  }
+}
+
+/** Un montant en cents entiers, sans flottant ; 0 reste 0,00 et null reste vide (R-08). */
+function centsVersTexte(cents) {
+  return Math.trunc(cents / 100) + ',' + String(cents % 100).padStart(2, '0');
+}
+
+/** Seul un champ encore vide est rempli : une relance n'efface jamais ce que l'utilisateur a saisi. */
+function preremplir(valeurs) {
+  const remplir = (id, valeur) => {
+    const champ = document.getElementById(id);
+    if (valeur !== null && valeur !== undefined && champ.value === '') {
+      champ.value = valeur;
+    }
+  };
+  const montant = (cents) => (cents === null || cents === undefined ? null : centsVersTexte(cents));
+  remplir('date', valeurs.date);
+  remplir('fournisseur', valeurs.fournisseur);
+  remplir('objet', valeurs.objet);
+  remplir('typeDepense', valeurs.typeDepense);
+  remplir('montantAvantTaxes', montant(valeurs.montantAvantTaxesCents));
+  remplir('tps', montant(valeurs.tpsCents));
+  remplir('tvq', montant(valeurs.tvqCents));
+  remplir('montantTotal', montant(valeurs.montantTotalCents));
+  remplir('numeroTps', valeurs.numeroInscriptionTps);
+  remplir('numeroTvq', valeurs.numeroInscriptionTvq);
+}
+
+function afficherLecture({ lecture, empechee }) {
+  const lue = lecture && lecture.resultat === 'LU';
+  if (lue) {
+    preremplir(lecture.valeurs);
+    montantTotalLuCents = lecture.valeurs.montantTotalCents;
+    elements['message-lecture'].textContent = lecture.champsRejetes.length === 0 ? ''
+      : 'À vérifier, valeur non retenue : ' + lecture.champsRejetes.map((champ) => CHAMPS[champ] || champ).join(', ') + '.';
+  } else if (lecture) {
+    elements['message-lecture'].textContent = lecture.resultat === 'ILLISIBLE' ? MESSAGE_ILLISIBLE : MESSAGE_ECHEC_LECTURE;
+  } else {
+    elements['message-lecture'].textContent = empechee;
+  }
+  elements['relancer-lecture'].hidden = lue;
+  lectureFaite = true;
+  photosLues = [...photos];
+  planifierControle();
+}
+
+/** Le montant lu ne vaut que pour les photos lues (R-13) ; la saisie reste, et rien n'est relu sans le demander. */
+function invaliderLectureSiPhotosChangees() {
+  const inchangees = photosLues && photosLues.length === photos.length && photos.every((photo, indice) => photo === photosLues[indice]);
+  if (!inchangees) {
+    photosLues = null;
+    montantTotalLuCents = null;
+    elements['message-lecture'].textContent = MESSAGE_PHOTOS_CHANGEES;
+    elements['relancer-lecture'].hidden = false;
+    planifierControle();
+  }
+}
+
+/** Après un retour aux photos, la saisie reste telle quelle : pas de nouvelle lecture sans le demander. */
+async function continuer() {
+  cleIdempotence = cleIdempotence || crypto.randomUUID();
+  if (lectureFaite) {
+    invaliderLectureSiPhotosChangees();
+    await montrerValidation();
+    return;
+  }
+  const generation = ++generationLecture;
+  const depart = elements['prise-de-vue'];
+  elements['message-depart'].textContent = '';
+  elements['message-succes'].textContent = 'Lecture en cours…';
+  elements.continuer.disabled = true;
+  depart.inert = true;
+  const resultat = await demanderLecture();
+  depart.inert = false;
+  elements.continuer.disabled = photos.length === 0;
+  elements['message-succes'].textContent = '';
+  if (generation !== generationLecture) {
+    return;
+  }
+  if (resultat.refus) {
+    elements['message-depart'].textContent = resultat.refus;
+    return;
+  }
+  afficherLecture(resultat);
+  await montrerValidation();
+}
+
+async function relancerLecture() {
+  const generation = ++generationLecture;
+  elements['relancer-lecture'].disabled = true;
+  elements.valider.disabled = true;
+  elements['message-lecture'].textContent = 'Lecture en cours…';
+  const resultat = await demanderLecture();
+  elements['relancer-lecture'].disabled = false;
+  elements.valider.disabled = false;
+  if (generation !== generationLecture) {
+    return;
+  }
+  if (resultat.refus) {
+    elements['message-lecture'].textContent = resultat.refus;
+    return;
+  }
+  afficherLecture(resultat);
+}
+
+/** D-41 : retirer ou ajouter une photo sans perdre la saisie ni la clé d'idempotence. */
+function revenirAuxPhotos() {
+  generationLecture += 1;
+  elements['message-validation'].textContent = '';
+  elements.validation.hidden = true;
+  elements['prise-de-vue'].hidden = false;
+  afficherPhotosChoisies();
+}
+
 function revenirAuDepart() {
+  generationLecture += 1;
+  lectureFaite = false;
+  montantTotalLuCents = null;
+  photosLues = null;
+  elements['message-lecture'].textContent = '';
+  elements['relancer-lecture'].hidden = true;
   photos = [];
   cleIdempotence = null;
   oublierLesControles();
@@ -227,7 +379,7 @@ async function controler(numero) {
   }
   let textes;
   try {
-    const reponse = await ecrireApi('/api/recus/controles', { valeurs });
+    const reponse = await ecrireApi('/api/recus/controles', montantTotalLuCents === null ? { valeurs } : { valeurs, montantTotalLuCents });
     if (reponse.ok) {
       textes = (await reponse.json()).alertes.map((alerte) => alerte.message);
     } else {
@@ -257,13 +409,14 @@ async function valider(evenement) {
     return;
   }
   const formulaire = new FormData();
-  formulaire.append('recu', new Blob([JSON.stringify({ cleIdempotence, valeurs })], { type: 'application/json' }));
+  formulaire.append('recu', new Blob([JSON.stringify({ cleIdempotence, valeurs, montantTotalLuCents })], { type: 'application/json' }));
   photos.forEach((photo) => formulaire.append('photos', photo));
 
   message.textContent = '';
   elements.valider.disabled = true;
   // L'envoi ne s'annule pas : le serveur créerait un reçu indélébile (R-35) après un abandon accepté par l'écran.
   elements.abandonner.disabled = true;
+  elements['retour-photos'].disabled = true;
   try {
     const reponse = await envoyerFormulaire('/api/recus', formulaire);
     if (reponse.ok) {
@@ -278,10 +431,13 @@ async function valider(evenement) {
   } finally {
     elements.valider.disabled = false;
     elements.abandonner.disabled = false;
+    elements['retour-photos'].disabled = false;
   }
 }
 
-elements.continuer.addEventListener('click', montrerValidation);
+elements.continuer.addEventListener('click', continuer);
+elements['relancer-lecture'].addEventListener('click', relancerLecture);
+elements['retour-photos'].addEventListener('click', revenirAuxPhotos);
 elements.abandonner.addEventListener('click', revenirAuDepart);
 elements['formulaire-recu'].addEventListener('submit', valider);
 elements['formulaire-recu'].addEventListener('input', planifierControle);

@@ -1,6 +1,8 @@
 package ca.gestionchalet.support;
 
 import ca.gestionchalet.support.TestClient.Reponse;
+import java.awt.Color;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -14,7 +16,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.zip.CRC32;
+import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
+import javax.imageio.stream.MemoryCacheImageOutputStream;
 import tools.jackson.databind.json.JsonMapper;
 
 /** Validations de reçus telles que la PWA les envoie : un vrai multipart, avec le jeton CSRF. Les images sont générées, jamais de photo réelle. */
@@ -93,6 +100,89 @@ public final class RecuRequests {
         throw new IllegalStateException("En-tête de trame absent");
     }
 
+    /** Moitié gauche blanche, moitié droite noire : une rotation se lit sur les pixels. */
+    public static byte[] jpegDeuxMoities(int largeur, int hauteur) {
+        BufferedImage image = new BufferedImage(largeur, hauteur, BufferedImage.TYPE_INT_RGB);
+        Graphics2D dessin = image.createGraphics();
+        dessin.setColor(Color.WHITE);
+        dessin.fillRect(0, 0, largeur / 2, hauteur);
+        dessin.dispose();
+        try (ByteArrayOutputStream octets = new ByteArrayOutputStream()) {
+            ImageIO.write(image, "jpeg", octets);
+            return octets.toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /** Un JPEG progressif, tel que l'écrit le JDK. */
+    public static byte[] jpegProgressif(int cote) {
+        ImageWriter ecrivain = ImageIO.getImageWritersByFormatName("jpeg").next();
+        ImageWriteParam reglages = ecrivain.getDefaultWriteParam();
+        reglages.setProgressiveMode(ImageWriteParam.MODE_DEFAULT);
+        try (ByteArrayOutputStream octets = new ByteArrayOutputStream(); ImageOutputStream sortie = new MemoryCacheImageOutputStream(octets)) {
+            ecrivain.setOutput(sortie);
+            ecrivain.write(null, new IIOImage(new BufferedImage(cote, cote, BufferedImage.TYPE_INT_RGB), null, null), reglages);
+            sortie.flush();
+            return octets.toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } finally {
+            ecrivain.dispose();
+        }
+    }
+
+    /** Ajoute avant la fin d'image des balayages vides, dont chacun fait refaire au JDK une passe complète. */
+    public static byte[] avecBalayagesVides(byte[] jpeg, int nombre) {
+        byte[] balayage = {(byte) 0xFF, (byte) 0xDA, 0, 8, 1, 1, 0, 1, 63, 0x10};
+        ByteBuffer sortie = ByteBuffer.allocate(jpeg.length + nombre * balayage.length);
+        sortie.put(jpeg, 0, jpeg.length - 2);
+        for (int i = 0; i < nombre; i++) {
+            sortie.put(balayage);
+        }
+        return sortie.put((byte) 0xFF).put((byte) 0xD9).array();
+    }
+
+    /** Le nombre de balayages d'un JPEG, en suivant ses segments. */
+    public static int balayages(byte[] jpeg) {
+        int nombre = 0;
+        for (int i = 2; i < jpeg.length - 1; i++) {
+            if (jpeg[i] == (byte) 0xFF && jpeg[i + 1] == (byte) 0xDA) {
+                nombre++;
+            }
+        }
+        return nombre;
+    }
+
+    /** Insère un segment juste après la signature SOI d'un JPEG. */
+    public static byte[] avecSegment(byte[] jpeg, int marqueur, byte[] contenu) {
+        ByteBuffer sortie = ByteBuffer.allocate(jpeg.length + 4 + contenu.length);
+        sortie.put(jpeg, 0, 2).put((byte) 0xFF).put((byte) marqueur).putShort((short) (contenu.length + 2)).put(contenu).put(jpeg, 2, jpeg.length - 2);
+        return sortie.array();
+    }
+
+    /** Un segment APP1 Exif, grand-boutiste ou petit-boutiste : l'orientation, et un texte témoin dans une zone GPS. */
+    public static byte[] exif(int orientation, boolean grandBoutiste, String temoin) {
+        byte[] texte = temoin.getBytes(StandardCharsets.US_ASCII);
+        ByteBuffer tiff = ByteBuffer.allocate(6 + 8 + 2 + 12 + 4 + texte.length);
+        tiff.put(new byte[] {'E', 'x', 'i', 'f', 0, 0});
+        tiff.order(grandBoutiste ? java.nio.ByteOrder.BIG_ENDIAN : java.nio.ByteOrder.LITTLE_ENDIAN);
+        tiff.put(grandBoutiste ? new byte[] {'M', 'M'} : new byte[] {'I', 'I'}).putShort((short) 42).putInt(8);
+        tiff.putShort((short) 1).putShort((short) 0x0112).putShort((short) 3).putInt(1).putShort((short) orientation).putShort((short) 0);
+        tiff.putInt(0).put(texte);
+        return tiff.array();
+    }
+
+    public static byte[] pngSeize(int cote) {
+        BufferedImage image = new BufferedImage(cote, cote, BufferedImage.TYPE_USHORT_GRAY);
+        try (ByteArrayOutputStream octets = new ByteArrayOutputStream()) {
+            ImageIO.write(image, "png", octets);
+            return octets.toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     public static Reponse valider(TestClient client, Map<String, Object> corps, byte[]... photos) {
         return validerJson(client, JSON.writeValueAsString(corps), photos);
     }
@@ -108,6 +198,27 @@ public final class RecuRequests {
     /** Le type et le nom déclarés par le client, que le serveur ne doit pas croire. */
     public static Reponse validerDeclare(TestClient client, Map<String, Object> corps, String type, String nom, byte[]... photos) {
         return envoyer(client, JSON.writeValueAsString(corps), type, nom, photos);
+    }
+
+    /** Une lecture telle que la PWA la demande : les seules parties {@code photos}. */
+    public static Reponse lire(TestClient client, String type, String nom, byte[]... photos) {
+        List<byte[]> morceaux = new ArrayList<>();
+        for (byte[] photo : photos) {
+            morceaux.add(("--" + BOUNDARY + "\r\nContent-Disposition: form-data; name=\"photos\"; filename=\"" + nom + "\"\r\nContent-Type: " + type + "\r\n\r\n")
+                    .getBytes(StandardCharsets.UTF_8));
+            morceaux.add(photo);
+            morceaux.add("\r\n".getBytes(StandardCharsets.UTF_8));
+        }
+        morceaux.add(("--" + BOUNDARY + "--\r\n").getBytes(StandardCharsets.UTF_8));
+        return client.envoyer(client.requete("/api/lectures")
+                .header("Content-Type", "multipart/form-data; boundary=" + BOUNDARY)
+                .header("X-XSRF-TOKEN", client.cookie("XSRF-TOKEN"))
+                .POST(HttpRequest.BodyPublishers.ofByteArrays(morceaux))
+                .build());
+    }
+
+    public static Reponse lire(TestClient client, byte[]... photos) {
+        return lire(client, "image/jpeg", "recu.jpg", photos);
     }
 
     private static Reponse envoyer(TestClient client, String corpsJson, String type, byte[]... photos) {

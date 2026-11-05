@@ -6,9 +6,12 @@ import ca.gestionchalet.support.ChromeSession;
 import ca.gestionchalet.support.RealServerTest;
 import ca.gestionchalet.support.RecuRequests;
 import ca.gestionchalet.support.TestDoublesConfiguration;
+import ca.gestionchalet.support.TestRecuExtractor;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -70,6 +73,9 @@ class RecuScreensChromeTest {
     @Autowired
     JdbcTemplate base;
 
+    @Autowired
+    TestRecuExtractor modele;
+
     @TempDir
     Path dossier;
 
@@ -79,6 +85,7 @@ class RecuScreensChromeTest {
 
     @BeforeEach
     void ouvrirEtSeConnecter() throws IOException, InterruptedException {
+        modele.reset();
         image1 = Files.write(dossier.resolve("image-1.png"), RecuRequests.png(300));
         image2 = Files.write(dossier.resolve("image-2.png"), RecuRequests.png(200));
         chrome = new ChromeSession(System.getProperty("essai.chrome"), Files.createDirectory(dossier.resolve("profil")));
@@ -322,27 +329,279 @@ class RecuScreensChromeTest {
         assertThat(envois.get(1).get("cle").asString()).isNotEqualTo(envois.get(0).get("cle").asString());
     }
 
-    /** L'écran laisse passer ce fichier, d'après son extension : c'est le serveur qui lit son contenu et le refuse. */
+    /** L'écran laisse passer ce fichier, d'après son extension : la lecture lit son contenu, le refuse, et la photo se retire là où elle est. */
     @Test
-    void ca69_cs10_unFichierDeguiseEstRefuseParLeServeurEtLaSaisieEstConservee() throws InterruptedException, IOException {
-        long avant = recus();
+    void ca69_cs10_unFichierDeguiseEstRefuseDesLaLectureEtSeRetire() throws InterruptedException, IOException {
         Path deguise = Files.writeString(dossier.resolve("deguise.png"), "<!doctype html><html><script>alert(1)</script></html>");
         chrome.chooseFiles("#importer", deguise);
         chrome.waitUntil("document.querySelectorAll('#photos-choisies figure').length === 1");
         cliquer("continuer");
-        chrome.waitUntil("document.querySelectorAll('#photos-a-valider figure').length === 1");
+        chrome.waitUntil("document.getElementById('message-depart').textContent !== ''");
+        capturer("lecture-format-refuse.png");
+
+        assertThat(chrome.eval("document.getElementById('message-depart').textContent").asString()).isEqualTo("Une photo n'est pas une image JPEG ou PNG.");
+        assertThat(visible("validation")).isFalse();
+        assertThat(modele.calls).isEmpty();
+
+        chrome.eval("document.querySelector('#photos-choisies button').click(); true");
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies figure').length === 0");
+        chrome.chooseFiles("#importer", image1);
+        chrome.waitUntil(NOMBRE_DE_PHOTOS_AU_DEPART + " === 1");
+        cliquer("continuer");
+        chrome.waitUntil(NOMBRE_DE_PHOTOS_A_VALIDER + " === 1");
+        assertThat(modele.calls).hasSize(1);
+    }
+
+    /** D-41 : la lecture est court-circuitée pour atteindre le refus de la validation, puis le retour retire la photo sans toucher à la saisie. */
+    @Test
+    void ca69_cs10_uneValidationRefuseePermetDeRetirerLaPhotoSansPerdreLaSaisie() throws InterruptedException, IOException {
+        long avant = recus();
+        Path deguise = Files.writeString(dossier.resolve("deguise.png"), "<!doctype html><html><script>alert(1)</script></html>");
+        chrome.eval("""
+                window.fetchOrigine = window.fetch;
+                window.fetch = async (chemin, options) => String(chemin) === '/api/lectures'
+                  ? new Response(JSON.stringify({ resultat: 'ECHEC', valeurs: {}, champsRejetes: [] }), { status: 200 })
+                  : window.fetchOrigine(chemin, options);
+                true""");
+        chrome.chooseFiles("#importer", deguise);
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies figure').length === 1");
+        chrome.chooseFiles("#importer", image1);
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies figure').length === 2");
+        cliquer("continuer");
+        chrome.waitUntil("document.querySelectorAll('#photos-a-valider figure').length === 2");
         saisirLesValeurs("Fournisseur déguisé");
 
         cliquer("valider");
         chrome.waitUntil("document.getElementById('message-validation').textContent !== ''");
         capturer("validation-format-refuse.png");
-
         assertThat(chrome.eval("document.getElementById('message-validation').textContent").asString())
                 .isEqualTo("Une photo n'est pas une image JPEG ou PNG. Rien n'a été enregistré.");
-        assertThat(visible("validation")).isTrue();
+        assertThat(recus()).isEqualTo(avant);
+
+        cliquer("retour-photos");
+        chrome.waitUntil("document.getElementById('prise-de-vue').offsetParent !== null");
+        chrome.eval("document.querySelector('#photos-choisies button').click(); true");
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies figure').length === 1");
+        cliquer("continuer");
+        chrome.waitUntil("document.getElementById('validation').offsetParent !== null");
+        chrome.waitUntil(NOMBRE_DE_PHOTOS_A_VALIDER + " === 1");
         assertThat(valeur("fournisseur")).isEqualTo("Fournisseur déguisé");
         assertThat(valeur("montantTotal")).isEqualTo("304,68");
-        assertThat(recus()).isEqualTo(avant);
+
+        cliquer("valider");
+        chrome.waitUntil("document.getElementById('prise-de-vue').offsetParent !== null && document.getElementById('message-succes').textContent !== ''");
+        assertThat(recus()).isEqualTo(avant + 1);
+    }
+
+    @Test
+    void ca77_lEcranAfficheLesPhotosALaCoteDuFormulairePrerempliUneTaxeAbsenteResteVide() throws InterruptedException, IOException {
+        chrome.eval(ENREGISTRER_LES_ENVOIS);
+        Map<String, Object> champs = new HashMap<>(Map.of("date", "2026-09-25", "fournisseur", "<img src=x onerror=alert(1)>", "objet", "Ampoules", "typeDepense", "Fournitures",
+                "montantAvantTaxes", "265.00", "tvq", "0", "montantTotal", "304.68", "numeroInscriptionTps", "123456789RT0001"));
+        champs.put("tps", null);
+        modele.answer(champs);
+
+        allerALaValidationAvecDeuxPhotos();
+        capturer("validation-preremplie.png");
+
+        assertThat(modele.calls).hasSize(1);
+        assertThat(modele.calls.getFirst().images()).hasSize(2);
+        assertThat(visible("photos-a-valider")).isTrue();
+        assertThat(nombre("document.querySelector('.a-cote').contains(document.getElementById('photos-a-valider')) && document.querySelector('.a-cote').contains(document.getElementById('formulaire-recu')) ? 1 : 0")).isEqualTo(1);
+        assertThat(valeur("date")).isEqualTo("2026-09-25");
+        assertThat(valeur("fournisseur")).isEqualTo("<img src=x onerror=alert(1)>");
+        assertThat(valeur("objet")).isEqualTo("Ampoules");
+        assertThat(valeur("typeDepense")).isEqualTo("Fournitures");
+        assertThat(valeur("montantAvantTaxes")).isEqualTo("265,00");
+        assertThat(valeur("tps")).isEmpty();
+        assertThat(valeur("tvq")).isEqualTo("0,00");
+        assertThat(valeur("montantTotal")).isEqualTo("304,68");
+        assertThat(valeur("numeroTps")).isEqualTo("123456789RT0001");
+        assertThat(valeur("numeroTvq")).isEmpty();
+        assertThat(visible("relancer-lecture")).isFalse();
+        assertThat(nombre("document.querySelectorAll('img').length")).isZero();
+
+        saisir("fournisseur", "Unimage");
+        saisir("montantTotal", "300,00");
+        cliquer("valider");
+        chrome.waitUntil("window.envois.length === 1 && document.getElementById('prise-de-vue').offsetParent !== null");
+        JsonNode recu = chrome.eval("window.envois").get(0).get("recu");
+        assertThat(recu.get("montantTotalLuCents").asInt()).isEqualTo(30468);
+        assertThat(recu.get("valeurs").get("montantTotalCents").asInt()).isEqualTo(30000);
+        assertThat(recu.get("valeurs").get("tpsCents").isNull()).isTrue();
+        assertThat(recu.get("valeurs").get("tvqCents").asInt()).isZero();
+    }
+
+    @Test
+    void ca77_unChampRejeteEstSignaleAVerifier() throws InterruptedException {
+        modele.answer(Map.of("fournisseur", "Unimage", "montantTotal", "-1"));
+
+        allerALaValidationAvecDeuxPhotos();
+
+        assertThat(chrome.eval("document.getElementById('message-lecture').textContent").asString()).isEqualTo("À vérifier, valeur non retenue : le montant total.");
+        assertThat(valeur("montantTotal")).isEmpty();
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+        "true | La lecture a échoué. Saisissez les valeurs ou relancez la lecture.",
+        "false | Ce reçu n'a pas pu être lu. Saisissez les valeurs ou relancez la lecture.",
+    })
+    void ca78_uneLectureSansValeurMontreUnMessageUnFormulaireVideLaPhotoEtRelancer(boolean panne, String message) throws InterruptedException, IOException {
+        if (panne) {
+            modele.fail();
+        }
+
+        allerALaValidationAvecDeuxPhotos();
+        capturer(panne ? "lecture-echec.png" : "lecture-illisible.png");
+
+        assertThat(chrome.eval("document.getElementById('message-lecture').textContent").asString()).isEqualTo(message);
+        assertThat(valeur("fournisseur")).isEmpty();
+        assertThat(valeur("montantTotal")).isEmpty();
+        assertThat(nombre(NOMBRE_DE_PHOTOS_A_VALIDER)).isEqualTo(2);
+        assertThat(visible("relancer-lecture")).isTrue();
+
+        saisir("objet", "Saisi à la main");
+        modele.answer(Map.of("objet", "Proposé", "fournisseur", "Unimage"));
+        cliquer("relancer-lecture");
+        chrome.waitUntil("document.getElementById('fournisseur').value === 'Unimage'");
+
+        assertThat(modele.calls).hasSize(2);
+        assertThat(valeur("objet")).isEqualTo("Saisi à la main");
+        assertThat(chrome.eval("document.getElementById('message-lecture').textContent").asString()).isEmpty();
+        assertThat(visible("relancer-lecture")).isFalse();
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+        "429 | TROP_DE_TENTATIVES | La limite de lectures est atteinte. Saisissez les valeurs ou relancez plus tard.",
+        "500 | ERREUR_INTERNE | La lecture a échoué. Saisissez les valeurs ou relancez la lecture.",
+    })
+    void uneLectureEmpecheeMeneAuFormulaireVide(int statut, String code, String message) throws InterruptedException {
+        chrome.eval("window.fetchOrigine = window.fetch; window.fetch = async (chemin, options) => String(chemin) === '/api/lectures' ? new Response(JSON.stringify({ erreur: 'x', code: '" + code + "' }), { status: " + statut + " }) : window.fetchOrigine(chemin, options); true");
+
+        allerALaValidationAvecDeuxPhotos();
+
+        assertThat(chrome.eval("document.getElementById('message-lecture').textContent").asString()).isEqualTo(message);
+        assertThat(visible("relancer-lecture")).isTrue();
+    }
+
+    /** Photo A lue, retour, remplacement par la photo B, Continuer : le montant lu sur A ne part pas avec B, et la saisie reste. */
+    @Test
+    void ca29_desPhotosChangeesInvalidentLeMontantLuEtProposentLaRelance() throws InterruptedException {
+        chrome.eval(ENREGISTRER_LES_ENVOIS);
+        modele.answer(Map.of("date", "2026-09-25", "fournisseur", "Unimage", "typeDepense", "Fournitures", "montantTotal", "304.68"));
+        chrome.chooseFiles("#importer", image1);
+        chrome.waitUntil(NOMBRE_DE_PHOTOS_AU_DEPART + " === 1");
+        cliquer("continuer");
+        chrome.waitUntil(NOMBRE_DE_PHOTOS_A_VALIDER + " === 1 && document.getElementById('validation').offsetParent !== null");
+        assertThat(visible("relancer-lecture")).isFalse();
+
+        cliquer("retour-photos");
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies button').length === 1");
+        chrome.eval("document.querySelector('#photos-choisies button').click(); true");
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies figure').length === 0");
+        chrome.chooseFiles("#importer", image2);
+        chrome.waitUntil(NOMBRE_DE_PHOTOS_AU_DEPART + " === 1");
+        cliquer("continuer");
+        chrome.waitUntil("document.getElementById('validation').offsetParent !== null");
+
+        assertThat(modele.calls).hasSize(1);
+        assertThat(valeur("fournisseur")).isEqualTo("Unimage");
+        assertThat(valeur("montantTotal")).isEqualTo("304,68");
+        assertThat(visible("relancer-lecture")).isTrue();
+        assertThat(chrome.eval("document.getElementById('message-lecture').textContent").asString())
+                .isEqualTo("Les photos ont changé : les valeurs affichées viennent des précédentes. Vérifiez-les ou relancez la lecture.");
+
+        cliquer("valider");
+        chrome.waitUntil("window.envois.length === 1 && document.getElementById('prise-de-vue').offsetParent !== null");
+        assertThat(chrome.eval("window.envois").get(0).get("recu").get("montantTotalLuCents").isNull()).isTrue();
+    }
+
+    /** Sans changement de photos, le montant lu reste envoyé. */
+    @Test
+    void ca29_unRetourSansChangementDePhotosGardeLeMontantLu() throws InterruptedException {
+        chrome.eval(ENREGISTRER_LES_ENVOIS);
+        modele.answer(Map.of("date", "2026-09-25", "fournisseur", "Unimage", "typeDepense", "Fournitures", "montantTotal", "304.68"));
+        chrome.chooseFiles("#importer", image1);
+        chrome.waitUntil(NOMBRE_DE_PHOTOS_AU_DEPART + " === 1");
+        cliquer("continuer");
+        chrome.waitUntil("document.getElementById('validation').offsetParent !== null");
+        cliquer("retour-photos");
+        chrome.waitUntil("document.getElementById('prise-de-vue').offsetParent !== null");
+        cliquer("continuer");
+        chrome.waitUntil("document.getElementById('validation').offsetParent !== null");
+
+        assertThat(visible("relancer-lecture")).isFalse();
+        cliquer("valider");
+        chrome.waitUntil("window.envois.length === 1 && document.getElementById('prise-de-vue').offsetParent !== null");
+        assertThat(chrome.eval("window.envois").get(0).get("recu").get("montantTotalLuCents").asInt()).isEqualTo(30468);
+    }
+
+    /** La clé reste la même après un changement de photos : si le premier envoi avait abouti, le renvoi est signalé en 409 et ne rend pas l'ancien reçu en silence. */
+    @Test
+    void ca18_desPhotosChangeesApresUneReponsePerdueSontSignalees() throws InterruptedException {
+        long avant = recus();
+        chrome.eval(ENREGISTRER_LES_ENVOIS);
+        chrome.eval(PERDRE_LA_PREMIERE_REPONSE);
+        allerALaValidationAvecDeuxPhotos();
+        saisirLesValeurs("Fournisseur photos changées");
+        cliquer("valider");
+        chrome.waitUntil("window.envois.length === 1 && document.getElementById('message-validation').textContent !== ''");
+
+        cliquer("retour-photos");
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies button').length === 2");
+        chrome.eval("document.querySelector('#photos-choisies button').click(); true");
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies figure').length === 1");
+        cliquer("continuer");
+        chrome.waitUntil("document.getElementById('validation').offsetParent !== null");
+        cliquer("valider");
+        chrome.waitUntil("window.envois.length === 2 && document.getElementById('message-validation').textContent.includes('pas été appliquée')");
+
+        JsonNode envois = chrome.eval("window.envois");
+        assertThat(envois.get(1).get("cle").asString()).isEqualTo(envois.get(0).get("cle").asString());
+        assertThat(envois.get(1).get("photos").asInt()).isEqualTo(1);
+        assertThat(recus()).isEqualTo(avant + 1);
+        assertThat(chrome.eval("document.getElementById('message-succes').textContent").asString()).isEmpty();
+    }
+
+    /** L'écran annonce l'alerte que le serveur figera : le contrôle porte le montant lu, tant qu'il vaut pour les photos affichées. */
+    @Test
+    void ca29_leControleEnvoieLeMontantLuPuisPlusApresUnChangementDePhotos() throws InterruptedException {
+        chrome.eval("""
+                window.controles = [];
+                window.fetchAvantControle = window.fetch;
+                window.fetch = async (chemin, options) => {
+                  if (String(chemin) === '/api/recus/controles') {
+                    window.controles.push(JSON.parse(options.body));
+                  }
+                  return window.fetchAvantControle(chemin, options);
+                };
+                true""");
+        modele.answer(Map.of("date", "2026-09-25", "fournisseur", "Unimage", "typeDepense", "Fournitures", "montantTotal", "120.00"));
+        chrome.chooseFiles("#importer", image1);
+        chrome.waitUntil(NOMBRE_DE_PHOTOS_AU_DEPART + " === 1");
+        cliquer("continuer");
+        chrome.waitUntil("document.getElementById('validation').offsetParent !== null");
+        chrome.waitUntil("window.controles.length >= 1 && document.querySelectorAll('#alertes li').length === 1");
+
+        chrome.eval("const total = document.getElementById('montantTotal'); total.value = '40,00'; total.dispatchEvent(new Event('input', { bubbles: true })); true");
+        chrome.waitUntil("window.controles.at(-1).valeurs.montantTotalCents === 4000");
+        assertThat(chrome.eval("window.controles.at(-1).montantTotalLuCents").asInt()).isEqualTo(12000);
+        chrome.waitUntil("document.querySelectorAll('#alertes li').length === 1");
+        assertThat(chrome.eval("document.querySelector('#alertes li').textContent").asString()).isEqualTo("Numéros d'inscription manquants : TPS, TVQ");
+
+        cliquer("retour-photos");
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies button').length === 1");
+        chrome.eval("document.querySelector('#photos-choisies button').click(); true");
+        chrome.waitUntil("document.querySelectorAll('#photos-choisies figure').length === 0");
+        chrome.chooseFiles("#importer", image2);
+        chrome.waitUntil(NOMBRE_DE_PHOTOS_AU_DEPART + " === 1");
+        int avant = nombre("window.controles.length");
+        cliquer("continuer");
+        chrome.waitUntil("window.controles.length > " + avant + " && document.querySelectorAll('#alertes li').length === 0");
+
+        assertThat(chrome.eval("'montantTotalLuCents' in window.controles.at(-1)").asBoolean()).isFalse();
     }
 
     /** Le corps exact du serveur est couvert par les tests sur serveur réel ; ici, le texte que chaque code donne à l'écran. */

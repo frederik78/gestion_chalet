@@ -155,4 +155,26 @@ class PhotoSizeRealServerTest {
         assertThat(reponse.statut()).isEqualTo(400);
         assertThat(reponse.json()).isEqualTo(Map.of("erreur", "Ce reçu compte trop de photos.", "code", "TROP_DE_PHOTOS"));
     }
+
+    @Test
+    void ca70_surLesLecturesUnePhotoDeLaTailleMaximaleEstAcceptee() {
+        assertThat(envoyer("/api/lectures", PHOTO_MAX, 1, true).statut()).isEqualTo(200);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"true", "false"})
+    void ca70_surLesLecturesLaTailleMaximalePlusUnOctetDonne413EnJson(boolean fragmente) {
+        Reponse reponse = envoyer("/api/lectures", PHOTO_MAX + 1, 1, fragmente);
+
+        assertThat(reponse.statut()).isEqualTo(413);
+        assertThat(reponse.json()).isEqualTo(TROP_LOURD);
+    }
+
+    @Test
+    void ca70_surLesLecturesUneRequeteTotaleTropLourdeDonne413EnJson() {
+        Reponse reponse = envoyer("/api/lectures", PHOTO_MAX, 6, true);
+
+        assertThat(reponse.statut()).isEqualTo(413);
+        assertThat(reponse.json()).isEqualTo(TROP_LOURD);
+    }
 }

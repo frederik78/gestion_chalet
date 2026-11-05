@@ -302,6 +302,8 @@ Application installable (D-13), sans mode hors ligne : aucune réponse de l'API 
 - la consigne fixe (R-05) et la liste des types de dépense ;
 - le modèle configuré et la structure de réponse attendue.
 
+Une photo JPEG à structure inattendue ou à trop de balayages est refusée par le contrôle du décodage.
+
 **Jamais envoyé** : nom de fichier d'origine, identité, courriel, mot de passe, jeton Google, identifiant de session, valeurs d'autres reçus. Aucun réglage `temperature`, `top_p` ni `top_k` (ADR 0001).
 
 **Réponse attendue et validation** :

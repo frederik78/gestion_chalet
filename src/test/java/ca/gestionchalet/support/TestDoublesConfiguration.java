@@ -28,6 +28,12 @@ public class TestDoublesConfiguration {
 
     @Bean
     @Primary
+    TestRecuExtractor modeleEssai() {
+        return new TestRecuExtractor();
+    }
+
+    @Bean
+    @Primary
     TestClock horlogeEssai() {
         return new TestClock();
     }

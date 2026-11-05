@@ -4,6 +4,7 @@ import ca.gestionchalet.domain.IdempotencyKeyConflictException;
 import ca.gestionchalet.domain.ImageTooLargeException;
 import ca.gestionchalet.domain.MissingPhotoException;
 import ca.gestionchalet.domain.TooManyPhotosException;
+import ca.gestionchalet.domain.TooManyReadingsException;
 import ca.gestionchalet.domain.UnreadableImageException;
 import ca.gestionchalet.domain.UnsupportedPhotoFormatException;
 import ca.gestionchalet.web.rest.errors.ErrorDTO.InvalidFieldDTO;
@@ -118,6 +119,18 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
     @ExceptionHandler(UnsupportedPhotoFormatException.class)
     public ResponseEntity<Object> handleUnsupportedPhotoFormat(UnsupportedPhotoFormatException ex, WebRequest request) {
         return handleExceptionInternal(ex, null, new HttpHeaders(), HttpStatus.UNSUPPORTED_MEDIA_TYPE, request);
+    }
+
+    /** Le point de sortie ne garde aucun en-tête : {@code Retry-After} est ajouté à sa réponse. */
+    @ExceptionHandler(TooManyReadingsException.class)
+    public ResponseEntity<Object> handleTooManyReadings(TooManyReadingsException ex, WebRequest request) {
+        ResponseEntity<Object> response = handleExceptionInternal(ex, ErrorDTO.of(ErrorCode.TROP_DE_TENTATIVES), new HttpHeaders(), HttpStatus.TOO_MANY_REQUESTS, request);
+        if (response == null) {
+            return null;
+        }
+        long seconds = ex.retryAfter().plusNanos(999_999_999L).toSeconds();
+        return ResponseEntity.status(response.getStatusCode()).headers(response.getHeaders())
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(seconds)).body(response.getBody());
     }
 
     @ExceptionHandler
