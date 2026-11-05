@@ -27,7 +27,7 @@ import tools.jackson.databind.json.JsonMapper;
  * causes, non par une exception propre au fournisseur. Un réseau en panne ou un délai dépassé ({@link IOException}, {@link TimeoutException}) est {@code UNREACHABLE} ; toute autre
  * erreur de l'appel est {@code SERVICE_ERROR}, y compris un corps de réponse que le client du fournisseur n'a pas pu lire.
  */
-public class ChatModelRecuExtractor implements RecuExtractor {
+public final class ChatModelRecuExtractor implements RecuExtractor {
 
     private static final String INSTRUCTIONS = """
             Tu relèves les valeurs d'un reçu québécois à partir de ses photos, qui montrent toutes un seul et même reçu.
