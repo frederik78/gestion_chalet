@@ -88,7 +88,7 @@ class RecuCopyGoogleTest {
         GOOGLE_API.answer(RecuCopyGoogleTest::unGoogleVide);
     }
 
-    /** Un Drive sans dossier ni fichier, et un Sheet dont l'onglet de 2026 n'a que sa ligne d'en-têtes. */
+    /** Un Drive sans dossier ni fichier, et un Sheet dont l'onglet de 2026 n'a que sa ligne d'en-têtes et les titres de septembre et d'octobre. */
     private static Response unGoogleVide(Request requete) {
         if (requete.is("GET", "/drive/v3/files")) {
             return Response.json("{\"files\":[]}");
@@ -106,7 +106,7 @@ class RecuCopyGoogleTest {
             return Response.json("{}");
         }
         if (requete.path().contains("/values/")) {
-            return Response.json("{\"values\":[[\"DATE\",\"BOUTIQUE\",\"OBJET\",\"TYPE\",\"MONTANT HT\",\"TPS\",\"TVQ\",\"MONTANT TOTAL\",\"NOTES\",\"PHOTO\"]]}");
+            return Response.json("{\"values\":[[\"DATE\",\"BOUTIQUE\",\"OBJET\",\"TYPE\",\"MONTANT HT\",\"TPS\",\"TVQ\",\"MONTANT TOTAL\",\"NOTES\",\"PHOTO\"],[\"septembre\"],[\"octobre\"]]}");
         }
         return requete.path().endsWith(":batchUpdate") ? Response.json("{}") : Response.status(404);
     }

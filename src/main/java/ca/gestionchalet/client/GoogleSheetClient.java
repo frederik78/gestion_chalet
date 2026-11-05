@@ -57,14 +57,13 @@ public class GoogleSheetClient implements SheetClient {
         int sheetId = tabProperties.at("/sheetId").asInt();
         Optional<Integer> existing = findRow(authorization, fileId, sheetId, row.rowId());
         SheetLayout layout = SheetLayout.read(readGrid(authorization, fileId, tab));
-        int rowIndex = existing.orElseGet(layout::usedRows);
+        Optional<SheetLayout.Placement> placement = existing.isEmpty() ? Optional.of(layout.placementFor(row.date().getMonth())) : Optional.empty();
+        int rowIndex = existing.orElseGet(() -> placement.orElseThrow().insertAt());
         List<Map<String, Object>> requests = new ArrayList<>();
         if (layout.photoColumnToAdd()) {
             addPhotoColumn(requests, layout, sheetId, tabProperties.at("/gridProperties/columnCount").asInt());
         }
-        if (existing.isEmpty() && rowIndex >= tabProperties.at("/gridProperties/rowCount").asInt()) {
-            requests.add(Map.of("appendDimension", Map.of("sheetId", sheetId, "dimension", "ROWS", "length", 1)));
-        }
+        placement.ifPresent(where -> requests.addAll(newRow(layout, where, sheetId, tabProperties.at("/gridProperties/rowCount").asInt())));
         for (SheetColumn column : SheetColumn.values()) {
             requests.add(Map.of("updateCells", Map.of(
                     "start", Map.of("sheetId", sheetId, "rowIndex", rowIndex, "columnIndex", layout.columnOf(column)),
@@ -117,6 +116,37 @@ public class GoogleSheetClient implements SheetClient {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * Une ligne vide à sa place, qui reprend la mise en forme de la ligne de données la plus proche, et sa liste déroulante de TYPE : PASTE_FORMAT exclut la validation des données
+     * (documentation de Google), qui se colle à part. Au bout de l'onglet, une ligne s'ajoute au lieu de s'insérer.
+     */
+    private static List<Map<String, Object>> newRow(SheetLayout layout, SheetLayout.Placement placement, int sheetId, int rowCount) {
+        int at = placement.insertAt();
+        List<Map<String, Object>> requests = new ArrayList<>();
+        if (at >= rowCount) {
+            requests.add(Map.of("appendDimension", Map.of("sheetId", sheetId, "dimension", "ROWS", "length", 1)));
+        } else {
+            requests.add(Map.of("insertDimension", Map.of(
+                    "range", Map.of("sheetId", sheetId, "dimension", "ROWS", "startIndex", at, "endIndex", at + 1), "inheritFromBefore", true)));
+        }
+        placement.formatSourceRow().ifPresent(source -> {
+            int sourceRow = source < at ? source : source + 1;
+            int typeColumn = layout.columnOf(SheetColumn.EXPENSE_TYPE);
+            requests.add(copyPaste(sheetId, sourceRow, at, 0, layout.width(), "PASTE_FORMAT"));
+            requests.add(copyPaste(sheetId, sourceRow, at, typeColumn, typeColumn + 1, "PASTE_DATA_VALIDATION"));
+        });
+        return requests;
+    }
+
+    private static Map<String, Object> copyPaste(int sheetId, int sourceRow, int destinationRow, int firstColumn, int endColumn, String pasteType) {
+        return Map.of("copyPaste", Map.of("source", cells(sheetId, sourceRow, firstColumn, endColumn), "destination", cells(sheetId, destinationRow, firstColumn, endColumn),
+                "pasteType", pasteType, "pasteOrientation", "NORMAL"));
+    }
+
+    private static Map<String, Object> cells(int sheetId, int row, int firstColumn, int endColumn) {
+        return Map.of("sheetId", sheetId, "startRowIndex", row, "endRowIndex", row + 1, "startColumnIndex", firstColumn, "endColumnIndex", endColumn);
     }
 
     /** Ajoute l'en-tête PHOTO après la dernière colonne (D-07), avec une colonne de plus dans l'onglet s'il n'y a plus de place. Aucun autre en-tête n'est touché. */

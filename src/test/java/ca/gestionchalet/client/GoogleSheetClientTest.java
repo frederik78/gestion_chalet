@@ -44,7 +44,10 @@ class GoogleSheetClientTest {
     private Supplier<Optional<String>> jetons = () -> Optional.of("jeton-d-essai");
     private static final List<String> ENTETES = List.of("DATE", "BOUTIQUE", "OBJET", "TYPE", "MONTANT HT", "TPS", "TVQ", "MONTANT TOTAL", "NOTES", "PHOTO");
     private List<String> entetes = ENTETES;
-    private int lignesUtilisees = 12;
+    /** Sous les en-têtes (rang 0) : « juin » (rang 1) et ses deux lignes, une ligne vide, puis « octobre » (rang 5) et sa ligne. */
+    private static final List<List<String>> SECTIONS = List.of(List.of("juin"), List.of("6 juin 2026", "Hydro Québec"), List.of("15 juin 2026", "Ménage"), List.of(),
+            List.of("octobre"), List.of("1 octobre 2026", "Familiprix"));
+    private List<List<String>> lignes = SECTIONS;
     private int lignesDeLOnglet = 100;
     private int colonnesDeLOnglet = 26;
     private String reponseRecherche = "{}";
@@ -60,7 +63,7 @@ class GoogleSheetClientTest {
         sheets.close();
     }
 
-    /** Un fichier à l'onglet « Comptes 2026 » (identifiant 7) de {@code lignesDeLOnglet} lignes, dont {@code lignesUtilisees} garnies. */
+    /** Un fichier à l'onglet « Comptes 2026 » (identifiant 7) de {@code lignesDeLOnglet} lignes, dont celles de {@code entetes} et de {@code lignes} sont garnies. */
     private Response repondre(Request requete) {
         if (requete.is("GET", "/v4/spreadsheets/" + FICHIER)) {
             return Response.json("{\"sheets\":[{\"properties\":{\"sheetId\":3,\"title\":\"Autre\",\"gridProperties\":{\"rowCount\":5,\"columnCount\":26}}},"
@@ -72,9 +75,7 @@ class GoogleSheetClientTest {
         if (requete.is("GET", "/v4/spreadsheets/" + FICHIER + "/values/'" + ONGLET + "'")) {
             List<List<String>> grille = new ArrayList<>();
             grille.add(entetes);
-            for (int i = 1; i < lignesUtilisees; i++) {
-                grille.add(List.of("x"));
-            }
+            grille.addAll(lignes);
             return Response.json(JSON.writeValueAsString(Map.of("values", grille)));
         }
         if (requete.is("POST", "/v4/spreadsheets/" + FICHIER + ":batchUpdate")) {
@@ -154,8 +155,8 @@ class GoogleSheetClientTest {
         assertThat(format.at("/cell/userEnteredFormat/numberFormat/pattern").asString()).isEqualTo("d mmmm yyyy");
         assertThat(format.get("fields").asString()).isEqualTo("userEnteredFormat.numberFormat");
         assertThat(format.at("/range/sheetId").asInt()).isEqualTo(7);
-        assertThat(format.at("/range/startRowIndex").asInt()).isEqualTo(12);
-        assertThat(format.at("/range/endRowIndex").asInt()).isEqualTo(13);
+        assertThat(format.at("/range/startRowIndex").asInt()).isEqualTo(4);
+        assertThat(format.at("/range/endRowIndex").asInt()).isEqualTo(5);
         assertThat(format.at("/range/startColumnIndex").asInt()).isZero();
         assertThat(format.at("/range/endColumnIndex").asInt()).isEqualTo(1);
         assertThat(demande("updateCells").get("fields").asString()).isEqualTo("userEnteredValue,textFormatRuns");
@@ -248,7 +249,7 @@ class GoogleSheetClientTest {
     void a03_unOngletEtUnFichierHostilesSontEncodesDansLesAdressesEtLesGuillemetsDoubles() {
         String fichier = "../x?y=1#z";
         String onglet = "L'été/2026?#";
-        sheets.answer(requete -> requete.method().equals("GET") && requete.path().equals("/v4/spreadsheets/" + fichier + "/values/'L''été/2026?#'") ? Response.json("{\"values\":[[\"DATE\",\"BOUTIQUE\",\"OBJET\",\"TYPE\",\"MONTANT HT\",\"TPS\",\"TVQ\",\"MONTANT TOTAL\",\"NOTES\",\"PHOTO\"]]}")
+        sheets.answer(requete -> requete.method().equals("GET") && requete.path().equals("/v4/spreadsheets/" + fichier + "/values/'L''été/2026?#'") ? Response.json("{\"values\":[[\"DATE\",\"BOUTIQUE\",\"OBJET\",\"TYPE\",\"MONTANT HT\",\"TPS\",\"TVQ\",\"MONTANT TOTAL\",\"NOTES\",\"PHOTO\"],[\"juin\"],[\"6 juin 2026\"]]}")
                 : requete.method().equals("GET") ? Response.json("{\"sheets\":[{\"properties\":{\"sheetId\":7,\"title\":\"" + onglet + "\",\"gridProperties\":{\"rowCount\":100}}}]}")
                 : Response.json("{}"));
 
@@ -308,6 +309,168 @@ class GoogleSheetClientTest {
 
         assertThat(corps(lot()).get("requests").findValues("updateCells").stream().filter(demande -> demande.at("/start/rowIndex").asInt() == 0)).isEmpty();
         assertThat(corps(lot()).get("requests").findValues("appendDimension").stream().filter(demande -> demande.get("dimension").asString().equals("COLUMNS"))).isEmpty();
+    }
+
+    private static SheetRow datee(LocalDate date) {
+        return new SheetRow(LIGNE, date, "Fournisseur", null, "Fournitures", null, null, null, new BigDecimal("35.00"), "", List.of());
+    }
+
+    private JsonNode demandes() {
+        return corps(lot()).get("requests");
+    }
+
+    /** Les demandes d'un type, dans l'ordre où elles partent. */
+    private List<JsonNode> demandesDe(String type) {
+        return demandes().findValues(type);
+    }
+
+    private static List<List<String>> titres(String... moisEtLignes) {
+        List<List<String>> grille = new ArrayList<>();
+        for (String texte : moisEtLignes) {
+            grille.add(texte.isEmpty() ? List.of() : List.of(texte.split("\\|")));
+        }
+        return grille;
+    }
+
+    @Test
+    void ca41_uneLigneInsereeApresUneLigneDeDonneesReprendSaMiseEnFormeEtLaListeDeroulanteDeType() {
+        ecrire(garageIberville());
+
+        List<JsonNode> demandes = new ArrayList<>();
+        demandes().forEach(demandes::add);
+        assertThat(demandes.get(0).at("/insertDimension/range/sheetId").asInt()).isEqualTo(7);
+        assertThat(demandes.get(0).at("/insertDimension/range/dimension").asString()).isEqualTo("ROWS");
+        assertThat(demandes.get(0).at("/insertDimension/range/startIndex").asInt()).isEqualTo(4);
+        assertThat(demandes.get(0).at("/insertDimension/range/endIndex").asInt()).isEqualTo(5);
+        JsonNode format = demandes.get(1).get("copyPaste");
+        assertThat(format.get("pasteType").asString()).isEqualTo("PASTE_FORMAT");
+        assertThat(format.at("/source")).isEqualTo(JSON.readTree("{\"sheetId\":7,\"startRowIndex\":3,\"endRowIndex\":4,\"startColumnIndex\":0,\"endColumnIndex\":10}"));
+        assertThat(format.at("/destination")).isEqualTo(JSON.readTree("{\"sheetId\":7,\"startRowIndex\":4,\"endRowIndex\":5,\"startColumnIndex\":0,\"endColumnIndex\":10}"));
+        JsonNode liste = demandes.get(2).get("copyPaste");
+        assertThat(liste.get("pasteType").asString()).as("PASTE_FORMAT exclut la validation des données (documentation de Google)").isEqualTo("PASTE_DATA_VALIDATION");
+        assertThat(liste.at("/source")).isEqualTo(JSON.readTree("{\"sheetId\":7,\"startRowIndex\":3,\"endRowIndex\":4,\"startColumnIndex\":3,\"endColumnIndex\":4}"));
+        assertThat(liste.at("/destination")).isEqualTo(JSON.readTree("{\"sheetId\":7,\"startRowIndex\":4,\"endRowIndex\":5,\"startColumnIndex\":3,\"endColumnIndex\":4}"));
+        int dernierCopyPaste = -1;
+        int formatDeDate = -1;
+        for (int i = 0; i < demandes.size(); i++) {
+            dernierCopyPaste = demandes.get(i).has("copyPaste") ? i : dernierCopyPaste;
+            formatDeDate = demandes.get(i).has("repeatCell") ? i : formatDeDate;
+        }
+        assertThat(formatDeDate).as("le format de la date posé en dernier l'emporte sur celui de la ligne copiée").isGreaterThan(dernierCopyPaste);
+    }
+
+    @Test
+    void ca41_leTypeEtLaMiseEnFormeSuiventLesColonnesDeLEnTeteEtLaLigneCopieeEstLaDerniereDeLaSection() {
+        entetes = List.of("NOTES", "TYPE", "PHOTO", "DATE", "BOUTIQUE", "OBJET", "MONTANT HT", "TPS", "TVQ", "MONTANT TOTAL");
+
+        ecrire(garageIberville());
+
+        assertThat(demandesDe("copyPaste").get(0).at("/source/endColumnIndex").asInt()).isEqualTo(10);
+        assertThat(demandesDe("copyPaste").get(1).at("/source/startColumnIndex").asInt()).isEqualTo(1);
+        assertThat(demandesDe("copyPaste").get(1).at("/destination/startColumnIndex").asInt()).isEqualTo(1);
+    }
+
+    @Test
+    void ca41_unePositionSansLigneDeDonneesAuDessusPrendLaPlusProcheEnDessousEtSonRangEstDecaleParLInsertion() {
+        lignes = titres("juin", "", "octobre", "1 octobre 2026|Familiprix");
+
+        ecrire(garageIberville());
+
+        assertThat(demandesDe("insertDimension").get(0).at("/range/startIndex").asInt()).as("juste après le titre de juin").isEqualTo(2);
+        assertThat(demandesDe("copyPaste").get(0).at("/source/startRowIndex").asInt()).as("la ligne d'octobre, décalée d'un rang par l'insertion").isEqualTo(5);
+        assertThat(demandesDe("copyPaste").get(0).at("/destination/startRowIndex").asInt()).isEqualTo(2);
+    }
+
+    @Test
+    void ca41_unOngletSansAucuneLigneDeDonneesNeCopieRienEtNEnInventePas() {
+        lignes = titres("juin");
+
+        ecrire(garageIberville());
+
+        assertThat(demandesDe("copyPaste")).isEmpty();
+        assertThat(demandesDe("insertDimension").get(0).at("/range/startIndex").asInt()).isEqualTo(2);
+    }
+
+    @Test
+    void r22_uneLigneSePlaceApresLaDerniereLigneDeSaSectionEtAvantLaLigneVideQuiLaSepareDeLaSuivante() {
+        lignes = titres("juin", "6 juin 2026|A", "7 juin 2026|B", "", "", "octobre", "1 octobre 2026|Familiprix");
+
+        ecrire(garageIberville());
+
+        assertThat(demandesDe("insertDimension").get(0).at("/range/startIndex").asInt()).isEqualTo(4);
+        assertThat(demandesDe("copyPaste").get(0).at("/source/startRowIndex").asInt()).isEqualTo(3);
+    }
+
+    @Test
+    void r22_laSectionDuMoisSeReconnaitSansCasseNiAccentsEtLaDerniereSectionVaJusquAuBoutDeLOnglet() {
+        lignes = titres("JUIN", "6 juin 2026|A", "", "AOÛT", "3 août 2026|B", "4 août 2026|C");
+
+        ecrire(datee(LocalDate.of(2026, 8, 20)));
+
+        assertThat(demandesDe("insertDimension").get(0).at("/range/startIndex").asInt()).isEqualTo(7);
+        assertThat(demandesDe("copyPaste").get(0).at("/source/startRowIndex").asInt()).isEqualTo(6);
+    }
+
+    @Test
+    void r22_ceNEstUnTitreQueLaSeuleCelluleNonVideDeLaPremiereColonne() {
+        lignes = titres("juin", "6 juin 2026|A", "mars|autre chose", "|mars", "Mars de pluie");
+
+        ecrire(datee(LocalDate.of(2026, 6, 20)));
+
+        assertThat(demandesDe("insertDimension").get(0).at("/range/startIndex").asInt()).as("aucune de ces lignes n'est la section « mars » : « juin » court jusqu'au bout").isEqualTo(6);
+    }
+
+    @Test
+    void ca43_deuxSectionsDuMemeMoisBloquentPourStructureSansRienEcrire() {
+        lignes = titres("mars", "3 mars 2026|A", "", "juin", "6 juin 2026|B", "", "Mars", "9 mars 2026|C");
+
+        assertThatThrownBy(() -> ecrire(datee(LocalDate.of(2026, 3, 20)))).isInstanceOfSatisfying(BlockedGoogleException.class,
+                e -> assertThat(e.motif()).isEqualTo(MotifBlocage.STRUCTURE_SHEET));
+
+        assertThat(sheets.requests()).noneSatisfy(requete -> assertThat(requete.path()).endsWith(":batchUpdate"));
+    }
+
+    @Test
+    void ca43_deuxSectionsDUnAutreMoisQueCeluiDuRecuBloquentAussiLaCopie() {
+        lignes = titres("mars", "3 mars 2026|A", "", "mars", "9 mars 2026|C", "", "juin", "6 juin 2026|B");
+
+        assertThatThrownBy(() -> ecrire(garageIberville())).isInstanceOfSatisfying(BlockedGoogleException.class,
+                e -> assertThat(e.motif()).isEqualTo(MotifBlocage.STRUCTURE_SHEET));
+
+        assertThat(sheets.requests()).noneSatisfy(requete -> assertThat(requete.path()).endsWith(":batchUpdate"));
+    }
+
+    @Test
+    void ca43_r23_unMoisSansSectionBloquePourStructureEnAttendantLaCreationDeSectionsDe001_07() {
+        lignes = titres("juin", "6 juin 2026|A");
+
+        assertThatThrownBy(() -> ecrire(datee(LocalDate.of(2026, 3, 20)))).isInstanceOfSatisfying(BlockedGoogleException.class,
+                e -> assertThat(e.motif()).isEqualTo(MotifBlocage.STRUCTURE_SHEET));
+
+        assertThat(sheets.requests()).noneSatisfy(requete -> assertThat(requete.path()).endsWith(":batchUpdate"));
+    }
+
+    @Test
+    void r24_unTitreHostileDuSheetEstIgnoreSansEtreRecopieDansLEnvoi() {
+        lignes = titres("juin", "6 juin 2026|A", "=IMPORTXML(\"https://exemple.invalid\",\"//a\")", "x".repeat(50_000), "octobre");
+
+        ecrire(garageIberville());
+
+        assertThat(demandesDe("insertDimension").get(0).at("/range/startIndex").asInt()).as("les deux lignes hostiles sont de la section de juin").isEqualTo(5);
+        assertThat(new String(lot().body(), StandardCharsets.UTF_8)).doesNotContain("IMPORTXML").doesNotContain("xxxxxxxxxx");
+    }
+
+    @Test
+    void r21_uneLigneDejaEcriteNeCherchePasDeSectionNiNInsereRienEtGardeSaMiseEnForme() {
+        lignes = titres("octobre", "1 octobre 2026|A");
+        reponseRecherche = "{\"matchedDeveloperMetadata\":[{\"developerMetadata\":{\"location\":{\"dimensionRange\":"
+                + "{\"sheetId\":7,\"dimension\":\"ROWS\",\"startIndex\":2,\"endIndex\":3}}}}]}";
+
+        ecrire(garageIberville());
+
+        assertThat(demandesDe("insertDimension")).isEmpty();
+        assertThat(demandesDe("copyPaste")).isEmpty();
+        assertThat(demandesDe("appendDimension")).isEmpty();
     }
 
     @Test
@@ -387,9 +550,9 @@ class GoogleSheetClientTest {
     void r21_uneNouvelleLigneEstCreeeApresLaDerniereLigneGarnieAvecSonIdentifiantInvisibleDansLeMemeLot() {
         ecrire(garageIberville());
 
-        assertThat(corps(lot()).get("requests")).hasSize(12);
+        assertThat(corps(lot()).get("requests")).hasSize(15);
         assertThat(demande("updateCells").at("/start/sheetId").asInt()).isEqualTo(7);
-        assertThat(demande("updateCells").at("/start/rowIndex").asInt()).isEqualTo(12);
+        assertThat(demande("updateCells").at("/start/rowIndex").asInt()).isEqualTo(4);
         assertThat(demande("updateCells").at("/start/columnIndex").asInt()).isZero();
         JsonNode metadonnee = demande("createDeveloperMetadata").get("developerMetadata");
         assertThat(metadonnee.get("metadataKey").asString()).isEqualTo("recuId");
@@ -397,23 +560,23 @@ class GoogleSheetClientTest {
         assertThat(metadonnee.get("visibility").asString()).isEqualTo("DOCUMENT");
         assertThat(metadonnee.at("/location/dimensionRange/sheetId").asInt()).isEqualTo(7);
         assertThat(metadonnee.at("/location/dimensionRange/dimension").asString()).isEqualTo("ROWS");
-        assertThat(metadonnee.at("/location/dimensionRange/startIndex").asInt()).isEqualTo(12);
-        assertThat(metadonnee.at("/location/dimensionRange/endIndex").asInt()).isEqualTo(13);
+        assertThat(metadonnee.at("/location/dimensionRange/startIndex").asInt()).isEqualTo(4);
+        assertThat(metadonnee.at("/location/dimensionRange/endIndex").asInt()).isEqualTo(5);
     }
 
     @Test
     void r21_sansPlaceDansLOngletUneLigneEstAjouteeDansLeMemeLot() {
-        lignesDeLOnglet = 12;
+        lignesDeLOnglet = 4;
 
         ecrire(garageIberville());
 
         JsonNode demandes = corps(lot()).get("requests");
-        assertThat(demandes).hasSize(13);
+        assertThat(demandes).hasSize(15);
         assertThat(demandes.get(0).at("/appendDimension/sheetId").asInt()).isEqualTo(7);
         assertThat(demandes.get(0).at("/appendDimension/dimension").asString()).isEqualTo("ROWS");
         assertThat(demandes.get(0).at("/appendDimension/length").asInt()).isEqualTo(1);
-        assertThat(demandes.get(1).has("updateCells")).isTrue();
-        assertThat(demandes.get(12).has("createDeveloperMetadata")).isTrue();
+        assertThat(demandes.get(1).has("copyPaste")).isTrue();
+        assertThat(demandes.get(14).has("createDeveloperMetadata")).isTrue();
     }
 
     @Test
@@ -440,7 +603,7 @@ class GoogleSheetClientTest {
         ecrire(garageIberville());
 
         assertThat(demande("updateCells").at("/start/sheetId").asInt()).isEqualTo(7);
-        assertThat(demande("updateCells").at("/start/rowIndex").asInt()).isEqualTo(12);
+        assertThat(demande("updateCells").at("/start/rowIndex").asInt()).isEqualTo(4);
     }
 
     @Test
