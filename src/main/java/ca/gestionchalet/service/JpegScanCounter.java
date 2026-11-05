@@ -36,27 +36,35 @@ final class JpegScanCounter {
     private JpegScanCounter() {
     }
 
-    /** Vrai si la photo a plus de {@code limit} balayages avant sa fin d'image, ou une structure inattendue. */
-    static boolean refuses(InputStream jpeg, int limit) throws IOException {
+    /** Ce que le parcours conclut ; la cause d'un refus va au journal, sans aucun contenu de la photo. */
+    enum Verdict {
+        ACCEPTED, TOO_MANY_SCANS, UNEXPECTED_STRUCTURE
+    }
+
+    /** Refuse la photo qui a plus de {@code limit} balayages avant sa fin d'image, ou une structure inattendue. */
+    static Verdict check(InputStream jpeg, int limit) throws IOException {
         InputStream content = new BufferedInputStream(jpeg);
         if (content.read() != MARKER_PREFIX || content.read() != START_OF_IMAGE) {
-            return true;
+            return Verdict.UNEXPECTED_STRUCTURE;
         }
         int scans = 0;
         int marker = nextMarker(content);
         while (true) {
             if (marker == END_OF_IMAGE) {
-                return scans == 0;
+                return scans == 0 ? Verdict.UNEXPECTED_STRUCTURE : Verdict.ACCEPTED;
             }
             if (marker < 0 || marker == STUFFED_BYTE || marker == START_OF_IMAGE) {
-                return true;
+                return Verdict.UNEXPECTED_STRUCTURE;
             }
             if (marker == TEMPORARY || marker >= RESTART_FIRST && marker <= RESTART_LAST) {
                 marker = nextMarker(content);
                 continue;
             }
-            if (!skipSegment(content) || marker == START_OF_SCAN && ++scans > limit) {
-                return true;
+            if (!skipSegment(content)) {
+                return Verdict.UNEXPECTED_STRUCTURE;
+            }
+            if (marker == START_OF_SCAN && ++scans > limit) {
+                return Verdict.TOO_MANY_SCANS;
             }
             marker = marker == START_OF_SCAN ? markerAfterCompressedData(content) : nextMarker(content);
         }

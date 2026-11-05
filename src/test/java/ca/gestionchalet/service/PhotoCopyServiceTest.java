@@ -207,6 +207,7 @@ class PhotoCopyServiceTest {
 
         assertThat(queue.length).isGreaterThan(190_000);
         assertThat(copieCollee).isPresent().hasValue(copieSeule.orElseThrow());
+        // Le décodeur lit par blocs (tampon du JDK, quelques Ko) : la marge de 32 Kio absorbe un tampon plus grand, et reste très en dessous de la queue (plus de 190 Kio).
         assertThat(collee.mostRead()).isLessThan(tete.length + 32_768);
     }
 

@@ -61,8 +61,9 @@ public class PhotoCopyService {
             return Optional.empty();
         }
         try {
-            if (format == PhotoFormat.JPEG && hasRefusedStructure(file)) {
-                LOG.warn("Copie d'une photo impossible : structure JPEG refusée ou trop de balayages");
+            JpegScanCounter.Verdict verdict = format == PhotoFormat.JPEG ? checkStructure(file) : JpegScanCounter.Verdict.ACCEPTED;
+            if (verdict != JpegScanCounter.Verdict.ACCEPTED) {
+                LOG.warn(verdict == JpegScanCounter.Verdict.TOO_MANY_SCANS ? "Copie d'une photo impossible : trop de balayages" : "Copie d'une photo impossible : structure JPEG inattendue");
                 return Optional.empty();
             }
             int orientation = format == PhotoFormat.JPEG ? readOrientation(file) : ExifOrientation.NONE;
@@ -75,9 +76,9 @@ public class PhotoCopyService {
         }
     }
 
-    private boolean hasRefusedStructure(MultipartFile file) throws IOException {
+    private JpegScanCounter.Verdict checkStructure(MultipartFile file) throws IOException {
         try (InputStream content = file.getInputStream()) {
-            return JpegScanCounter.refuses(content, rules.passesDecodageMax());
+            return JpegScanCounter.check(content, rules.passesDecodageMax());
         }
     }
 

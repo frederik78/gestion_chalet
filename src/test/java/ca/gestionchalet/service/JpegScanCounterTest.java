@@ -59,11 +59,25 @@ class JpegScanCounterTest {
     }
 
     private static boolean refuses(byte[] jpeg) {
+        return verdict(jpeg) != JpegScanCounter.Verdict.ACCEPTED;
+    }
+
+    private static JpegScanCounter.Verdict verdict(byte[] jpeg) {
         try {
-            return JpegScanCounter.refuses(new ByteArrayInputStream(jpeg), LIMIT);
+            return JpegScanCounter.check(new ByteArrayInputStream(jpeg), LIMIT);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /** Le journal distingue les deux causes : ce sont les refus à tort qui ont causé l'incident. */
+    @Test
+    void leVerdictDistingueTropDeBalayagesEtStructureInattendue() {
+        assertThat(verdict(jpeg(SOF, scans(1, new byte[0])))).isEqualTo(JpegScanCounter.Verdict.ACCEPTED);
+        assertThat(verdict(jpeg(SOF, scans(LIMIT + 1, new byte[0])))).isEqualTo(JpegScanCounter.Verdict.TOO_MANY_SCANS);
+        assertThat(verdict(join(SOI, SOI, SOF, scans(1, new byte[0]), EOI))).isEqualTo(JpegScanCounter.Verdict.UNEXPECTED_STRUCTURE);
+        assertThat(verdict(join(SOI, EOI))).isEqualTo(JpegScanCounter.Verdict.UNEXPECTED_STRUCTURE);
+        assertThat(verdict(jpeg(bytes(0xFF, 0xE9, 0, 100, 1), SOF))).isEqualTo(JpegScanCounter.Verdict.UNEXPECTED_STRUCTURE);
     }
 
     @Test
