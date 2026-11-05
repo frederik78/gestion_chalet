@@ -101,6 +101,8 @@ La première issue vérifie manuellement un vrai appel à Haiku 5.5, avec une ph
 
 Relevé de l'essai réel, fait par l'utilisateur et réussi le 2026-11-05 : Spring AI retenu, vrai appel à Haiku avec de vraies photos de reçus, dont 2 Motion Photos Pixel, comprises par le modèle. Le SDK Java d'Anthropic n'est donc pas nécessaire. Le nom de l'interface est `RecuExtractor`.
 
+Relevé D-64 (2026-11-05) : le secours par le SDK d'Anthropic reste inutile, et le code ne dépend plus d'Anthropic. `ChatModelRecuExtractor` (derrière `RecuExtractor`) n'importe que Spring AI : le schéma de réponse passe par `StructuredOutputChatOptions`, les pannes sont classées par la chaîne de leurs causes, et une règle de `AgentRulesTest` interdit toute dépendance à `com.anthropic..` et `org.springframework.ai.anthropic..`. Seuls le pom et `spring.ai.anthropic.*` nomment le fournisseur.
+
 ## Conséquences
 - Changer de modèle demande seulement de modifier la configuration.
 - Changer de base impose de reprendre les données, de revoir le dialecte et de repasser les tests de persistance, car JPA n'abstrait pas tout.
