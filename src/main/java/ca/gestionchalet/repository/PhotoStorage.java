@@ -51,6 +51,15 @@ public final class PhotoStorage {
         }
     }
 
+    /** Le contenu d'origine de la photo, pour sa copie dans Drive (R-36). */
+    public byte[] read(Photo photo) {
+        try {
+            return Files.readAllBytes(pathOf(photo));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     /** La photo est déjà écrite : tout échec, à l'ouverture du dossier comme à son {@code force}, est journalisé et n'échoue pas l'envoi. */
     private void forceDirectory() {
         try (FileChannel directory = FileChannel.open(root, StandardOpenOption.READ)) {

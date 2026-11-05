@@ -2,17 +2,14 @@ package ca.gestionchalet.service;
 
 import ca.gestionchalet.domain.AutorisationGoogle;
 import ca.gestionchalet.domain.EtatAutorisationGoogle;
-import ca.gestionchalet.domain.EtatCopie;
-import ca.gestionchalet.domain.MotifBlocage;
-import ca.gestionchalet.domain.Recu;
 import ca.gestionchalet.repository.AutorisationGoogleRepository;
-import ca.gestionchalet.repository.RecuRepository;
 import ca.gestionchalet.service.dto.GoogleAuthorizationStateDTO;
 import ca.gestionchalet.service.mapper.GoogleAuthorizationMapper;
 import ca.gestionchalet.security.GoogleTokenEncryptor;
 import ca.gestionchalet.security.UnreadableTokenException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.encrypt.TextEncryptor;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
@@ -36,18 +33,18 @@ public class GoogleAuthorizationService implements OAuth2AuthorizedClientService
     private static final String REGISTRATION_ID = "google";
 
     private final AutorisationGoogleRepository autorisationRepository;
-    private final RecuRepository recuRepository;
     private final ClientRegistrationRepository clientRegistrations;
     private final GoogleAuthorizationMapper mapper;
     private final TextEncryptor encryptor;
+    private final ApplicationEventPublisher events;
 
-    public GoogleAuthorizationService(AutorisationGoogleRepository autorisationRepository, RecuRepository recuRepository,
-            ClientRegistrationRepository clientRegistrations, GoogleAuthorizationMapper mapper, GoogleTokenEncryptor encryptor) {
+    public GoogleAuthorizationService(AutorisationGoogleRepository autorisationRepository,
+            ClientRegistrationRepository clientRegistrations, GoogleAuthorizationMapper mapper, GoogleTokenEncryptor encryptor, ApplicationEventPublisher events) {
         this.autorisationRepository = autorisationRepository;
-        this.recuRepository = recuRepository;
         this.clientRegistrations = clientRegistrations;
         this.mapper = mapper;
         this.encryptor = encryptor;
+        this.events = events;
     }
 
     @Transactional(readOnly = true)
@@ -71,7 +68,7 @@ public class GoogleAuthorizationService implements OAuth2AuthorizedClientService
     public void suspend() {
         AutorisationGoogle autorisation = current();
         autorisation.suspendre();
-        blockPending(autorisation);
+        publishLoss(autorisation);
     }
 
     /** Un jeton illisible, après un changement de clé, se traite comme un {@code invalid_grant} : il n'est pas réutilisé. */
@@ -103,8 +100,8 @@ public class GoogleAuthorizationService implements OAuth2AuthorizedClientService
         OAuth2RefreshToken refreshToken = client.getRefreshToken();
         if (refreshToken != null && accessToken.getScopes().containsAll(client.getClientRegistration().getScopes())) {
             autorisation.accorder(encryptor.encrypt(accessToken.getTokenValue()), accessToken.getExpiresAt(), encryptor.encrypt(refreshToken.getTokenValue()));
-            recuRepository.findByEtatCopieAndMotifBlocage(EtatCopie.BLOQUEE, MotifBlocage.AUTORISATION_GOOGLE).forEach(Recu::reprendre);
             autorisationRepository.save(autorisation);
+            events.publishEvent(new GoogleAuthorizationGranted());
             LOG.info("Autorisation Google : VALIDE");
         } else {
             requireRenewal(autorisation);
@@ -120,12 +117,12 @@ public class GoogleAuthorizationService implements OAuth2AuthorizedClientService
 
     private void requireRenewal(AutorisationGoogle autorisation) {
         autorisation.demanderRenouvellement();
-        blockPending(autorisation);
+        publishLoss(autorisation);
     }
 
-    private void blockPending(AutorisationGoogle autorisation) {
-        recuRepository.findByEtatCopie(EtatCopie.A_COPIER).forEach(recu -> recu.bloquer(MotifBlocage.AUTORISATION_GOOGLE));
+    private void publishLoss(AutorisationGoogle autorisation) {
         autorisationRepository.save(autorisation);
+        events.publishEvent(new GoogleAuthorizationLost());
         LOG.warn("Autorisation Google : A_RENOUVELER");
     }
 

@@ -39,6 +39,24 @@
     <Class name="ca.gestionchalet.repository.PhotoStorage"/>
     <Bug pattern="CRLF_INJECTION_LOGS"/>
   </Match>
+  <!-- Seuls sont journalisés un UUID généré par le serveur, un nom de classe, un code de réponse et un motif de blocage énuméré : aucune valeur de reçu ni de réponse de Google. -->
+  <Match>
+    <Class name="~ca\.gestionchalet\.service\.RecuCopyService.*"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
+  <!-- Un adaptateur garde le RestClient que la configuration lui donne, comme un service garde ses collaborateurs. -->
+  <Match>
+    <Class name="~ca\.gestionchalet\.client\.Google(Drive|Sheet)Client"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <!-- La photo à déposer porte ses octets jusqu'à l'envoi, sans les conserver ni les modifier : les copier doublerait en mémoire une photo pouvant atteindre 15 Mo. -->
+  <Match>
+    <Class name="ca.gestionchalet.client.DriveClient$DrivePhoto"/>
+    <Or>
+      <Bug pattern="EI_EXPOSE_REP"/>
+      <Bug pattern="EI_EXPOSE_REP2"/>
+    </Or>
+  </Match>
   <!-- Un service garde les collaborateurs que Spring lui injecte : c'est le principe même de l'injection. -->
   <Match>
     <Class name="~ca\.gestionchalet\.service\.[A-Za-z]+Service"/>

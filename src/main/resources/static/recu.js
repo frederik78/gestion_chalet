@@ -420,8 +420,10 @@ async function valider(evenement) {
   try {
     const reponse = await envoyerFormulaire('/api/recus', formulaire);
     if (reponse.ok) {
+      const recu = await reponse.json().catch(() => null);
       revenirAuDepart();
-      elements['message-succes'].textContent = 'Reçu enregistré.';
+      elements['message-succes'].textContent = 'Reçu enregistré.'
+        + (recu && recu.motifBlocage === 'FICHIER_INACCESSIBLE' ? ' Copie vers Google en attente : fichier ou onglet du Sheet non configuré.' : '');
       return;
     }
     const corps = await reponse.json().catch(() => null);

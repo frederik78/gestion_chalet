@@ -16,3 +16,11 @@ recus:
   # Le contexte est partagé par de nombreuses lectures ; cs19 fixe sa propre limite, DefaultValuesTest garde la vraie.
   lecture:
     lectures-par-heure: 100000
+  # Aucune copie en tâche de fond : un test appelle « traiter le suivant » lui-même ; et aucune adresse de Drive ni de Sheets ne mène hors de la machine.
+  copie:
+    automatique: false
+    # Un Sheet configuré : sans lui, aucune copie ne part (D-62) ; RecuCopyUnconfiguredRealServerTest les vide.
+    fichier: fichier-essai
+    onglet: Comptes 2026
+    adresse-drive: http://localhost:9
+    adresse-sheets: http://localhost:9

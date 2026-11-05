@@ -27,12 +27,15 @@ import archfixtures.rules.repository.NativePurgingRepository;
 import archfixtures.rules.repository.NeighbourStorage;
 import archfixtures.rules.repository.SpecificationRepository;
 import archfixtures.rules.repository.QueryPurgingRepository;
+import archfixtures.rules.service.CopyStateChangingByReferenceService;
+import archfixtures.rules.service.CopyStateChangingService;
 import archfixtures.rules.service.DirectProviderCallService;
 import archfixtures.rules.service.EntityManagerRemovingService;
 import archfixtures.rules.service.JdbcPurgingService;
 import archfixtures.rules.service.LegacyFileDeletingService;
 import archfixtures.rules.service.ScheduledDiscardingService;
 import archfixtures.rules.service.FileDeletingService;
+import archfixtures.rules.service.PhotoDepositingService;
 import archfixtures.rules.service.PhotoDiscardingByReferenceService;
 import archfixtures.rules.service.PhotoDiscardingService;
 import archfixtures.rules.service.FloatingCalculationService;
@@ -49,6 +52,7 @@ import archfixtures.rules.web.rest.ResourceBadlyNamed;
 import archfixtures.rules.web.rest.SerializesEntityResource;
 import archfixtures.rules.web.rest.ServiceOutsideLayerService;
 import ca.gestionchalet.domain.Photo;
+import ca.gestionchalet.domain.Recu;
 import ca.gestionchalet.repository.PhotoStorage;
 import ca.gestionchalet.repository.RecuRepository;
 import com.tngtech.archunit.base.DescribedPredicate;
@@ -71,7 +75,9 @@ import java.io.ObjectInputStream;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -251,6 +257,39 @@ class AgentRulesTest {
         return classes().should(sansRetrait).allowEmptyShould(true);
     }
 
+    private static final Map<Class<?>, Set<String>> TRANSITIONS_DE_COPIE = Map.of(
+            Recu.class, Set.of("bloquer", "reprendre", "terminerCopie", "reessayer", "corriger"),
+            Photo.class, Set.of("deposer"));
+
+    /**
+     * D-60 : seul le cycle de la copie ({@code RecuCopyService}) appelle les transitions de l'état de la copie d'un reçu. Les noms sont vérifiés sur {@code Recu} : une
+     * transition renommée fait échouer la règle au lieu de la rendre muette. Les références de méthode comptent (mesuré : {@code callMethod} ne les voit pas).
+     * Limite : un appel indirect, par une méthode intermédiaire de {@code RecuCopyService}, n'est pas suivi.
+     */
+    private static ArchRule seulLeCycleDeCopieChangeLEtat(String racine) {
+        TRANSITIONS_DE_COPIE.forEach((type, transitions) -> transitions.forEach(transition -> {
+            if (Arrays.stream(type.getMethods()).noneMatch(methode -> methode.getName().equals(transition))) {
+                throw new AssertionError(type.getSimpleName() + "." + transition + " n'existe plus : la règle serait muette");
+            }
+        }));
+        String cycle = racine + ".service.RecuCopyService";
+        ArchCondition<JavaClass> sansChangement = new ArchCondition<>("ne pas changer l'état de la copie hors de RecuCopyService") {
+            @Override
+            public void check(JavaClass classe, ConditionEvents evenements) {
+                boolean autorisee = classe.getName().equals(cycle) || classe.getName().startsWith(cycle + "$")
+                        || TRANSITIONS_DE_COPIE.keySet().stream().anyMatch(type -> classe.getName().equals(type.getName()));
+                if (autorisee) {
+                    return;
+                }
+                classe.getAccessesFromSelf().stream()
+                        .filter(acces -> TRANSITIONS_DE_COPIE.entrySet().stream().anyMatch(transitions ->
+                                acces.getTargetOwner().isEquivalentTo(transitions.getKey()) && transitions.getValue().contains(acces.getName())))
+                        .forEach(acces -> evenements.add(SimpleConditionEvent.violated(classe, acces.getDescription())));
+            }
+        };
+        return classes().should(sansChangement).allowEmptyShould(true);
+    }
+
     private static final Set<String> SQL_DIRECT = Set.of("org.springframework.jdbc.core.JdbcTemplate",
             "org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate", "org.springframework.jdbc.core.simple.JdbcClient");
 
@@ -352,7 +391,7 @@ class AgentRulesTest {
                 entitesSansSetterPublic(), entitesAvecConstructeurProtege(), dtoEnRecordsAuBonEndroit(racine),
                 entiteJamaisSerialisee(racine), jamaisDeFlottant(), jamaisDeDeserialisationPolymorphe(),
                 fournisseursDerriereClient(racine), servicesNommesDansService(racine),
-                fichiersRetiresSeulementParLeStockage(racine));
+                fichiersRetiresSeulementParLeStockage(racine), seulLeCycleDeCopieChangeLEtat(racine));
     }
 
     @Test
@@ -440,7 +479,10 @@ class AgentRulesTest {
                 Arguments.of(seulLeRetourDeTransactionRetireUnePhoto(racine, RETRAIT_DE_PHOTO), List.of(NeighbourStorage.class)),
                 Arguments.of(niEntityManagerRemoveNiSqlDirect(), List.of(EntityManagerRemovingService.class)),
                 Arguments.of(niEntityManagerRemoveNiSqlDirect(), List.of(JdbcPurgingService.class)),
-                Arguments.of(tachePlanifieeSansRetrait(), List.of(ScheduledDiscardingService.class)));
+                Arguments.of(tachePlanifieeSansRetrait(), List.of(ScheduledDiscardingService.class)),
+                Arguments.of(seulLeCycleDeCopieChangeLEtat(racine), List.of(CopyStateChangingService.class)),
+                Arguments.of(seulLeCycleDeCopieChangeLEtat(racine), List.of(CopyStateChangingByReferenceService.class)),
+                Arguments.of(seulLeCycleDeCopieChangeLEtat(racine), List.of(PhotoDepositingService.class)));
     }
 
     @ParameterizedTest(name = "{1}")

@@ -16,6 +16,8 @@ public interface RecuRepository extends Repository<Recu, UUID> {
 
     List<Recu> findByValeursDateAndValeursMontantTotalCents(LocalDate date, Long montantTotalCents);
 
+    Optional<Recu> findById(UUID id);
+
     Optional<Recu> findByCleIdempotence(UUID cleIdempotence);
 
     List<Recu> findByEtatCopie(EtatCopie etatCopie);

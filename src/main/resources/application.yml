@@ -146,6 +146,20 @@ recus:
     droits:
       - https://www.googleapis.com/auth/spreadsheets
       - https://www.googleapis.com/auth/drive.file
+  copie:
+    # Un seul fil copie les reçus validés : réveillé après chaque validation, puis à chaque passage périodique (D-60, R-19, R-20). Faux : seul un appel direct copie (tests).
+    automatique: true
+    intervalle: 1m
+    delai-appel: 60s
+    # Créé par l'application au premier dépôt (R-28).
+    dossier-drive: Reçus du chalet
+    adresse-drive: https://www.googleapis.com
+    adresse-sheets: https://sheets.googleapis.com
+    adresse-lien-fichier: https://drive.google.com/file/d/{id}/view
+    # Avant la structure du Sheet (001-11) : un seul fichier et un seul onglet, colonnes dans l'ordre observé. Vides, aucune ligne n'est écrite et la copie est bloquée.
+    # Ne pas renseigner sur un vrai Sheet avant 001-11 : une ligne s'y ajouterait après la dernière ligne garnie de l'onglet, hors de toute section de mois.
+    fichier: ${RECUS_COPIE_FICHIER:}
+    onglet: ${RECUS_COPIE_ONGLET:}
   securite:
     # Aucun condensé par défaut : à fournir par l'environnement (RECUS_SECURITE_CONDENSE_MOT_DE_PASSE), sinon l'application refuse de démarrer.
     echecs-avant-blocage: 5

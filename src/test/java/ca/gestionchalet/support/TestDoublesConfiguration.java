@@ -3,6 +3,7 @@ package ca.gestionchalet.support;
 import jakarta.servlet.Filter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -30,6 +31,14 @@ public class TestDoublesConfiguration {
     @Primary
     TestRecuExtractor modeleEssai() {
         return new TestRecuExtractor();
+    }
+
+    /** Drive et le Sheet en mémoire, à la place des adaptateurs : aucun test n'appelle Google. {@code essai.google-en-memoire=false} garde les vrais adaptateurs, pointés sur un serveur local. */
+    @Bean
+    @Primary
+    @ConditionalOnProperty(name = "essai.google-en-memoire", havingValue = "true", matchIfMissing = true)
+    InMemoryGoogle googleEnMemoire() {
+        return new InMemoryGoogle();
     }
 
     @Bean
