@@ -46,6 +46,7 @@ class GoogleSheetClientTest {
     private List<String> entetes = ENTETES;
     private int lignesUtilisees = 12;
     private int lignesDeLOnglet = 100;
+    private int colonnesDeLOnglet = 26;
     private String reponseRecherche = "{}";
 
     @BeforeEach
@@ -62,8 +63,8 @@ class GoogleSheetClientTest {
     /** Un fichier à l'onglet « Comptes 2026 » (identifiant 7) de {@code lignesDeLOnglet} lignes, dont {@code lignesUtilisees} garnies. */
     private Response repondre(Request requete) {
         if (requete.is("GET", "/v4/spreadsheets/" + FICHIER)) {
-            return Response.json("{\"sheets\":[{\"properties\":{\"sheetId\":3,\"title\":\"Autre\",\"gridProperties\":{\"rowCount\":5}}},"
-                    + "{\"properties\":{\"sheetId\":7,\"title\":\"" + ONGLET + "\",\"gridProperties\":{\"rowCount\":" + lignesDeLOnglet + "}}}]}");
+            return Response.json("{\"sheets\":[{\"properties\":{\"sheetId\":3,\"title\":\"Autre\",\"gridProperties\":{\"rowCount\":5,\"columnCount\":26}}},"
+                    + "{\"properties\":{\"sheetId\":7,\"title\":\"" + ONGLET + "\",\"gridProperties\":{\"rowCount\":" + lignesDeLOnglet + ",\"columnCount\":" + colonnesDeLOnglet + "}}}]}");
         }
         if (requete.is("POST", "/v4/spreadsheets/" + FICHIER + "/developerMetadata:search")) {
             return Response.json(reponseRecherche);
@@ -256,6 +257,57 @@ class GoogleSheetClientTest {
         assertThat(sheets.requests()).allSatisfy(requete -> assertThat(requete.rawPath()).startsWith("/v4/spreadsheets/..%2Fx%3Fy%3D1%23z"));
         assertThat(sheets.requests().stream().map(Request::rawPath)).contains("/v4/spreadsheets/..%2Fx%3Fy%3D1%23z/values/%27L%27%27%C3%A9t%C3%A9%2F2026%3F%23%27");
         assertThat(sheets.requests()).anySatisfy(requete -> assertThat(requete.path()).endsWith(":batchUpdate"));
+    }
+
+    @Test
+    void ca42_unOngletSansColonnePhotoLaRecoitApresLaDerniereColonneEtLeLienEstEcritSousElle() {
+        entetes = List.of("DATE", "BOUTIQUE", "OBJET", "TYPE", "MONTANT HT", "TPS", "TVQ", "MONTANT TOTAL", "NOTES");
+
+        ecrire(avec("F", null, null, "", List.of(new PhotoLink("Photo 1", "fichier-a"))));
+
+        JsonNode enTete = corps(lot()).get("requests").findValues("updateCells").stream().filter(demande -> demande.at("/start/rowIndex").asInt() == 0).findFirst().orElseThrow();
+        assertThat(enTete.at("/start/sheetId").asInt()).isEqualTo(7);
+        assertThat(enTete.at("/start/columnIndex").asInt()).isEqualTo(9);
+        assertThat(enTete.at("/rows/0/values/0/userEnteredValue/stringValue").asString()).isEqualTo("PHOTO");
+        assertThat(enTete.get("fields").asString()).isEqualTo("userEnteredValue");
+        assertThat(cellule(9).at("/userEnteredValue/stringValue").asString()).isEqualTo("Photo 1");
+        assertThat(cellule(9).at("/textFormatRuns/0/format/link/uri").asString()).isEqualTo("https://drive.exemple.invalid/fichier/fichier-a/voir");
+        assertThat(corps(lot()).get("requests").findValues("appendDimension").stream().filter(demande -> demande.has("dimension") && demande.get("dimension").asString().equals("COLUMNS")))
+                .as("l'onglet a de la place pour une colonne de plus").isEmpty();
+    }
+
+    @Test
+    void ca42_lApresLaDerniereColonneEstApresLaDerniereEnTeteNonVideMemeUneColonneDuProprietaire() {
+        entetes = List.of("DATE", "BOUTIQUE", "OBJET", "TYPE", "MONTANT HT", "TPS", "TVQ", "MONTANT TOTAL", "NOTES", "CALCUL", " ");
+
+        ecrire(avec("F", null, null, "", List.of(new PhotoLink("Photo 1", "fichier-a"))));
+
+        assertThat(cellule(10).at("/userEnteredValue/stringValue").asString()).isEqualTo("Photo 1");
+        assertThat(corps(lot()).get("requests").findValues("updateCells").stream().filter(demande -> demande.at("/start/rowIndex").asInt() == 0).findFirst().orElseThrow()
+                .at("/start/columnIndex").asInt()).isEqualTo(10);
+        assertThat(cellule(9).isMissingNode()).as("CALCUL").isTrue();
+    }
+
+    @Test
+    void ca42_sansPlaceDansLOngletUneColonneEstAjouteeAvantLEcritureDeLEnTete() {
+        entetes = List.of("DATE", "BOUTIQUE", "OBJET", "TYPE", "MONTANT HT", "TPS", "TVQ", "MONTANT TOTAL", "NOTES");
+        colonnesDeLOnglet = 9;
+
+        ecrire(avec("F", null, null, "", List.of(new PhotoLink("Photo 1", "fichier-a"))));
+
+        JsonNode demandes = corps(lot()).get("requests");
+        assertThat(demandes.get(0).at("/appendDimension/sheetId").asInt()).isEqualTo(7);
+        assertThat(demandes.get(0).at("/appendDimension/dimension").asString()).isEqualTo("COLUMNS");
+        assertThat(demandes.get(0).at("/appendDimension/length").asInt()).isEqualTo(1);
+        assertThat(demandes.get(1).at("/updateCells/rows/0/values/0/userEnteredValue/stringValue").asString()).isEqualTo("PHOTO");
+    }
+
+    @Test
+    void ca42_unOngletQuiALaColonnePhotoNeVoitSonEnTeteNiSonEspaceModifies() {
+        ecrire(avec("F", null, null, "", List.of()));
+
+        assertThat(corps(lot()).get("requests").findValues("updateCells").stream().filter(demande -> demande.at("/start/rowIndex").asInt() == 0)).isEmpty();
+        assertThat(corps(lot()).get("requests").findValues("appendDimension").stream().filter(demande -> demande.get("dimension").asString().equals("COLUMNS"))).isEmpty();
     }
 
     @Test

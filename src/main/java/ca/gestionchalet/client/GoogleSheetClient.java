@@ -59,6 +59,9 @@ public class GoogleSheetClient implements SheetClient {
         SheetLayout layout = SheetLayout.read(readGrid(authorization, fileId, tab));
         int rowIndex = existing.orElseGet(layout::usedRows);
         List<Map<String, Object>> requests = new ArrayList<>();
+        if (layout.photoColumnToAdd()) {
+            addPhotoColumn(requests, layout, sheetId, tabProperties.at("/gridProperties/columnCount").asInt());
+        }
         if (existing.isEmpty() && rowIndex >= tabProperties.at("/gridProperties/rowCount").asInt()) {
             requests.add(Map.of("appendDimension", Map.of("sheetId", sheetId, "dimension", "ROWS", "length", 1)));
         }
@@ -85,7 +88,7 @@ public class GoogleSheetClient implements SheetClient {
     /** L'onglet de la configuration, par son titre exact : absent, il est refusé comme un fichier inaccessible (section 8 du PRD). */
     private JsonNode findTab(String authorization, String fileId, String tab) {
         JsonNode file = calls.call(() -> restClient.get()
-                .uri(uri -> uri.path("/v4/spreadsheets/{id}").queryParam("fields", "sheets.properties(sheetId,title,gridProperties.rowCount)").build(fileId))
+                .uri(uri -> uri.path("/v4/spreadsheets/{id}").queryParam("fields", "sheets.properties(sheetId,title,gridProperties.rowCount,gridProperties.columnCount)").build(fileId))
                 .header(HttpHeaders.AUTHORIZATION, authorization).retrieve().body(JsonNode.class));
         if (file == null || !file.path("sheets").isArray()) {
             throw new TransientGoogleException("REPONSE_ILLISIBLE");
@@ -114,6 +117,18 @@ public class GoogleSheetClient implements SheetClient {
             }
         }
         return Optional.empty();
+    }
+
+    /** Ajoute l'en-tête PHOTO après la dernière colonne (D-07), avec une colonne de plus dans l'onglet s'il n'y a plus de place. Aucun autre en-tête n'est touché. */
+    private static void addPhotoColumn(List<Map<String, Object>> requests, SheetLayout layout, int sheetId, int columnCount) {
+        int photoColumn = layout.columnOf(SheetColumn.PHOTO);
+        if (photoColumn >= columnCount) {
+            requests.add(Map.of("appendDimension", Map.of("sheetId", sheetId, "dimension", "COLUMNS", "length", photoColumn + 1 - columnCount)));
+        }
+        requests.add(Map.of("updateCells", Map.of(
+                "start", Map.of("sheetId", sheetId, "rowIndex", layout.headerRow(), "columnIndex", photoColumn),
+                "rows", List.of(Map.of("values", List.of(text(SheetColumn.PHOTO.header())))),
+                "fields", "userEnteredValue")));
     }
 
     /** Les valeurs affichées de l'onglet entier, ligne par ligne : l'API ne rend que jusqu'à la dernière ligne garnie. */

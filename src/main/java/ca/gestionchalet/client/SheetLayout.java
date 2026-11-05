@@ -18,11 +18,13 @@ final class SheetLayout {
 
     private final int headerRow;
     private final Map<SheetColumn, Integer> columns;
+    private final boolean photoColumnToAdd;
     private final int usedRows;
 
-    private SheetLayout(int headerRow, Map<SheetColumn, Integer> columns, int usedRows) {
+    private SheetLayout(int headerRow, Map<SheetColumn, Integer> columns, boolean photoColumnToAdd, int usedRows) {
         this.headerRow = headerRow;
         this.columns = columns;
+        this.photoColumnToAdd = photoColumnToAdd;
         this.usedRows = usedRows;
     }
 
@@ -30,10 +32,26 @@ final class SheetLayout {
     static SheetLayout read(List<List<String>> grid) {
         int headerRow = findHeaderRow(grid);
         Map<SheetColumn, Integer> columns = new EnumMap<>(SheetColumn.class);
+        List<String> headers = grid.get(headerRow);
         for (SheetColumn column : SheetColumn.values()) {
-            columns.put(column, indexOf(grid.get(headerRow), column));
+            columns.put(column, indexOf(headers, column));
         }
-        return new SheetLayout(headerRow, columns, grid.size());
+        // PHOTO seule peut manquer : elle s'ajoute après la dernière colonne (D-07, R-24).
+        boolean photoColumnToAdd = columns.get(SheetColumn.PHOTO) < 0;
+        if (photoColumnToAdd) {
+            columns.put(SheetColumn.PHOTO, lastHeader(headers) + 1);
+        }
+        return new SheetLayout(headerRow, columns, photoColumnToAdd, grid.size());
+    }
+
+    private static int lastHeader(List<String> headers) {
+        int last = -1;
+        for (int index = 0; index < headers.size(); index++) {
+            if (!ReceiptText.isEmpty(headers.get(index))) {
+                last = index;
+            }
+        }
+        return last;
     }
 
     /** La première ligne qui porte un des en-têtes attendus : les titres de mois et les lignes de données n'en portent aucun. */
@@ -50,7 +68,7 @@ final class SheetLayout {
         throw structure();
     }
 
-    /** L'unique colonne de ce nom ; absente ou en double, la structure est inattendue (on ne devine pas laquelle écrire). */
+    /** L'unique colonne de ce nom, ou -1 pour PHOTO absente ; toute autre absente ou une colonne en double, la structure est inattendue (on ne devine pas laquelle écrire). */
     private static int indexOf(List<String> headers, SheetColumn column) {
         int found = -1;
         for (int index = 0; index < headers.size(); index++) {
@@ -61,7 +79,7 @@ final class SheetLayout {
                 found = index;
             }
         }
-        if (found < 0) {
+        if (found < 0 && column != SheetColumn.PHOTO) {
             throw structure();
         }
         return found;
@@ -81,6 +99,11 @@ final class SheetLayout {
 
     int columnOf(SheetColumn column) {
         return columns.get(column);
+    }
+
+    /** Vrai si l'en-tête PHOTO manque : l'application l'écrit à {@link #columnOf} avant la ligne (D-07). */
+    boolean photoColumnToAdd() {
+        return photoColumnToAdd;
     }
 
     /** Le rang, à partir de 0, de la première ligne libre. */
