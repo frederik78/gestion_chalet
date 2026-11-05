@@ -32,7 +32,7 @@ src/main/java/ca/gestionchalet/
 ├── domain/       entités JPA, types métier, règles et erreurs métier, converter/
 ├── repository/   dépôts Spring Data, stockage local des photos
 ├── service/      cas d'utilisation et reprise des envois ; service/dto, service/mapper, service/validation
-├── client/       RecuExtractor, ClasseurDepenses, DepotPhotos et leurs implémentations
+├── client/       RecuExtractor, SheetClient, DriveClient et leurs implémentations
 ├── security/     compte local, limitation des échecs de connexion
 └── web/rest/     XxxResource ; web/rest/errors
 src/main/resources/
