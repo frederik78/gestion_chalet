@@ -36,7 +36,7 @@ import tools.jackson.databind.json.JsonMapper;
     "spring.ai.anthropic.api-key=cle-essai",
 })
 @ExtendWith(OutputCaptureExtension.class)
-class AnthropicReadingContractRealServerTest {
+class ChatModelReadingContractRealServerTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final String TEMOIN = "FOURNISSEUR-TEMOIN";
@@ -217,6 +217,24 @@ class AnthropicReadingContractRealServerTest {
         attendreEchec();
 
         assertThat(journaux.getOut()).doesNotContain(TEMOIN);
+    }
+
+    @Test
+    void ca04_unCorpsHttpIllisibleDonneEchecInjoignable(CapturedOutput journaux) {
+        consigne = new Consigne(200, "<html>" + TEMOIN + "</html>", 0);
+
+        attendreEchec();
+
+        assertThat(journaux.getOut()).contains("Lecture en échec : UNREACHABLE").doesNotContain(TEMOIN);
+    }
+
+    @Test
+    void ca04_unCorpsJsonDeMauvaiseFormeDonneErreurDeService(CapturedOutput journaux) {
+        consigne = new Consigne(200, "{\"content\":\"" + TEMOIN + "\"}", 0);
+
+        attendreEchec();
+
+        assertThat(journaux.getOut()).contains("Lecture en échec : SERVICE_ERROR").doesNotContain(TEMOIN);
     }
 
     @Test

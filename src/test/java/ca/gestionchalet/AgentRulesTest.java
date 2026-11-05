@@ -215,6 +215,13 @@ class AgentRulesTest {
                 .allowEmptyShould(true);
     }
 
+    /** D-64 : changer de modèle ne demande que la dépendance Spring AI et la configuration {@code spring.ai.*} ; aucune classe ne dépend d'Anthropic. */
+    private static ArchRule aucuneDependanceAuFournisseurDuModele(String racine) {
+        return noClasses().that().resideInAPackage(racine + "..")
+                .should().dependOnClassesThat().resideInAnyPackage("com.anthropic..", "org.springframework.ai.anthropic..")
+                .allowEmptyShould(true);
+    }
+
     private static ArchRule servicesNommesDansService(String racine) {
         return classes().that().areAnnotatedWith("org.springframework.stereotype.Service")
                 .should().resideInAPackage(racine + ".service..")
@@ -390,7 +397,7 @@ class AgentRulesTest {
                 domaineSansSpringNiHibernate(racine), interfacesSeulementDansClient(racine), entitesDansLeDomaine(racine),
                 entitesSansSetterPublic(), entitesAvecConstructeurProtege(), dtoEnRecordsAuBonEndroit(racine),
                 entiteJamaisSerialisee(racine), jamaisDeFlottant(), jamaisDeDeserialisationPolymorphe(),
-                fournisseursDerriereClient(racine), servicesNommesDansService(racine),
+                fournisseursDerriereClient(racine), aucuneDependanceAuFournisseurDuModele(racine), servicesNommesDansService(racine),
                 fichiersRetiresSeulementParLeStockage(racine), seulLeCycleDeCopieChangeLEtat(racine));
     }
 
@@ -462,6 +469,7 @@ class AgentRulesTest {
                 Arguments.of(jamaisDeDeserialisationPolymorphe(), List.of(ObjectReadingService.class)),
                 Arguments.of(jamaisDeDeserialisationPolymorphe(), List.of(PolymorphicDTO.class)),
                 Arguments.of(fournisseursDerriereClient(racine), List.of(DirectProviderCallService.class)),
+                Arguments.of(aucuneDependanceAuFournisseurDuModele(racine), List.of(archfixtures.rules.client.VendorBoundClient.class)),
                 Arguments.of(servicesNommesDansService(racine), List.of(ServiceOutsideLayerService.class)),
                 Arguments.of(servicesNommesDansService(racine), List.of(BadlyNamed.class)),
                 Arguments.of(fichiersRetiresSeulementParLeStockage(racine), List.of(FileDeletingService.class)),
@@ -503,7 +511,8 @@ class AgentRulesTest {
                 Arguments.of(entitesAvecConstructeurProtege(), CompliantEntity.class),
                 Arguments.of(entitesDansLeDomaine(racine), CompliantEntity.class),
                 Arguments.of(dtoEnRecordsAuBonEndroit(racine), CompliantDTO.class),
-                Arguments.of(fournisseursDerriereClient(racine), ProviderClient.class));
+                Arguments.of(fournisseursDerriereClient(racine), ProviderClient.class),
+                Arguments.of(aucuneDependanceAuFournisseurDuModele(racine), ProviderClient.class));
     }
 
     @ParameterizedTest(name = "{1}")

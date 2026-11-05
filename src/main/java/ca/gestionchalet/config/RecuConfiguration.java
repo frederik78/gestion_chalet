@@ -1,7 +1,7 @@
 package ca.gestionchalet.config;
 
 import ca.gestionchalet.domain.AlertRules;
-import ca.gestionchalet.client.AnthropicRecuExtractor;
+import ca.gestionchalet.client.ChatModelRecuExtractor;
 import ca.gestionchalet.client.RecuExtractor;
 import ca.gestionchalet.domain.ReadingRules;
 import ca.gestionchalet.domain.RecuRules;
@@ -20,7 +20,7 @@ public class RecuConfiguration {
 
     @Bean
     RecuExtractor recuExtractor(ChatModel chatModel) {
-        return new AnthropicRecuExtractor(chatModel);
+        return new ChatModelRecuExtractor(chatModel);
     }
 
     @Bean
