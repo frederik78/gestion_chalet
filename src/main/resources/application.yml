@@ -109,8 +109,8 @@ recus:
     # Protections du décodage : sous -Xmx256m, un PNG de 9,8 Mpx sur 16 bits échoue parfois à 2 décodages simultanés, jamais à 1 (mesuré).
     cote-source-max-pixels: 20000
     decodages-simultanes: 1
-    # Un JPEG progressif peut enchaîner des balayages vides, chacun refaisant une passe complète : le nombre de balayages (paires FF DA du fichier) est compté avant le décodage.
-    # Le délai ne vaut que pour un fichier qui passe ce compte : mesuré à 1,2 s pour 1 s sur 32 balayages à 64 Mpx ; sans le compte, 100 000 balayages ne rendaient plus la main.
+    # Un JPEG progressif peut enchaîner des balayages vides, chacun refaisant une passe complète : le nombre de balayages réels, compté avant le décodage en suivant la structure du fichier (les segments, miniatures et données après la fin d'image n'en font pas partie), ne doit pas dépasser cette limite ; une structure inattendue est refusée aussi.
+    # Le délai ne vaut que pour un fichier qui passe ce contrôle : mesuré à 1,2 s pour 1 s sur 32 balayages à 64 Mpx ; sans lui, 100 000 balayages ne rendaient plus la main.
     passes-decodage-max: 32
     delai-decodage: 20s
     attente-decodage: 30s

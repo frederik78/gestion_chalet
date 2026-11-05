@@ -32,7 +32,7 @@ src/main/java/ca/gestionchalet/
 ├── domain/       entités JPA, types métier, règles et erreurs métier, converter/
 ├── repository/   dépôts Spring Data, stockage local des photos
 ├── service/      cas d'utilisation et reprise des envois ; service/dto, service/mapper, service/validation
-├── client/       ExtracteurRecu, ClasseurDepenses, DepotPhotos et leurs implémentations
+├── client/       RecuExtractor, ClasseurDepenses, DepotPhotos et leurs implémentations
 ├── security/     compte local, limitation des échecs de connexion
 └── web/rest/     XxxResource ; web/rest/errors
 src/main/resources/
@@ -98,6 +98,8 @@ Modèle, seuils d'alerte (100 $, 500 $, 0,02 $), liste des types de dépense, co
 
 ### Essai préalable
 La première issue vérifie manuellement un vrai appel à Haiku 5.5, avec une photo et une sortie structurée, hors de la suite de tests. Si Spring AI ne convient pas, le SDK Java officiel d'Anthropic le remplace derrière `ExtracteurRecu`, sans nouvel ADR.
+
+Relevé de l'essai réel, fait par l'utilisateur et réussi le 2026-11-05 : Spring AI retenu, vrai appel à Haiku avec de vraies photos de reçus, dont 2 Motion Photos Pixel, comprises par le modèle. Le SDK Java d'Anthropic n'est donc pas nécessaire. Le nom de l'interface est `RecuExtractor`.
 
 ## Conséquences
 - Changer de modèle demande seulement de modifier la configuration.
