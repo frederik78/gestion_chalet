@@ -91,4 +91,21 @@ class PhotoStorageTest {
             assertThat(forces.getLast()).isEqualTo(dossier.toString());
         }
     }
+
+    @Test
+    void ca45_laPhotoLueEstCelleQuiAEteEcriteOctetPourOctet(@TempDir Path dossier) {
+        PhotoStorage stockage = new PhotoStorage(dossier);
+        Photo photo = Photo.of(1, PhotoFormat.PNG, 4);
+        byte[] origine = {(byte) 0x89, 'P', 'N', 'G'};
+        stockage.write(photo, new ByteArrayInputStream(origine));
+
+        assertThat(stockage.read(photo)).isEqualTo(origine);
+    }
+
+    @Test
+    void ca45_unePhotoIllisibleLeveUneErreurDEntreeSortieSansLeContenu(@TempDir Path dossier) {
+        PhotoStorage stockage = new PhotoStorage(dossier);
+
+        assertThatThrownBy(() -> stockage.read(Photo.of(1, PhotoFormat.PNG, 4))).isInstanceOf(UncheckedIOException.class);
+    }
 }

@@ -26,6 +26,9 @@ public class Photo {
     @Column(nullable = false)
     private long taille;
 
+    /** Identifiant du fichier dans Drive, tel que Drive l'a donné ; absent tant que la photo n'est pas déposée. */
+    private String driveFileId;
+
     protected Photo() {
     }
 
@@ -38,6 +41,14 @@ public class Photo {
 
     public static Photo of(int rang, PhotoFormat format, long taille) {
         return new Photo(UUID.randomUUID(), rang, format, taille);
+    }
+
+    /** La photo est dans Drive. Le même fichier peut être redonné après une reprise ; un autre fichier signalerait un doublon. */
+    public void deposer(String fileId) {
+        if (driveFileId != null && !driveFileId.equals(fileId)) {
+            throw new IllegalStateException("Photo déjà déposée sous un autre fichier");
+        }
+        driveFileId = fileId;
     }
 
     public UUID getId() {
@@ -54,5 +65,9 @@ public class Photo {
 
     public long getTaille() {
         return taille;
+    }
+
+    public String getDriveFileId() {
+        return driveFileId;
     }
 }
