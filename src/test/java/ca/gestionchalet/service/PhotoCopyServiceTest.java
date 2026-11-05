@@ -16,7 +16,6 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
-import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.web.MockMultipartFile;
@@ -64,6 +63,71 @@ class PhotoCopyServiceTest {
         Optional<byte[]> copie = assertTimeoutPreemptively(ofSeconds(5), () -> copier(service, hostile));
 
         assertThat(copie).isEmpty();
+    }
+
+    private static byte[] avecOctetsAvantLaFin(byte[] jpeg, byte[] insere) {
+        byte[] sortie = new byte[jpeg.length + insere.length];
+        System.arraycopy(jpeg, 0, sortie, 0, jpeg.length - 2);
+        System.arraycopy(insere, 0, sortie, jpeg.length - 2, insere.length);
+        sortie[sortie.length - 2] = (byte) 0xFF;
+        sortie[sortie.length - 1] = (byte) 0xD9;
+        return sortie;
+    }
+
+    private static byte[] repeter(byte[] motif, int fois) {
+        byte[] sortie = new byte[motif.length * fois];
+        for (int i = 0; i < fois; i++) {
+            System.arraycopy(motif, 0, sortie, i * motif.length, motif.length);
+        }
+        return sortie;
+    }
+
+    private static final byte[] BALAYAGE_VIDE = {(byte) 0xFF, (byte) 0xDA, 0, 8, 1, 1, 0, 1, 63, 0x10};
+
+    /** Un marqueur autonome FF 01 que le décodeur ne lit pas comme un segment : un suivi de la grammaire y voit une longueur et saute les balayages qui suivent. */
+    @Test
+    void desBalayagesCachesApresUnMarqueurAutonomeSontComptes() {
+        // FF 01, puis ce qu'un suivi de la grammaire lirait comme une longueur de 65 535 : les balayages qui suivent lui échappent.
+        byte[] cache = {(byte) 0xFF, 0x01, (byte) 0xFF, (byte) 0xFF};
+        byte[] hostile = avecOctetsAvantLaFin(RecuRequests.jpegProgressif(64), concat(cache, repeter(BALAYAGE_VIDE, 100)));
+
+        assertThat(copier(service(20000, 1, 32, LONG, LONG), hostile)).isEmpty();
+    }
+
+    @Test
+    void desBalayagesApresUnSegmentDeLongueurZeroOuUneSontComptes() {
+        for (byte[] segment : new byte[][] {{(byte) 0xFF, (byte) 0xE9, 0, 0}, {(byte) 0xFF, (byte) 0xE9, 0, 1}}) {
+            byte[] hostile = avecOctetsAvantLaFin(RecuRequests.jpegProgressif(64), concat(segment, repeter(BALAYAGE_VIDE, 100)));
+
+            assertThat(copier(service(20000, 1, 32, LONG, LONG), hostile)).as("longueur " + segment[3]).isEmpty();
+        }
+    }
+
+    @Test
+    void desBalayagesPrecedesDeOctetsFFEtUnFluxCoupeSontComptes() {
+        byte[] rempli = new byte[] {(byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xDA, 0, 8, 1, 1, 0, 1, 63, 0x10};
+        byte[] hostile = avecOctetsAvantLaFin(RecuRequests.jpegProgressif(64), repeter(rempli, 100));
+        byte[] coupe = java.util.Arrays.copyOf(hostile, hostile.length - 500);
+
+        assertThat(copier(service(20000, 1, 32, LONG, LONG), hostile)).isEmpty();
+        assertThat(copier(service(20000, 1, 32, LONG, LONG), coupe)).isEmpty();
+    }
+
+    private static byte[] concat(byte[] a, byte[] b) {
+        byte[] sortie = java.util.Arrays.copyOf(a, a.length + b.length);
+        System.arraycopy(b, 0, sortie, a.length, b.length);
+        return sortie;
+    }
+
+    @Test
+    void unJpegAvecMiniatureExifEtMpfProgressifsPasseSousLaLimite() {
+        byte[] miniature = RecuRequests.jpegProgressif(16);
+        byte[] exif = concat("Exif\0\0".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1), miniature);
+        byte[] photo = RecuRequests.avecSegment(RecuRequests.jpegProgressif(64), 0xE1, exif);
+        photo = RecuRequests.avecSegment(photo, 0xE2, concat("MPF\0".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1), miniature));
+
+        assertThat(RecuRequests.balayages(photo)).isEqualTo(30);
+        assertThat(copier(service(20000, 1, 32, LONG, LONG), photo)).isPresent();
     }
 
     @Test
@@ -133,17 +197,23 @@ class PhotoCopyServiceTest {
         assertThat(copier(service(100, 1, 32, LONG, LONG), RecuRequests.jpeg(101))).isEmpty();
     }
 
-    /** Sans dossier de cache utilisable, un encodage qui écrirait la copie sur disque échouerait : elle reste donc en mémoire. */
+    /** Un JVM dont le dossier temporaire n'existe pas : tout cache de fichier de l'encodage échouerait, la copie réussit donc seulement si elle reste en mémoire (la photo d'essai est écrite par le parent). */
     @Test
-    void laCopieNeTransitePasParLeDisque(@TempDir Path dossier) throws IOException {
-        byte[] jpeg = RecuRequests.jpeg(8);
-        Path cache = Files.createDirectory(dossier.resolve("cache"));
-        ImageIO.setCacheDirectory(cache.toFile());
-        Files.delete(cache);
-        try {
-            assertThat(copier(service(20000, 1, 32, LONG, LONG), jpeg)).isPresent();
-        } finally {
-            ImageIO.setCacheDirectory(null);
+    void laCopieNeTransitePasParLeDisque(@TempDir Path dossier) throws Exception {
+        Path photo = Files.write(dossier.resolve("photo.jpg"), RecuRequests.jpeg(8));
+        Process enfant = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-Djava.io.tmpdir=" + dossier.resolve("inexistant"), "-Djava.awt.headless=true", "-cp", System.getProperty("java.class.path"),
+                PhotoCopyDiskProbe.class.getName(), photo.toString()).redirectErrorStream(true).start();
+        String sortie = new String(enfant.getInputStream().readAllBytes());
+
+        assertThat(enfant.waitFor()).as(sortie).isZero();
+    }
+
+    /** Lancé dans un autre JVM par {@link #laCopieNeTransitePasParLeDisque}. */
+    public static final class PhotoCopyDiskProbe {
+
+        public static void main(String[] args) throws IOException {
+            System.exit(copier(service(20000, 1, 32, LONG, LONG), Files.readAllBytes(Path.of(args[0]))).isPresent() ? 0 : 1);
         }
     }
 }
