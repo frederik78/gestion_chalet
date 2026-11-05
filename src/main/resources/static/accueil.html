@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gestion de chalet</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icones/icone-192.png">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/commun.js" defer></script>
+  <script src="/accueil.js" defer></script>
+  <script src="/recu.js" defer></script>
+</head>
+<body>
+  <main>
+    <h1>Gestion de chalet</h1>
+    <section id="prise-de-vue">
+      <h2>Nouveau reçu</h2>
+      <form>
+        <label for="photographier">Photographier le reçu</label>
+        <input id="photographier" type="file" accept="image/jpeg,image/png" capture="environment">
+        <label for="importer">Importer une photo</label>
+        <input id="importer" type="file" accept="image/jpeg,image/png" multiple>
+      </form>
+      <div id="photos-choisies" class="photos"></div>
+      <p id="message-depart" role="alert"></p>
+      <p id="message-succes" role="status"></p>
+      <button id="continuer" type="button" disabled>Continuer</button>
+    </section>
+
+    <section id="validation" hidden>
+      <h2>Valider le reçu</h2>
+      <div class="a-cote">
+        <div id="photos-a-valider" class="photos"></div>
+        <form id="formulaire-recu">
+          <label for="date">Date</label>
+          <input id="date" type="date" required>
+          <label for="fournisseur">Fournisseur</label>
+          <input id="fournisseur" type="text" maxlength="120" required>
+          <label for="objet">Objet</label>
+          <input id="objet" type="text" maxlength="200">
+          <label for="typeDepense">Type de dépense</label>
+          <select id="typeDepense" required>
+            <option value="">Choisir</option>
+          </select>
+          <label for="montantAvantTaxes">Montant avant taxes ($)</label>
+          <input id="montantAvantTaxes" type="text" inputmode="decimal" autocomplete="off">
+          <label for="tps">TPS ($)</label>
+          <input id="tps" type="text" inputmode="decimal" autocomplete="off">
+          <label for="tvq">TVQ ($)</label>
+          <input id="tvq" type="text" inputmode="decimal" autocomplete="off">
+          <label for="montantTotal">Montant total ($)</label>
+          <input id="montantTotal" type="text" inputmode="decimal" autocomplete="off" required>
+          <label for="numeroTps">Numéro d'inscription TPS</label>
+          <input id="numeroTps" type="text" maxlength="30" autocomplete="off">
+          <label for="numeroTvq">Numéro d'inscription TVQ</label>
+          <input id="numeroTvq" type="text" maxlength="30" autocomplete="off">
+          <ul id="alertes" class="alertes" role="status"></ul>
+          <p id="message-lecture" role="status"></p>
+          <button id="relancer-lecture" class="secondaire" type="button" hidden>Relancer la lecture</button>
+          <p id="message-validation" role="alert"></p>
+          <div class="actions">
+            <button id="valider" type="submit">Valider</button>
+            <button id="retour-photos" class="secondaire" type="button">Retour aux photos</button>
+            <button id="abandonner" class="secondaire" type="button">Abandonner</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <button id="deconnexion" class="secondaire" type="button">Se déconnecter</button>
+  </main>
+</body>
+</html>

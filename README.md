@@ -1,14 +1,14 @@
 # Gestion de chalet
 
-<Une phrase : ce que fait l'application et pour qui.>
+Application de gestion d'un chalet loué au Québec, pour son propriétaire. Premier module : reporter en base et dans le Google Sheet les valeurs et la photo des reçus, pour la déclaration de la TPS et de la TVQ.
 
 Projet construit avec la Software Factory (`factory/`). Les règles de travail, la stack et l'architecture sont dans [`AGENTS.md`](AGENTS.md) (standard ouvert, source de vérité pour tout agent de code).
 
 ## Démarrage rapide
-- **Prérequis** : <langage et version, outil de build, base de données…>
-- **Tests** : `<commande de tests>` (voir `AGENTS.md`, section Commandes)
+- **Prérequis** : Java 25 ; Maven est fourni par le wrapper `./mvnw`
+- **Tests** : `./mvnw test` (voir `AGENTS.md`, section Commandes)
 - **Vérification complète** : `scripts/verify-clean.sh` (tests et analyses dans une copie propre du dépôt, hors IDE ; c'est ce que lance la CI)
-- **Lancer l'application** : `<commande>`
+- **Lancer l'application** : `RECUS_SECURITE_CONDENSE_MOT_DE_PASSE='<condensé bcrypt>' RECUS_GOOGLE_CLE_CHIFFREMENT="$(openssl rand -base64 32)" RECUS_SECURITE_COOKIE_SECURISE=false ./mvnw spring-boot:run`, voir [`docs/deploiement.md`](docs/deploiement.md)
 - **Après un clone** : `./factory/sync.sh` (recrée les alias de skills et, pour Claude Code, les agents, générés et non versionnés)
 
 ## Où trouver quoi

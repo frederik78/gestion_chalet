@@ -110,7 +110,7 @@ Transitions autorisées, les seules possibles :
 
 | De | Vers | Quand |
 |---|---|---|
-| (création) | `A_COPIER` | validation |
+| (création) | `A_COPIER` | validation ; sans autorisation Google, le reçu passe aussitôt à `BLOQUEE` (CA64) |
 | `A_COPIER` | `COPIEE` | photos déposées et ligne écrite, sans changement de version entre-temps |
 | `A_COPIER` | `A_COPIER` | panne passagère : nouvel essai programmé |
 | `A_COPIER` | `BLOQUEE` | un motif de blocage est constaté |
@@ -141,7 +141,7 @@ L'état et les alertes sont calculés par le serveur. Ils ne sont jamais lus de 
 - **R-08** Une taxe absente reste vide : ni calcul, ni mise à 0. Un 0 saisi ou imprimé reste 0. Vide et 0 restent distincts en base, dans l'API et dans le Sheet.
 - **R-09** Le type de dépense appartient à la liste fermée, tenue en configuration, dans l'orthographe du Sheet (D-20) : Honoraires professionnel, Fournitures, Entretien / Réparations, Électricité / Internet, Impôts / Taxes, Assurances, Publicité, Autres dépenses, Frais de voyage, Intérêts, Administration.
 - **R-10** La date n'est pas postérieure à la date du jour, fuseau de Montréal. Un montant vaut de 0 à 1 000 000,00 $ ; le montant total est strictement positif.
-- **R-11** La validation est idempotente : un renvoi avec la même clé d'idempotence ne crée ni reçu ni photo supplémentaires, et rend le reçu déjà créé.
+- **R-11** La validation est idempotente : un renvoi avec la même clé d'idempotence ne crée ni reçu ni photo supplémentaires, et rend le reçu déjà créé. Si les valeurs ou les photos diffèrent de celles du reçu déjà créé, le renvoi est refusé : rien ne change et l'utilisateur en est averti.
 - **R-12** La validation est atomique : reçu et copie locale des photos sont tous deux enregistrés, ou aucun.
 
 ### Alertes (D-03, D-04, D-11, D-23)
@@ -156,14 +156,14 @@ Calculées à la validation et à chaque correction, jamais bloquantes. Les seui
 
 - **R-13** Le montant de référence est le plus élevé du montant total validé et du montant total lu, s'il existe. Un reçu de 120 $ ramené à 40 $ pour la part du chalet reste soumis à la règle des 100 $ (Q-09).
 - **R-14** Écart de calcul = |montant avant taxes + TPS + TVQ - montant total|. Une taxe vide compte pour 0 dans cette seule comparaison, sans être modifiée. Sans montant avant taxes, l'alerte n'est pas calculée.
-- **R-15** Le fournisseur est comparé sans tenir compte de la casse, des accents ni des espaces en bordure. Une correction ne compare jamais un reçu à lui-même.
+- **R-15** Le fournisseur est comparé sans tenir compte de la casse, des accents ni des séparateurs en bordure (espace insécable compris), et en tenant `œ` pour `oe`, `æ` pour `ae` et l'apostrophe courbe `’` pour l'apostrophe droite `'` (D-55, D-61). Aucune autre règle n'est ajoutée : ni la ponctuation (`Inc.` et `Inc` diffèrent), ni un séparateur au milieu du nom. Le passage par les majuscules puis les minuscules peut toutefois égaler quelques formes (`ß` = `ss`, `ı` = `i`, `ﬁ` = `fi`). La valeur enregistrée et affichée ne change pas. Une correction ne compare jamais un reçu à lui-même.
 - **R-16** Les alertes sont consultables avant la validation, sans rien enregistrer (`POST /api/recus/controles`), pour que l'utilisateur puisse encore abandonner.
 - **R-17** L'alerte de 500 $ reste active après vérification : la première version n'offre pas de moyen de la lever.
 
 ### Copie (D-05, D-07, D-18, D-19, D-24)
 - **R-18** Ordre : les photos d'abord, puis la ligne du Sheet, qui contient leurs liens. Tant que les photos ne sont pas toutes déposées, la ligne n'est pas écrite.
 - **R-19** Les copies sont traitées une à la fois, par ordre de validation, pour que deux reçus ne calculent jamais une position d'insertion sur un même état du Sheet.
-- **R-20** Reprise : la validation n'attend pas la copie. Une panne passagère (erreur réseau, délai dépassé, réponse 429 ou 5xx de Google) programme un nouvel essai, 1 minute après le premier échec, puis à intervalle doublé jusqu'à 1 heure, sans limite de tentatives. Un reçu `BLOQUEE` est réessayé à l'intervalle maximal. Après un redémarrage, tout reçu non `COPIEE` est repris.
+- **R-20** Reprise : la validation n'attend pas la copie. Une panne passagère (erreur réseau, délai dépassé, réponse 429 ou 5xx de Google, réponse 2xx illisible, code `temporarily_unavailable` ou `server_error`) programme un nouvel essai, 1 minute après le premier échec, puis à intervalle doublé jusqu'à 1 heure, sans limite de tentatives. Un reçu `BLOQUEE` est réessayé à l'intervalle maximal. Après un redémarrage, tout reçu non `COPIEE` est repris.
 - **R-21** Pas de doublon dans Drive ni dans le Sheet : chaque photo et chaque ligne portent un identifiant invisible de l'utilisateur. Avant toute création, l'application cherche cet identifiant ; s'il existe, elle réutilise le fichier ou met à jour la ligne. Cet identifiant est une métadonnée attachée à la ligne, qui la suit quand elle se déplace, et n'ajoute aucune colonne (Q-07, à confirmer à l'essai réel, section 13).
 - **R-22** Placement d'une nouvelle ligne (D-24) :
   - la section est celle du mois de la date du reçu, reconnue sans tenir compte de la casse ni des accents ;
@@ -206,7 +206,7 @@ Pas de suppression ni d'annulation d'un reçu dans la première version. Pour é
 | montant avant taxes, TPS, TVQ | facultatifs, cents entiers ; vide différent de 0 |
 | montant total | obligatoire, cents entiers, strictement positif |
 | montant total lu | facultatif, cents entiers, non modifiable après la validation |
-| numéro d'inscription TPS, TVQ | facultatifs, 30 caractères au plus, en base seulement |
+| numéro d'inscription TPS, TVQ | facultatifs, 30 caractères au plus, en base seulement ; un numéro fait d'espaces devient vide (D-41) |
 | alertes | calculées |
 | état de la copie, motif de blocage | calculés |
 | clé d'idempotence | UUID fourni par le client, unique |
@@ -239,12 +239,14 @@ Corps d'erreur : `{ "erreur": "<message générique en français>", "code": "<CO
 | 400 | `TROP_DE_PHOTOS`, `PHOTO_MANQUANTE`, `IMAGE_ILLISIBLE`, `IMAGE_TROP_GRANDE` | limites d'image |
 | 401 | `NON_AUTHENTIFIE`, `IDENTIFIANTS_INVALIDES` | pas de session ; mot de passe faux |
 | 403 | `CSRF_INVALIDE` | jeton CSRF absent ou faux |
-| 404 | `INTROUVABLE` | ressource absente ; identique quelle qu'en soit la raison |
+| 404 | `INTROUVABLE` | ressource absente, ou méthode non permise sur une route existante, sans en-tête `Allow` (`OPTIONS` excepté) ; identique quelle qu'en soit la raison |
 | 409 | `VERSION_PERIMEE` | correction fondée sur une version dépassée |
+| 409 | `CLE_DEJA_UTILISEE` | clé d'idempotence déjà connue, avec des valeurs ou des photos différentes |
 | 413 | `TAILLE_EXCESSIVE` | photo ou requête trop lourde |
 | 415 | `FORMAT_NON_ACCEPTE` | format hors liste |
 | 429 | `TROP_DE_TENTATIVES` | avec en-tête `Retry-After` |
 | 500 | `ERREUR_INTERNE` | sans détail |
+| 503 | `GOOGLE_NON_CONFIGURE` | autorisation demandée sans identifiants Google dans la configuration (D-42) |
 
 **Objet `valeurs`** (lecture, contrôle, validation, correction) :
 ```json
@@ -265,19 +267,19 @@ Valeurs fictives pour les numéros et le type.
 
 | Méthode et chemin | Entrée | Réponse |
 |---|---|---|
-| `POST /api/connexion` | `{ "motDePasse": "…" }` | 204 et nouvelle session ; 401 ; 429 |
-| `POST /api/deconnexion` | | 204 |
+| `POST /api/connexion` | formulaire `application/x-www-form-urlencoded`, paramètre `motDePasse` | 204 et nouvelle session ; 401, y compris mot de passe absent ou vide, tentative comptée ; 429 ; 400 avec un paramètre d'URL ; 415 pour un autre format, JSON compris ; 413 au-delà de 64 Ko ou sans longueur déclarée ; corps jamais terminé : fermeture sans réponse à 20 s, tentative comptée (à revoir avec NF-03) |
+| `POST /api/deconnexion` | | 204, avec ou sans session |
 | `GET /api/configuration` | | 200 : `{ "typesDepense": […], "photosParRecuMax": 5, "tailleParPhotoMaxOctets": …, "formats": ["image/jpeg", "image/png"] }` |
 | `POST /api/lectures` | multipart, parties `photos` | 200 : objet lecture ; 400, 413, 415, 429 |
 | `POST /api/recus/controles` | JSON : `valeurs`, `montantTotalLuCents` (facultatif), `recuId` (facultatif, en correction) | 200 : `{ "alertes": [ … ] }` ; 400. N'enregistre rien |
-| `POST /api/recus` | multipart : partie `recu` en JSON (`cleIdempotence`, `valeurs`, `montantTotalLuCents`) et parties `photos` | 201 : objet reçu ; 200 si la clé est déjà connue ; 400, 413, 415 |
+| `POST /api/recus` | multipart : partie `recu` en JSON (`cleIdempotence`, `valeurs`, `montantTotalLuCents`) et parties `photos` | 201 : objet reçu ; 200 si la clé est déjà connue avec le même contenu ; 400, 409, 413, 415 |
 | `GET /api/recus` | `annee`, `etatCopie`, `page`, `taille` (100 au plus) | 200 : `{ "recus": [ … ], "total": n }`, par date décroissante |
 | `GET /api/recus/{id}` | | 200 : objet reçu ; 404 |
 | `PUT /api/recus/{id}` | JSON : `version`, `valeurs` | 200 : objet reçu ; 400, 404, 409 |
 | `GET /api/recus/{id}/photos/{rang}` | | 200 : image ; 404 |
 | `POST /api/recus/{id}/copie` | | 202 : relance immédiate, sans effet si `COPIEE` ; 404 |
 | `GET /api/google/etat` | | 200 : `{ "etat": "ABSENTE" \| "VALIDE" \| "A_RENOUVELER" }` |
-| `GET /api/google/autorisation` | | 302 vers le consentement Google |
+| `GET /api/google/autorisation` | | 302 vers le consentement Google ; 503 `GOOGLE_NON_CONFIGURE` sans identifiants Google (D-42) |
 | `GET /api/google/rappel` | `code`, `state` | 302 vers la PWA, toujours vers une adresse fixe |
 
 **Objet lecture** : `{ "resultat": "LU" | "ILLISIBLE" | "ECHEC", "valeurs": { … }, "champsRejetes": ["date"] }`.
@@ -300,6 +302,8 @@ Application installable (D-13), sans mode hors ligne : aucune réponse de l'API 
 - la consigne fixe (R-05) et la liste des types de dépense ;
 - le modèle configuré et la structure de réponse attendue.
 
+Une photo JPEG à structure inattendue ou à trop de balayages est refusée par le contrôle du décodage.
+
 **Jamais envoyé** : nom de fichier d'origine, identité, courriel, mot de passe, jeton Google, identifiant de session, valeurs d'autres reçus. Aucun réglage `temperature`, `top_p` ni `top_k` (ADR 0001).
 
 **Réponse attendue et validation** :
@@ -309,10 +313,12 @@ Application installable (D-13), sans mode hors ligne : aucune réponse de l'API 
 | `date` | `AAAA-MM-JJ`, date réelle, non future | vide, signalé |
 | `fournisseur` | texte de 1 à 120 caractères, sans caractère de contrôle | vide, signalé |
 | `objet` | texte de 200 caractères au plus, sans caractère de contrôle | vide, signalé |
-| `typeDepense` | élément exact de la liste | vide, signalé |
+| `typeDepense` | élément exact de la liste ; texte vide ou fait de séparateurs : non relevé, sans signalement | vide, signalé |
 | `montantAvantTaxes`, `tps`, `tvq`, `montantTotal` | chaîne `^\d{1,7}(\.\d{1,2})?$`, dans les bornes de R-10, convertie en cents sans flottant | vide, signalé |
 | `numeroInscriptionTps`, `numeroInscriptionTvq` | lettres, chiffres, espaces et tirets, 30 caractères au plus | vide, signalé |
 | tout autre champ | | ignoré |
+
+Un texte absent, `null`, vide ou fait seulement de séparateurs (espace insécable compris) est un champ non relevé, comme s'il était absent : il n'est pas signalé comme rejeté et ne compte pas pour un résultat `LU` (D-61).
 
 Une réponse qui n'est pas du JSON conforme, ou qui ne répond pas sous 60 secondes, donne `ECHEC`. Pas de nouvel essai automatique : la PWA propose de relancer. Les réponses du modèle ne sont ni enregistrées ni journalisées.
 
@@ -348,6 +354,7 @@ Un fichier par photo, photo d'origine (R-36), dans le dossier de l'application (
 - Consentement partiel (un droit décoché) : l'autorisation est `A_RENOUVELER`, et l'utilisateur en est informé.
 - Conservation : jeton de renouvellement chiffré au repos, clé fournie par l'environnement ; jamais renvoyé à la PWA ni journalisé.
 - Expiration ou révocation (`invalid_grant`, ou droits retirés) : l'état passe à `A_RENOUVELER`, les reçus en attente deviennent `BLOQUEE` (`AUTORISATION_GOOGLE`), et le bandeau de la PWA le signale. Aucun reçu n'est perdu, la validation reste possible. Le renouvellement relance aussitôt les copies.
+- Autre refus de renouvellement, sans révocation (`invalid_client`, ou 401 et 403 sans code lisible) : même état, mêmes reçus `BLOQUEE` et même bandeau, mais le jeton de renouvellement est gardé : une fois la cause corrigée, la reprise se fait sans nouveau consentement.
 - Aucune autorisation donnée : même comportement, avec l'état `ABSENTE`.
 - Condition externe : le projet Google est publié en production, sans vérification, avec un écran d'avertissement au consentement (Q-12, à confirmer dans la documentation de Google, section 13). Selon la documentation de Google, connue du rédacteur mais non vérifiée ici, un projet resté en mode test voit son autorisation expirer après 7 jours, ce qui contredirait D-17, et une autorisation inutilisée pendant 6 mois expire aussi.
 
@@ -368,7 +375,7 @@ Un fichier par photo, photo d'origine (R-36), dans le dossier de l'application (
 | Quota ou limitation Google (429) | panne passagère, en respectant `Retry-After` |
 | Onglet renommé ou absent | `FICHIER_INACCESSIBLE` |
 | TYPE refusé par une liste déroulante modifiée dans le Sheet | `STRUCTURE_SHEET` |
-| Fichier à format valide mais contenu corrompu | 400 `IMAGE_ILLISIBLE` |
+| Fichier à format valide mais contenu corrompu | 400 `IMAGE_ILLISIBLE` si l'en-tête est illisible ; une image tronquée après son en-tête est acceptée, le corps n'étant pas décodé (D-41) |
 | Session expirée pendant la validation | 401 ; la page garde photos et valeurs, l'utilisateur se reconnecte et renvoie avec la même clé |
 
 ## 9. Valeurs par défaut (configuration)
@@ -380,8 +387,8 @@ Acceptées par l'utilisateur (Q-14). Aucune n'est figée dans le code.
 | Formats acceptés (Q-11) | JPEG, PNG | formats courants ; HEIC à convertir par le navigateur |
 | Taille maximale d'une photo | 15 Mo | photo de téléphone courante |
 | Photos par reçu | 5 | D-08, reçu long en plusieurs vues |
-| Requête totale | 75 Mo | 5 x 15 Mo, sous la limite de 100 Mo que le rédacteur attribue à Cloudflare (non vérifié ici) |
-| Dimensions maximales | 64 mégapixels | protection contre les images piégées |
+| Requête totale | 76 Mo | 5 x 15 Mo et les séparateurs du multipart (D-41), sous la limite de 100 Mo que le rédacteur attribue à Cloudflare (non vérifié ici) |
+| Dimensions maximales | 64 mégapixels, `recus.dimensions-max-megapixels` | protection contre les images piégées |
 | Délai de lecture | 60 secondes | |
 | Lectures par heure | 60 | maîtrise du coût |
 | Blocage de connexion | 5 échecs par source, 15 minutes | ADR 0001 |
@@ -413,7 +420,7 @@ Sauf mention contraire, Anthropic, Google Sheets et Google Drive sont doublés :
 - **CA15** Given chacun des 11 types de D-20, puis `Autres` When un reçu est validé Then chacun des 11 est accepté et `Autres` est refusé avec `HORS_LISTE` ; le même test avec une liste de configuration modifiée suit cette liste.
 - **CA16** Given une date postérieure à aujourd'hui (fuseau de Montréal), un total à 0, un total à 1 000 000,01 $ When ils sont validés Then chacun reçoit 400 `VALIDATION` avec le code `BORNE` (R-10).
 - **CA17** Given un total lu de 710,85 corrigé à 300,00 pour la part du chalet When il est validé Then 30000 est enregistré et écrit dans le Sheet, sans recalcul des autres montants (D-04, R-07).
-- **CA18** Given une validation envoyée deux fois avec la même `cleIdempotence` When la seconde arrive Then elle répond 200 avec le même reçu, et il n'existe qu'un reçu et un jeu de photos (R-11).
+- **CA18** Given une validation envoyée deux fois avec la même `cleIdempotence` When la seconde arrive Then elle répond 200 avec le même reçu, et il n'existe qu'un reçu et un jeu de photos ; si ses valeurs ou ses photos diffèrent, elle répond 409 `CLE_DEJA_UTILISEE`, le reçu reste inchangé et l'écran avertit que la modification n'a pas été appliquée (R-11).
 - **CA19** Given l'échec de l'écriture d'une photo locale, puis celui de l'enregistrement en base When la validation est envoyée Then la réponse est 500 `ERREUR_INTERNE`, il ne reste ni reçu ni fichier, et une nouvelle validation avec la même clé réussit (R-12).
 - **CA20** Given la lecture a échoué When l'utilisateur valide des valeurs saisies à la main avec une photo Then le reçu est créé avec `montantTotalLuCents` à `null` (Q-02).
 
@@ -546,17 +553,17 @@ Point transmis à NF-03 : derrière Cloudflare Tunnel, toutes les requêtes semb
 | `version` | entier positif |
 | `rang` | entier de 1 au nombre maximal de photos |
 | `annee`, `page`, `taille`, `etatCopie` | entiers bornés ; état dans la liste |
-| `motDePasse` | 1 000 caractères au plus |
+| `motDePasse` | formulaire de 64 Ko au plus, longueur déclarée, sans paramètre d'URL ; bcrypt ne compare que les 72 premiers octets |
 | `photos` | section 9 ; format vérifié sur le contenu, pas sur l'en-tête ni l'extension ; nom ignoré |
 | `code`, `state` du rappel | longueur bornée ; `state` égal à celui de la session |
 
 ### 11.5 Critères de sécurité
 
-- **CS01** Given aucune session When chaque route de `/api` et de `/actuator` (hors santé) et chaque route inconnue est appelée Then la réponse est 401 `NON_AUTHENTIFIE` ou 404, sans donnée ; seuls `GET /actuator/health`, sans détail, et les ressources de la page de connexion répondent 200 [A01].
+- **CS01** Given aucune session When chaque route de `/api` (hors `POST /api/deconnexion` avec un jeton CSRF, qui répond 204) et de `/actuator` (hors santé) et chaque route inconnue est appelée Then la réponse est 401 `NON_AUTHENTIFIE` ou 404, sans donnée ; seuls `GET /actuator/health`, sans détail, et les ressources de la page de connexion répondent 200 [A01].
 - **CS02** Given une session valide et aucun jeton CSRF, ou un jeton faux When chaque route `POST` et `PUT` est appelée, `POST /api/connexion` compris Then la réponse est 403 `CSRF_INVALIDE` et rien ne change [A01, A07].
 - **CS03** Given un UUID inconnu, un identifiant non UUID, ou un rang inexistant ou sans rapport avec le reçu When il est demandé Then la réponse est 404 `INTROUVABLE`, de corps identique dans tous les cas (y compris une valeur de type `..%2F..%2Fetc%2Fpasswd`), et aucun fichier hors du dossier des photos n'est lu [A01].
 - **CS04** Given un mauvais mot de passe When `POST /api/connexion` est appelé Then la réponse est 401 `IDENTIFIANTS_INVALIDES` ; given le bon Then l'identifiant de session change, et le cookie porte `HttpOnly`, `SameSite`, et `Secure` en configuration hors poste local [A07].
-- **CS05** Given N échecs de connexion d'une même source When une nouvelle tentative arrive, même avec le bon mot de passe Then la réponse est 429 avec `Retry-After` ; après le délai, le bon mot de passe réussit ; une autre source n'est pas bloquée [A07].
+- **CS05** Given N échecs de connexion d'une même source When une nouvelle tentative arrive, même avec le bon mot de passe Then la réponse est 429 avec `Retry-After` ; après le délai, le bon mot de passe réussit ; une connexion réussie remet à zéro le compteur d'échecs de sa source ; une autre source n'est pas bloquée [A07].
 - **CS06** Given une session inactive au-delà de la durée configurée, ou une déconnexion effectuée When l'ancien cookie est réutilisé Then la réponse est 401 [A07].
 - **CS07** Given un condensé de mot de passe absent ou d'un algorithme faible en configuration When l'application démarre Then elle refuse de démarrer, sans compte par défaut [A02, A07].
 - **CS08** Given une erreur interne provoquée, et sur serveur réel des requêtes malformées (JSON cassé, multipart invalide, chemin encodé, requête trop grosse) When elles sont traitées Then le corps ne contient que `erreur` et `code` (et `champs` pour `VALIDATION`), sans trace de pile, nom de classe ni version, et les en-têtes de sécurité sont présents [A05].
@@ -639,3 +646,5 @@ L'utilisateur a validé le PRD et accepté toutes les recommandations.
 | Q-12 Autorisation Google une seule fois | Projet Google publié en production sans vérification ; à confirmer dans la documentation de Google | section 7.6, section 13 |
 | Q-13 Métadonnées des photos | Retirées pour Anthropic ; originaux intacts en local et dans Drive | R-36, section 7.3, CA07, CA71 |
 | Q-14 Valeurs par défaut | Acceptées | section 9 |
+| Connexion façon JHipster | `formLogin` et `logout` de Spring Security (option A, 2026-11-01) : connexion par formulaire, déconnexion 204 même sans session | section 7, CS01 |
+| Limite du mot de passe et cas limites de la connexion | Pas de limite de 1 000 caractères : le corps est borné à 64 Ko et bcrypt ignore la suite ; comportements acceptés (2026-11-02) | section 7, section 11.4 |

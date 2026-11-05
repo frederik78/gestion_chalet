@@ -31,8 +31,8 @@ src/main/java/ca/gestionchalet/
 ├── config/       configuration Spring, sécurité, propriétés `recus.*`
 ├── domain/       entités JPA, types métier, règles et erreurs métier, converter/
 ├── repository/   dépôts Spring Data, stockage local des photos
-├── service/      cas d'utilisation et reprise des envois ; service/dto, service/mapper
-├── client/       ExtracteurRecu, ClasseurDepenses, DepotPhotos et leurs implémentations
+├── service/      cas d'utilisation et reprise des envois ; service/dto, service/mapper, service/validation
+├── client/       RecuExtractor, ClasseurDepenses, DepotPhotos et leurs implémentations
 ├── security/     compte local, limitation des échecs de connexion
 └── web/rest/     XxxResource ; web/rest/errors
 src/main/resources/
@@ -42,8 +42,14 @@ src/main/resources/
 
 Le package racine est à plat : pas de sous-package par module. Le métier est porté par le nom des classes (`Recu`, `RecuService`, `RecuRepository`, `RecuResource`).
 
+### Référence de code
+JHipster 9.4.0, monolithe en session, sans frontend : les fichiers se lisent un par un (`factory/stacks/java-maven/README.md`), sans générateur ni dépendance à `jhipster-framework`. Ne sont pas repris, faute de critère : `rememberMe`, `AccountResource`, table `User`, CORS, AOP, `SpaWebFilter`.
+
+### Mécanismes du framework
+Connexion et déconnexion par `formLogin` et `logout` de Spring Security, CSRF par `CookieCsrfTokenRepository`, erreurs par `ResponseEntityExceptionHandler`. Ce qui s'en écarte, avec sa raison mesurée, est dans les rapports de `docs/reviews/001-01.md`.
+
 ### Règles exécutées par les tests
-`TechnicalStructureTest` et `ReglesAgentsTest` (ArchUnit) font échouer `./mvnw test` à la moindre violation. Chaque règle a un test qui échoue sur une violation volontaire.
+`TechnicalStructureTest` et `AgentRulesTest` (ArchUnit) font échouer `./mvnw test` à la moindre violation. Chaque règle a un test qui échoue sur une violation volontaire.
 
 | Couche | Accessible par |
 |---|---|
@@ -56,7 +62,7 @@ Le package racine est à plat : pas de sous-package par module. Le métier est p
 | `domain` | toutes les autres |
 
 - **Web** : une `XxxResource` valide l'entrée et délègue à un `XxxService`, sans logique métier ni accès aux données.
-- **Domaine** : annotations `jakarta.persistence` permises ; aucune dépendance à `web`, à l'API Servlet, à Spring MVC ou à Spring Security. Tout emprunt à `org.springframework..` ou `org.hibernate..` est une exception nommée dans `ReglesAgentsTest` et justifiée.
+- **Domaine** : annotations `jakarta.persistence` permises ; aucune dépendance à `web`, à l'API Servlet, à Spring MVC ou à Spring Security. Tout emprunt à `org.springframework..` ou `org.hibernate..` est une exception nommée dans `AgentRulesTest` et justifiée.
 - **Interfaces** : uniquement dans `client/`, pour les trois services externes. Le dépôt, le stockage local et l'authentification restent des classes concrètes, sans port.
 - **Entité** : pas de setter public ; l'état change par des fabriques et des transitions qui recalculent le statut et les alertes. Ceux-ci ne sont jamais lus d'une source non fiable (modèle, client). Le constructeur sans argument `protected` est réservé à JPA.
 - **DTO** : le JSON est un record `XxxDTO` projeté par MapStruct ; une entité n'est jamais sérialisée.
@@ -86,12 +92,14 @@ Modèle, seuils d'alerte (100 $, 500 $, 0,02 $), liste des types de dépense, co
 
 ### Tests
 - `domain/`, `service/` : tests unitaires ; l'entité se teste sans Spring ; collaborateurs doublés.
-- `web/rest/` : contrat JSON avec `@WebMvcTest` ; sécurité avec `SecurityConfiguration` importée, plus un test sur serveur réel, requêtes malformées comprises (`factory/LESSONS.md` n° 10).
+- `web/rest/` : contrat JSON et sécurité sur serveur réel (port aléatoire), requêtes malformées comprises (`factory/LESSONS.md` n° 10).
 - `repository/` : `@DataJpaTest` sur une base SQLite temporaire, schéma appliqué par Liquibase.
 - `client/` : implémentations testées sans service réel. Aucun test ne dépend d'un service externe.
 
 ### Essai préalable
 La première issue vérifie manuellement un vrai appel à Haiku 5.5, avec une photo et une sortie structurée, hors de la suite de tests. Si Spring AI ne convient pas, le SDK Java officiel d'Anthropic le remplace derrière `ExtracteurRecu`, sans nouvel ADR.
+
+Relevé de l'essai réel, fait par l'utilisateur et réussi le 2026-11-05 : Spring AI retenu, vrai appel à Haiku avec de vraies photos de reçus, dont 2 Motion Photos Pixel, comprises par le modèle. Le SDK Java d'Anthropic n'est donc pas nécessaire. Le nom de l'interface est `RecuExtractor`.
 
 ## Conséquences
 - Changer de modèle demande seulement de modifier la configuration.

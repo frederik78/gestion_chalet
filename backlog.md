@@ -19,7 +19,7 @@ Vue d'ensemble des besoins. Détail dans `docs/prd/`, suivi de la livraison dans
 
 | ID | Besoin | Priorité | Statut | PRD | Décisions |
 |----|--------|----------|--------|-----|-----------|
-| F-01 | Photographier un reçu avec le téléphone pour que ses valeurs (date, fournisseur, TPS et TVQ s'il y en a, montant avant taxes, montant total) et sa photo soient reportées en BD et dans le Google Sheet | P1 | Spécifié | `docs/prd/001-recus.md` | D-01 à D-13, D-16 à D-25 |
+| F-01 | Photographier un reçu avec le téléphone pour que ses valeurs (date, fournisseur, TPS et TVQ s'il y en a, montant avant taxes, montant total) et sa photo soient reportées en BD et dans le Google Sheet | P1 | En cours | `docs/prd/001-recus.md` | D-01 à D-13, D-16 à D-25 |
 
 ## Besoins non fonctionnels
 
@@ -59,6 +59,41 @@ Vue d'ensemble des besoins. Détail dans `docs/prd/`, suivi de la livraison dans
 | D-24 | 2026-11-01 | Section d'un mois créée à l'arrivée de son premier reçu, à sa place parmi les mois ; nouvelle ligne insérée selon sa date dans la section ; lignes existantes jamais déplacées | F-01 |
 | D-25 | 2026-11-01 | Montants stockés en cents entiers ; photos stockées en fichiers, hors de la base | F-01 |
 | D-26 | 2026-11-01 | ADR 0001 accepté : structure JHipster à plat sans générateur, Spring AI 2.0.x pour appeler Claude, à confirmer par un essai réel en première issue, SDK officiel en repli | tous |
+| D-27 | 2026-11-01 | Issues indépendantes livrées en parallèle, jusqu'à 3 à la fois | F-01 |
+| D-28 | 2026-11-01 | Connexion façon JHipster : `formLogin` et `logout` de Spring Security, formulaire au lieu de JSON, déconnexion 204 même sans session | F-01 |
+| D-29 | 2026-11-02 | Connexion : pas de limite de 1 000 caractères sur le mot de passe ; cas limites acceptés (vide ou absent 401, JSON 415, paramètre d'URL 400, sans longueur déclarée 413, corps jamais terminé fermé à 60 s) | F-01 |
+| D-30 | 2026-11-02 | Les classes techniques sont impérativement en anglais | F-01 |
+| D-31 | 2026-11-02 | `archunit-junit5` et `@ArchTest` comme JHipster ; `@Component` conservé sur `DomainUserDetailsService` ; deux défenses de taille sur la connexion, avec une seule valeur | F-01 |
+| D-32 | 2026-11-02 | Essai réel validé : Spring AI et Claude Haiku 5.5 retenus | F-01 |
+| D-33 | 2026-11-02 | Connexion réussie : compteur d'échecs de la source remis à zéro ; méthode non permise sur une route existante : 404 sans `Allow`, `OPTIONS` excepté | F-01 |
+| D-34 | 2026-11-02 | `liquibase-core` 5.0.4, sous licence FSL-1.1-ALv2, conservé | F-01 |
+| D-35 | 2026-11-02 | Chrome installé dans la CI pour que les tests d'écran y tournent réellement ; pilote de test écrit avec le JDK conservé | F-01 |
+| D-36 | 2026-11-02 | Renvoi d'une clé connue avec un contenu différent : 409 `CLE_DEJA_UTILISEE`, reçu inchangé, utilisateur averti | F-01 |
+| D-37 | 2026-11-03 | Tests d'écran en CI avec le Chrome de l'image du runner, sans téléchargement ; sa version suit l'image ; `sysctl` AppArmor gardé tant qu'un passage réel n'a pas montré qu'il est inutile | F-01 |
+| D-38 | 2026-11-03 | `service/validation` inscrit à la structure de l'ADR 0001, pour les validateurs Bean Validation propres au métier | F-01 |
+| D-39 | 2026-11-03 | `spring-boot-starter-data-jpa-test` (Apache-2.0), scope test, pour `@DataJpaTest` exigé par l'ADR 0001 | F-01 |
+| D-40 | 2026-11-03 | `POST /api/recus` sécurisé sans attendre 001-03 : contenu réel, nombre, taille et dimensions des photos contrôlés avant toute écriture, sur tous les chemins ; textes reçus en JSON strictement en chaînes, caractères de format refusés ; 001-06 dépend de 001-03 | F-01 |
+| D-41 | 2026-11-04 | Image tronquée après son en-tête acceptée, sans décodage ; image valide suivie d'un autre contenu conservée, à servir plus tard sous le type de son format avec `nosniff` ; requête totale à 76 Mo ; numéro d'inscription fait d'espaces rendu vide ; bouton de retour de l'écran de validation dans 001-03 | F-01 |
+| D-42 | 2026-11-04 | Sans identifiants Google, l'application démarre en `ABSENTE` ; la clé de chiffrement reste obligatoire. Consentement partiel : `A_RENOUVELER`, jetons effacés. Clé de chiffrement changée : `A_RENOUVELER` | F-01 |
+| D-43 | 2026-11-04 | Saisie sans session : `server.tomcat.connection-timeout` raccourci à 20 s, après mesure ; le reste de la protection (proxy) relève de NF-03, à traiter avant toute exposition publique | F-01 |
+| D-44 | 2026-11-04 | Échec de renouvellement Google qui n'est pas une panne passagère au sens de R-20 (`invalid_client`, par exemple) : l'autorisation passe à `A_RENOUVELER`, avec un journal d'erreur | F-01 |
+| D-45 | 2026-11-04 | Identifiants Google retirés après autorisation : jetons conservés et chiffrés, état `ABSENTE`, retour à `VALIDE` sans nouveau consentement quand ils reviennent | F-01 |
+| D-46 | 2026-11-04 | Reçus bloqués pendant ce retrait : ils restent `BLOQUEE` jusqu'à la reprise de 001-08 | F-01 |
+| D-47 | 2026-11-04 | Clé de chiffrement changée : détectée au premier usage et non au démarrage, l'autorisation passe alors à `A_RENOUVELER` | F-01 |
+| D-48 | 2026-11-04 | Photos changées après une lecture : le montant lu est invalidé et la relance proposée, la saisie reste intacte | F-01 |
+| D-49 | 2026-11-04 | Image acceptée par le contrôle mais non décodable, ou côté source au-delà de 20000 px : la lecture finit en `ECHEC`, saisie à la main | F-01 |
+| D-50 | 2026-11-04 | Limite de lectures perdue au redémarrage ; une photo refusée ne compte pas, une lecture en `ECHEC` compte | F-01 |
+| D-51 | 2026-11-04 | La relance ne remplit que les champs vides ; orientation lue pour le seul JPEG ; long côté de 1568 px, à confirmer sur un long reçu | F-01 |
+| D-52 | 2026-11-04 | Mémoire native au-delà de `-Xmx` à la lecture (776 Mo mesurés sous `-Xmx256m`) : reporté à NF-03, à régler avant tout déploiement | F-01 |
+| D-53 | 2026-11-04 | Le vrai appel à Haiku avec de vraies photos, lancé par l'utilisateur, précède le passage de 001-03 à `Fait` | F-01 |
+| D-54 | 2026-11-04 | Contrôle préalable : aucun contrôle sur une saisie incomplète ; s'il échoue, message et validation possible ; `recuId` accepté ; aucune alerte rétroactive ; écart sans séparateur de milliers | F-01 |
+| D-55 | 2026-11-04 | Comparaison des fournisseurs : `œ`, apostrophe courbe et espace insécable en bordure traités par un correctif après la fusion de 001-04 | F-01 |
+| D-56 | 2026-11-04 | Risques acceptés : aucune limite de débit sur le contrôle préalable ; doublons simultanés détectés grâce au lien unique vers la base, à écrire dans `docs/deploiement.md` ; le contrôle peut signaler un reçu déjà créé après une réponse perdue | F-01 |
+| D-57 | 2026-11-04 | Remplace D-44. Renouvellement Google : `invalid_grant` ou `invalid_token` efface le jeton ; réponse illisible, `temporarily_unavailable` et `server_error` sont des pannes passagères ; `invalid_client` et les autres refus passent à `A_RENOUVELER` avec un journal d'erreur, sans effacer le jeton, pour reprendre sans nouveau consentement | F-01 |
+| D-58 | 2026-11-04 | Le développeur de chaque issue peut rebaser sa branche non poussée sur `develop`, une fois par fusion précédente, puis refait la vérification complète ; un conflit de sécurité lui fait abandonner le rebase et le remonter | F-01 |
+| D-59 | 2026-11-04 | Renouvellement Google : un 401 ou 403 sans code lisible passe à `A_RENOUVELER` sans effacer le jeton, avec bandeau et journal d'erreur ; un 200 illisible reste passager. 001-05 se termine sur cette correction, sans 4e relecture | F-01 |
+| D-60 | 2026-11-04 | Cycle de la copie réuni dans `RecuCopyService`, construit dans 001-06 sans branche préalable, complété par 001-11 et 001-08 : les appelants signalent des faits, le module décide de l'ordre, des pannes et des essais. `Recu` seul change son état et refuse les transitions interdites, sans bibliothèque, avec un test du tableau complet ; une règle d'architecture réserve ces transitions au module. L'autorisation Google prévient par des événements Spring synchrones, dans la même transaction. Aucune transaction pendant un appel à Google. La base sert de file, un seul fil, réveillé après chaque validation et périodiquement. Les adapters de Drive et du Sheet classent les pannes et demandent le jeton. Rythme des essais dans 001-08, durées dans `recus.copie.*`. Pas de nouvel ADR : la structure ne change pas | F-01 |
+| D-61 | 2026-11-05 | Texte vide et comparaison des fournisseurs réunis dans une seule classe du domaine, sans annotation de validation ni nouvel ADR ; la validation, la lecture du modèle et la comparaison l'appellent. Comparaison (complète D-55) : en plus de la casse, des accents et des espaces en bordure, `œ` = `oe`, `æ` = `ae` (majuscules comprises), apostrophe courbe = apostrophe droite, séparateurs `\p{Z}` dont l'espace insécable en bordure ; rien d'autre (ni ponctuation, ni `Inc.` / `Inc`, ni séparateur du milieu) ; la valeur enregistrée et affichée ne change pas. Un fournisseur fait seulement de séparateurs renvoyé par le modèle est vide : non relevé, non rejeté, et il ne compte pas pour un résultat `LU` | F-01 |
 
 ## À trancher
 

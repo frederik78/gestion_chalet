@@ -1,0 +1,156 @@
+spring:
+  application:
+    name: gestion-chalet
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 76MB
+      # Analysé seulement par une route qui lit un multipart, jamais par le seul passage dans Spring MVC.
+      resolve-lazily: true
+  # Ces filtres liraient le corps d'un formulaire avant la sécurité, sans la borne de RequestBodyLimitFilter. Aucune route n'en a besoin.
+  mvc:
+    formcontent:
+      filter:
+        enabled: false
+    hiddenmethod:
+      filter:
+        enabled: false
+  # Modèle fixé par recus.modele ; aucun réglage temperature, top_p ni top_k (ADR 0001). La clé vient de ANTHROPIC_API_KEY, lue par le client.
+  ai:
+    anthropic:
+      # Délai de lecture ; aucun nouvel essai automatique : la PWA propose de relancer (PRD, section 7.3).
+      timeout: ${recus.lecture.delai}
+      max-retries: 0
+      chat:
+        model: ${recus.modele}
+        # Borne la réponse, donnée non fiable ; une réponse coupée n'est plus du JSON et donne ECHEC.
+        max-tokens: 1024
+  # Un montant est un entier en cents (PRD, section 11.4) : ni décimal, ni texte, que Jackson convertirait sinon.
+  jackson:
+    deserialization:
+      accept-float-as-int: false
+    mapper:
+      allow-coercion-of-scalars: false
+  # Un seul lien vers SQLite : les écritures passent l'une après l'autre, sans « database is locked ». Les clés étrangères, désactivées par défaut par SQLite, sont activées.
+  datasource:
+    url: jdbc:sqlite:${recus.dossier-donnees}/gestion-chalet.db?foreign_keys=true
+    hikari:
+      maximum-pool-size: 1
+  liquibase:
+    change-log: classpath:config/liquibase/master.xml
+  # Liquibase seul gère le schéma (ADR 0001) ; Hibernate ne fait que valider.
+  jpa:
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.type.preferred_uuid_jdbc_type: CHAR
+
+logging:
+  level:
+    # Spring AI y recopie le message envoyé et les blocs de réponse qu'il ne reconnaît pas : du contenu de reçu (D-12).
+    org.springframework.ai.anthropic: ERROR
+    # Il recopierait le message de la base, qui peut citer une valeur de reçu ; ExceptionTranslator journalise la panne sans son message.
+    org.hibernate.orm.jdbc.error: "OFF"
+
+server:
+  # Aucun en-tête de proxy n'est cru : la source du blocage de connexion est l'adresse de la connexion (à revoir avec NF-03).
+  forward-headers-strategy: none
+  mime-mappings:
+    webmanifest: application/manifest+json
+  tomcat:
+    # Attente maximale entre deux lectures, pas durée totale (60 s par défaut) : borne le temps qu'une connexion muette tient un fil (mesuré, D-43).
+    connection-timeout: 20s
+    # Le formulaire de connexion est lu par Tomcat, avant RequestBodyLimitFilter (2 Mo par défaut).
+    max-http-form-post-size: ${recus.securite.corps-requete-max}
+    # Ce que Tomcat lit et jette après un refus, pour que le client reçoive la réponse au lieu d'une connexion coupée (2 Mo par défaut). Au-delà de la requête
+    # totale de 76 Mo : une requête encore plus lourde reçoit le 413 ; passé 100 Mo, sa connexion est coupée, sans mémoire consommée dans les deux cas.
+    max-swallow-size: 100MB
+  servlet:
+    session:
+      timeout: 8h
+      tracking-modes: cookie
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${recus.securite.cookie-securise}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+      discovery:
+        enabled: false
+  endpoint:
+    health:
+      show-details: never
+      show-components: never
+      probes:
+        enabled: false
+
+recus:
+  modele: claude-haiku-5-5
+  # Hors de la racine web (ADR 0001) ; à placer sur un volume conservé.
+  dossier-donnees: ${RECUS_DOSSIER_DONNEES:data}
+  dossier-photos: ${recus.dossier-donnees}/photos
+  fuseau-horaire: America/Montreal
+  photos-par-recu-max: 5
+  # Protection contre les images piégées : lue dans l'en-tête, sans décoder les pixels (PRD, section 9).
+  dimensions-max-megapixels: 64
+  lecture:
+    # Lu par le client du modèle (spring.ai.anthropic.timeout) : au-delà, le résultat est ECHEC (PRD, section 7.3).
+    delai: 60s
+    # Maîtrise du coût (CS19), sur une heure glissante.
+    lectures-par-heure: 60
+    # Long côté de la copie envoyée, celui jusqu'auquel le service n'applique aucune réduction.
+    cote-max-pixels: 1568
+    # Protections du décodage : sous -Xmx256m, un PNG de 9,8 Mpx sur 16 bits échoue parfois à 2 décodages simultanés, jamais à 1 (mesuré).
+    cote-source-max-pixels: 20000
+    decodages-simultanes: 1
+    # Un JPEG progressif peut enchaîner des balayages vides, chacun refaisant une passe complète : le nombre de balayages réels, compté avant le décodage en suivant la structure du fichier (les segments, miniatures et données après la fin d'image n'en font pas partie), ne doit pas dépasser cette limite ; une structure inattendue est refusée aussi.
+    # Le délai ne vaut que pour un fichier qui passe ce contrôle : mesuré à 1,2 s pour 1 s sur 32 balayages à 64 Mpx ; sans lui, 100 000 balayages ne rendaient plus la main.
+    passes-decodage-max: 32
+    delai-decodage: 20s
+    attente-decodage: 30s
+  formats:
+    - image/jpeg
+    - image/png
+  # Liste fermée, dans l'orthographe du Sheet (R-09).
+  types-depense:
+    - Honoraires professionnel
+    - Fournitures
+    - Entretien / Réparations
+    - Électricité / Internet
+    - Impôts / Taxes
+    - Assurances
+    - Publicité
+    - Autres dépenses
+    - Frais de voyage
+    - Intérêts
+    - Administration
+  # Montants en cents (D-03, D-23).
+  alertes:
+    seuil-numeros-inscription-cents: 10000
+    seuil-piece-a-verifier-cents: 50000
+    ecart-tolere-cents: 2
+  google:
+    # Aucune clé par défaut : RECUS_GOOGLE_CLE_CHIFFREMENT, 32 octets en base 64 (openssl rand -base64 32), sinon l'application refuse de démarrer.
+    # Identifiants facultatifs, RECUS_GOOGLE_CLIENT_ID et RECUS_GOOGLE_CLIENT_SECRET : sans eux, l'autorisation reste ABSENTE (D-42).
+    delai-appel: 10s
+    adresse-consentement: https://accounts.google.com/o/oauth2/v2/auth
+    adresse-jeton: https://oauth2.googleapis.com/token
+    adresse-rappel: "{baseUrl}/api/google/rappel"
+    # Édition des feuilles de calcul, et les seuls fichiers Drive créés par l'application : aucun autre droit.
+    droits:
+      - https://www.googleapis.com/auth/spreadsheets
+      - https://www.googleapis.com/auth/drive.file
+  securite:
+    # Aucun condensé par défaut : à fournir par l'environnement (RECUS_SECURITE_CONDENSE_MOT_DE_PASSE), sinon l'application refuse de démarrer.
+    echecs-avant-blocage: 5
+    duree-blocage: 15m
+    sources-suivies-max: 10000
+    corps-requete-max: 64KB
+    # Vrai partout, sauf sur le poste local en HTTP (RECUS_SECURITE_COOKIE_SECURISE=false).
+    cookie-securise: true

@@ -4,7 +4,7 @@ titre: Sections de mois
 prd: docs/prd/001-recus.md
 besoin: F-01
 statut: À faire
-depend_de: [001-06]
+depend_de: [001-11]
 criteres: [CA33, CA34, CA35, CA36, CA37]
 branche: feat/001-07-sections-mois
 commits: []

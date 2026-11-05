@@ -31,15 +31,20 @@ Si le schéma de base de données est géré par une migration, tout changement 
    rejette avant ton code.
 7. Pas de port, d'interface ni d'abstraction « au cas où » : une interface n'existe que s'il y a deux implémentations réelles ou une frontière
    externe à doubler dans les tests (appel réseau, fournisseur).
-8. Lance les tests ciblés pendant le travail, puis `scripts/verify-clean.sh` en fin de travail (copie propre du dépôt : un IDE ouvert peut recompiler
-   les classes générées et casser le build dans le dépôt), et corrige jusqu'à ce que tout passe. Le refactoring se fait une fois les tests verts.
-9. Commits atomiques au format conventionnel (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `build:`), sur la branche de l'issue. Tu ne pousses pas, tu ne fusionnes pas.
-10. Quand le PRD ne fixe pas un comportement (valeur refusée, borne, type accepté), choisis le comportement le plus sûr et cohérent avec l'existant, et liste-le dans « À trancher par l'utilisateur » de ton rapport.
+8. **Le framework d'abord** : avant d'écrire un mécanisme transversal (session, authentification, CSRF, en-têtes, erreurs, validation, limites, configuration, journalisation…), cherche ce que le framework et ses
+   dépendances fournissent déjà (classe, propriété de configuration), dans la version réellement utilisée : vérifie dans ses sources ou ses jars, pas de mémoire. Lis aussi comment le fait le projet de référence ou le générateur que l'ADR nomme : son code, pas ton souvenir. Le guide de la stack (`factory/stacks/<stack>/README.md`) dit quoi lire et comment, sans télécharger tout le projet.
+   Pour un rôle que la référence couvre, reprends son emplacement, son nom de classe et sa forme ; le PRD et l'ADR l'emportent sur la référence. Les classes techniques sont impérativement en anglais. Ne reprends que ce qu'un critère demande, et consigne chaque écart dans la section « Alignement sur la référence » de ton rapport.
+   Utilise-le. Un équivalent écrit à la main n'est permis que si un critère du PRD ou un essai mesuré montre que le framework ne convient pas : la raison va dans le commentaire de la classe et dans la section « Code écrit à la place du framework » de ton rapport.
+8 bis. **Entrées externes** : pour chaque entrée ajoutée ou modifiée (route, fichier reçu, rappel, réponse d'un tiers), remplis le tableau du rapport et teste une valeur hostile. Une valeur par défaut du framework n'est pas présumée sûre.
+9. Avant chaque commit intermédiaire, lance les tests ciblés sur ce que le commit touche, plus les tests d'architecture s'il change la structure, et lis leur code de sortie réel ; le cycle TDD reste obligatoire. Puis `scripts/fin-issue.sh <issue>` complet après ton dernier commit, avant de rendre ton rapport (build dans une copie propre : un IDE ouvert peut recompiler
+   les classes générées et casser le build dans le dépôt), et s'il échoue, corrige par un nouveau commit, sans réécrire l'historique, puis relance-le ; reprends sa dernière ligne dans le rapport. Le refactoring se fait une fois les tests verts.
+10. Commits atomiques au format conventionnel (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `build:`), sur la branche de l'issue. Tu ne pousses pas, tu ne fusionnes pas.
+11. Quand le PRD ne fixe pas un comportement (valeur refusée, borne, type accepté), choisis le comportement le plus sûr et cohérent avec l'existant, et liste-le dans « À trancher par l'utilisateur » de ton rapport.
     Toute décision de conception que tu prends seul (nom de contrat, valeur par défaut, dépendance ajoutée) est écrite dans ton rapport, avec la raison.
     Toute dépendance ajoutée est rapportée avec sa version, son origine et sa **licence** (vérifie-la : une licence à usage restreint se décide avec l'utilisateur).
-11. **Prouve, n'affirme pas** : pour chaque critère, montre un état AVANT et un état APRÈS. Bug : le test qui échoue puis réussit. Performance ou autre effet invisible : des chiffres mesurés avant et après, avec la commande.
+12. **Prouve, n'affirme pas** : pour chaque critère, montre un état AVANT et un état APRÈS. Bug : le test qui échoue puis réussit. Performance ou autre effet invisible : des chiffres mesurés avant et après, avec la commande.
     Comportement visible (interface) : des captures ou une vidéo si l'environnement le permet, sinon la sortie d'un test de contrat. Si ta preuve « après » montre que le travail n'est pas fini, retourne à la construction avant de rendre ton rapport.
-12. **Écris pour un lecteur sans contexte** (un développeur embauché plus tard, un autre agent) : une responsabilité par module, pas de duplication, pas de code mort, pas de fonctions éparpillées, noms explicites,
+13. **Écris pour un lecteur sans contexte** (un développeur embauché plus tard, un autre agent) : une responsabilité par module, pas de duplication, pas de code mort, pas de fonctions éparpillées, noms explicites,
     la structure d'`AGENTS.md` respectée. Fonctionner ne suffit pas.
 
 Termine par un rapport au format de `factory/prompts/report-format.md` (court, avec la commande et les nombres de la vérification, les critères

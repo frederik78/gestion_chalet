@@ -13,6 +13,8 @@ permissions:
   contents: read
 jobs:
   verify:
+    # Build mesuré en local à moins de 2 min, Chrome compris ; la marge couvre un cache Maven vide.
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -27,8 +29,23 @@ jobs:
           distribution: temurin
           java-version: 25
           cache: maven
+      # Tests d'écran (D-35) : le Chrome de l'image du runner (actions/runner-images, images/ubuntu/scripts/build/install-google-chrome.sh : CHROME_BIN=/usr/bin/google-chrome). Sa version suit l'image ; l'affichage fait échouer l'étape tôt si Chrome manque.
+      # Le bac à sable de Chrome reste actif : Ubuntu 24.04 restreint les user namespaces par AppArmor, on lève cette restriction sur ce runner jetable, sans --no-sandbox ; à garder tant qu'un passage réel n'a pas montré qu'elle est inutile.
+      - name: Preparer Chrome
+        if: hashFiles('pom.xml') != ''
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          /usr/bin/google-chrome --version
       - if: hashFiles('pom.xml') != ''
-        run: ./mvnw -B verify
+        run: ./mvnw -B verify -Dessai.chrome=/usr/bin/google-chrome
+      - name: Controler que les tests d'ecran ont tourne
+        if: hashFiles('pom.xml') != ''
+        run: |
+          rapport=target/surefire-reports/TEST-ca.gestionchalet.RecuScreensChromeTest.xml
+          if ! grep -Eq '<testsuite .* tests="[1-9][0-9]*" .* skipped="0" ' "$rapport"; then
+            echo "::error::Les tests d'ecran n'ont pas tourne : rapport absent, vide ou tests ignores."
+            exit 1
+          fi
   secrets:
     # Détection de secrets dans tout l'historique. gitleaks-action est gratuit pour un dépôt personnel ; pour une organisation, il faut
     # la licence GITLEAKS_LICENSE (sinon remplacer ce job par le binaire gitleaks lancé à la main).
@@ -44,6 +61,8 @@ jobs:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
   securite:
     # Analyse des dépendances (OWASP Dependency-Check) : active seulement si le secret NVD_API_KEY existe.
+    # Dependency-Check non mesuré (sans NVD_API_KEY en local) : marge large pour le téléchargement de la base NVD.
+    timeout-minutes: 90
     runs-on: ubuntu-latest
     env:
       NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
