@@ -36,6 +36,7 @@ Structure en services, inspirée de JHipster, sans générateur : `config`, `dom
 - Une `XxxResource` valide l'entrée et délègue à un `XxxService`, sans logique métier ni accès aux données.
 - Le domaine contient les entités JPA, sans setter public : l'état change par des fabriques et des transitions. Le statut et les alertes ne sont jamais lus d'une source non fiable (modèle, client).
 - Le JSON est un record `XxxDTO` projeté par MapStruct ; une entité n'est jamais sérialisée.
+- La copie vers Drive et le Sheet est un cycle réuni dans `RecuCopyService` (D-60) : les appelants signalent des faits (reçu validé, autorisation Google accordée ou perdue, par des événements Spring synchrones dans la même transaction), le module décide de l'ordre, des pannes et des essais. Seul `Recu` change l'état de la copie, par des transitions qui refusent les autres, et seul ce module les appelle (`AgentRulesTest`). Aucune transaction ne reste ouverte pendant un appel à Google ; la base sert de file, un seul fil copie.
 - Interfaces seulement dans `client/`, pour Claude, Google Sheets et Google Drive. Le dépôt, le stockage local et l'authentification restent concrets.
 - Liquibase est le seul gestionnaire du schéma (`ddl-auto=validate`) ; un changeset appliqué n'est jamais modifié.
 - Compte local unique, session par cookie, CSRF actif ; refus par défaut.
