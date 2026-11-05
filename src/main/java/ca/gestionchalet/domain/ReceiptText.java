@@ -36,7 +36,12 @@ public final class ReceiptText {
      * séparateurs en bordure. Rien d'autre : ni ponctuation, ni séparateur du milieu, ni « Inc. » contre « Inc ».
      */
     public static boolean sameSupplier(String first, String second) {
-        return comparableSupplier(first).equals(comparableSupplier(second));
+        return sameLabel(first, second);
+    }
+
+    /** Les mêmes règles pour un libellé du Sheet, en-tête de colonne ou titre de mois (R-22, R-24) : la comparaison n'est pas propre au fournisseur. */
+    public static boolean sameLabel(String first, String second) {
+        return comparableLabel(first).equals(comparableLabel(second));
     }
 
     /** Parcours linéaire des deux bordures : une expression régulière ancrée aux deux bouts est quadratique sur une longue suite de séparateurs. */
@@ -58,8 +63,8 @@ public final class ReceiptText {
                 || c == ' ' || c == '\t' || c == '\n' || c == '\u000B' || c == '\f' || c == '\r';
     }
 
-    private static String comparableSupplier(String supplier) {
-        String bordered = trimSeparators(supplier);
+    private static String comparableLabel(String label) {
+        String bordered = trimSeparators(label);
         String withoutAccents = COMBINING_MARKS.matcher(Normalizer.normalize(bordered, Normalizer.Form.NFD)).replaceAll("");
         return withoutAccents.toUpperCase(Locale.ROOT).toLowerCase(Locale.ROOT)
                 .replace("œ", "oe")
