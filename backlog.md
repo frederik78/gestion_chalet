@@ -91,6 +91,7 @@ Vue d'ensemble des besoins. Détail dans `docs/prd/`, suivi de la livraison dans
 | D-56 | 2026-11-04 | Risques acceptés : aucune limite de débit sur le contrôle préalable ; doublons simultanés détectés grâce au lien unique vers la base, à écrire dans `docs/deploiement.md` ; le contrôle peut signaler un reçu déjà créé après une réponse perdue | F-01 |
 | D-57 | 2026-11-04 | Remplace D-44. Renouvellement Google : `invalid_grant` ou `invalid_token` efface le jeton ; réponse illisible, `temporarily_unavailable` et `server_error` sont des pannes passagères ; `invalid_client` et les autres refus passent à `A_RENOUVELER` avec un journal d'erreur, sans effacer le jeton, pour reprendre sans nouveau consentement | F-01 |
 | D-58 | 2026-11-04 | Le développeur de chaque issue peut rebaser sa branche non poussée sur `develop`, une fois par fusion précédente, puis refait la vérification complète ; un conflit de sécurité lui fait abandonner le rebase et le remonter | F-01 |
+| D-59 | 2026-11-04 | Renouvellement Google : un 401 ou 403 sans code lisible passe à `A_RENOUVELER` sans effacer le jeton, avec bandeau et journal d'erreur ; un 200 illisible reste passager. 001-05 se termine sur cette correction, sans 4e relecture | F-01 |
 
 ## À trancher
 
