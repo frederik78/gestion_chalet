@@ -2,6 +2,7 @@ package ca.gestionchalet.config;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import java.nio.file.Path;
@@ -17,6 +18,7 @@ import org.springframework.validation.annotation.Validated;
  * inconnues restent permises, car {@code recus.modele} et le condensé du mot de passe sont lus ailleurs.
  *
  * @param securite réglages de sécurité ({@code recus.securite.*})
+ * @param google réglages de l'autorisation Google ({@code recus.google.*})
  * @param dossierPhotos dossier des photos, hors de la base et de la racine web
  * @param typesDepense liste fermée des types de dépense, dans l'orthographe du Sheet
  * @param photosParRecuMax nombre maximal de photos d'un reçu
@@ -27,7 +29,7 @@ import org.springframework.validation.annotation.Validated;
  */
 @Validated
 @ConfigurationProperties("recus")
-public record ApplicationProperties(@Valid @NotNull Security securite, @NotNull Path dossierPhotos,
+public record ApplicationProperties(@Valid @NotNull Security securite, @Valid @NotNull Google google, @NotNull Path dossierPhotos,
         @NotEmpty List<String> typesDepense,
         @Min(1) int photosParRecuMax,
         @NotEmpty List<String> formats,
@@ -46,6 +48,23 @@ public record ApplicationProperties(@Valid @NotNull Security securite, @NotNull 
      * @param ecartTolereCents écart de calcul au-delà duquel l'alerte est levée
      */
     public record Alerts(@Min(1) long seuilNumerosInscriptionCents, @Min(1) long seuilPieceAVerifierCents, @Min(0) long ecartTolereCents) {
+    }
+
+    /**
+     * La clé de chiffrement et les identifiants du client, secrets, sont lus à part : un record les écrirait dans son {@code toString}.
+     *
+     * @param delaiAppel délai maximal d'un appel à Google pour obtenir un jeton
+     * @param adresseConsentement adresse du consentement Google
+     * @param adresseJeton adresse des jetons Google
+     * @param adresseRappel adresse de rappel
+     * @param droits droits demandés (PRD, section 7.6)
+     */
+    public record Google(@NotNull Duration delaiAppel, @NotBlank String adresseConsentement, @NotBlank String adresseJeton,
+            @NotBlank String adresseRappel, @NotEmpty List<String> droits) {
+
+        public Google {
+            droits = droits == null ? List.of() : List.copyOf(droits);
+        }
     }
 
     /**

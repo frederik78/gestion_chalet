@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="20261103120000-1" author="gestion-chalet">
+        <!-- En SQL : sur SQLite, addColumn de Liquibase recrée la table et laisse la clé étrangère de photo sur une table disparue (mesuré : « no such table: main.recu_temporary »). -->
+        <sql>ALTER TABLE recu ADD COLUMN motif_blocage varchar(30)</sql>
+    </changeSet>
+
+    <changeSet id="20261103120000-2" author="gestion-chalet">
+        <createTable tableName="autorisation_google">
+            <column name="id" type="int"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="etat" type="varchar(20)"><constraints nullable="false"/></column>
+            <column name="jeton_acces_chiffre" type="varchar(8192)"/>
+            <column name="jeton_acces_expire_le" type="varchar(40)"/>
+            <column name="jeton_renouvellement_chiffre" type="varchar(8192)"/>
+        </createTable>
+    </changeSet>
+</databaseChangeLog>

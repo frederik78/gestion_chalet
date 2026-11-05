@@ -76,6 +76,22 @@ Vue d'ensemble des besoins. Détail dans `docs/prd/`, suivi de la livraison dans
 | D-41 | 2026-11-04 | Image tronquée après son en-tête acceptée, sans décodage ; image valide suivie d'un autre contenu conservée, à servir plus tard sous le type de son format avec `nosniff` ; requête totale à 76 Mo ; numéro d'inscription fait d'espaces rendu vide ; bouton de retour de l'écran de validation dans 001-03 | F-01 |
 | D-42 | 2026-11-04 | Sans identifiants Google, l'application démarre en `ABSENTE` ; la clé de chiffrement reste obligatoire. Consentement partiel : `A_RENOUVELER`, jetons effacés. Clé de chiffrement changée : `A_RENOUVELER` | F-01 |
 | D-43 | 2026-11-04 | Saisie sans session : `server.tomcat.connection-timeout` raccourci à 20 s, après mesure ; le reste de la protection (proxy) relève de NF-03, à traiter avant toute exposition publique | F-01 |
+| D-44 | 2026-11-04 | Échec de renouvellement Google qui n'est pas une panne passagère au sens de R-20 (`invalid_client`, par exemple) : l'autorisation passe à `A_RENOUVELER`, avec un journal d'erreur | F-01 |
+| D-45 | 2026-11-04 | Identifiants Google retirés après autorisation : jetons conservés et chiffrés, état `ABSENTE`, retour à `VALIDE` sans nouveau consentement quand ils reviennent | F-01 |
+| D-46 | 2026-11-04 | Reçus bloqués pendant ce retrait : ils restent `BLOQUEE` jusqu'à la reprise de 001-08 | F-01 |
+| D-47 | 2026-11-04 | Clé de chiffrement changée : détectée au premier usage et non au démarrage, l'autorisation passe alors à `A_RENOUVELER` | F-01 |
+| D-48 | 2026-11-04 | Photos changées après une lecture : le montant lu est invalidé et la relance proposée, la saisie reste intacte | F-01 |
+| D-49 | 2026-11-04 | Image acceptée par le contrôle mais non décodable, ou côté source au-delà de 20000 px : la lecture finit en `ECHEC`, saisie à la main | F-01 |
+| D-50 | 2026-11-04 | Limite de lectures perdue au redémarrage ; une photo refusée ne compte pas, une lecture en `ECHEC` compte | F-01 |
+| D-51 | 2026-11-04 | La relance ne remplit que les champs vides ; orientation lue pour le seul JPEG ; long côté de 1568 px, à confirmer sur un long reçu | F-01 |
+| D-52 | 2026-11-04 | Mémoire native au-delà de `-Xmx` à la lecture (776 Mo mesurés sous `-Xmx256m`) : reporté à NF-03, à régler avant tout déploiement | F-01 |
+| D-53 | 2026-11-04 | Le vrai appel à Haiku avec de vraies photos, lancé par l'utilisateur, précède le passage de 001-03 à `Fait` | F-01 |
+| D-54 | 2026-11-04 | Contrôle préalable : aucun contrôle sur une saisie incomplète ; s'il échoue, message et validation possible ; `recuId` accepté ; aucune alerte rétroactive ; écart sans séparateur de milliers | F-01 |
+| D-55 | 2026-11-04 | Comparaison des fournisseurs : `œ`, apostrophe courbe et espace insécable en bordure traités par un correctif après la fusion de 001-04 | F-01 |
+| D-56 | 2026-11-04 | Risques acceptés : aucune limite de débit sur le contrôle préalable ; doublons simultanés détectés grâce au lien unique vers la base, à écrire dans `docs/deploiement.md` ; le contrôle peut signaler un reçu déjà créé après une réponse perdue | F-01 |
+| D-57 | 2026-11-04 | Remplace D-44. Renouvellement Google : `invalid_grant` ou `invalid_token` efface le jeton ; réponse illisible, `temporarily_unavailable` et `server_error` sont des pannes passagères ; `invalid_client` et les autres refus passent à `A_RENOUVELER` avec un journal d'erreur, sans effacer le jeton, pour reprendre sans nouveau consentement | F-01 |
+| D-58 | 2026-11-04 | Le développeur de chaque issue peut rebaser sa branche non poussée sur `develop`, une fois par fusion précédente, puis refait la vérification complète ; un conflit de sécurité lui fait abandonner le rebase et le remonter | F-01 |
+| D-59 | 2026-11-04 | Renouvellement Google : un 401 ou 403 sans code lisible passe à `A_RENOUVELER` sans effacer le jeton, avec bandeau et journal d'erreur ; un 200 illisible reste passager. 001-05 se termine sur cette correction, sans 4e relecture | F-01 |
 
 ## À trancher
 

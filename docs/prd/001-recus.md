@@ -163,7 +163,7 @@ Calculées à la validation et à chaque correction, jamais bloquantes. Les seui
 ### Copie (D-05, D-07, D-18, D-19, D-24)
 - **R-18** Ordre : les photos d'abord, puis la ligne du Sheet, qui contient leurs liens. Tant que les photos ne sont pas toutes déposées, la ligne n'est pas écrite.
 - **R-19** Les copies sont traitées une à la fois, par ordre de validation, pour que deux reçus ne calculent jamais une position d'insertion sur un même état du Sheet.
-- **R-20** Reprise : la validation n'attend pas la copie. Une panne passagère (erreur réseau, délai dépassé, réponse 429 ou 5xx de Google) programme un nouvel essai, 1 minute après le premier échec, puis à intervalle doublé jusqu'à 1 heure, sans limite de tentatives. Un reçu `BLOQUEE` est réessayé à l'intervalle maximal. Après un redémarrage, tout reçu non `COPIEE` est repris.
+- **R-20** Reprise : la validation n'attend pas la copie. Une panne passagère (erreur réseau, délai dépassé, réponse 429 ou 5xx de Google, réponse 2xx illisible, code `temporarily_unavailable` ou `server_error`) programme un nouvel essai, 1 minute après le premier échec, puis à intervalle doublé jusqu'à 1 heure, sans limite de tentatives. Un reçu `BLOQUEE` est réessayé à l'intervalle maximal. Après un redémarrage, tout reçu non `COPIEE` est repris.
 - **R-21** Pas de doublon dans Drive ni dans le Sheet : chaque photo et chaque ligne portent un identifiant invisible de l'utilisateur. Avant toute création, l'application cherche cet identifiant ; s'il existe, elle réutilise le fichier ou met à jour la ligne. Cet identifiant est une métadonnée attachée à la ligne, qui la suit quand elle se déplace, et n'ajoute aucune colonne (Q-07, à confirmer à l'essai réel, section 13).
 - **R-22** Placement d'une nouvelle ligne (D-24) :
   - la section est celle du mois de la date du reçu, reconnue sans tenir compte de la casse ni des accents ;
@@ -349,6 +349,7 @@ Un fichier par photo, photo d'origine (R-36), dans le dossier de l'application (
 - Consentement partiel (un droit décoché) : l'autorisation est `A_RENOUVELER`, et l'utilisateur en est informé.
 - Conservation : jeton de renouvellement chiffré au repos, clé fournie par l'environnement ; jamais renvoyé à la PWA ni journalisé.
 - Expiration ou révocation (`invalid_grant`, ou droits retirés) : l'état passe à `A_RENOUVELER`, les reçus en attente deviennent `BLOQUEE` (`AUTORISATION_GOOGLE`), et le bandeau de la PWA le signale. Aucun reçu n'est perdu, la validation reste possible. Le renouvellement relance aussitôt les copies.
+- Autre refus de renouvellement, sans révocation (`invalid_client`, ou 401 et 403 sans code lisible) : même état, mêmes reçus `BLOQUEE` et même bandeau, mais le jeton de renouvellement est gardé : une fois la cause corrigée, la reprise se fait sans nouveau consentement.
 - Aucune autorisation donnée : même comportement, avec l'état `ABSENTE`.
 - Condition externe : le projet Google est publié en production, sans vérification, avec un écran d'avertissement au consentement (Q-12, à confirmer dans la documentation de Google, section 13). Selon la documentation de Google, connue du rédacteur mais non vérifiée ici, un projet resté en mode test voit son autorisation expirer après 7 jours, ce qui contredirait D-17, et une autorisation inutilisée pendant 6 mois expire aussi.
 

@@ -1,6 +1,7 @@
 package ca.gestionchalet.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -27,5 +28,20 @@ class RecuTest {
 
         assertThat(recu.hasContent("empreinte-a")).isTrue();
         assertThat(recu.hasContent("empreinte-b")).isFalse();
+    }
+
+    @Test
+    void ca66_seulUnRecuACopierSeBloqueEtSeulUnRecuBloqueSeReprend() {
+        Recu recu = recu("e");
+        assertThatThrownBy(recu::reprendre).isInstanceOf(IllegalStateException.class);
+
+        recu.bloquer(MotifBlocage.AUTORISATION_GOOGLE);
+        assertThat(recu.getEtatCopie()).isEqualTo(EtatCopie.BLOQUEE);
+        assertThat(recu.getMotifBlocage()).isEqualTo(MotifBlocage.AUTORISATION_GOOGLE);
+        assertThatThrownBy(() -> recu.bloquer(MotifBlocage.AUTORISATION_GOOGLE)).isInstanceOf(IllegalStateException.class);
+
+        recu.reprendre();
+        assertThat(recu.getEtatCopie()).isEqualTo(EtatCopie.A_COPIER);
+        assertThat(recu.getMotifBlocage()).isNull();
     }
 }

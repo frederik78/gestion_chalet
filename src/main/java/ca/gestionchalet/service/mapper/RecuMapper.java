@@ -15,7 +15,6 @@ import org.mapstruct.ReportingPolicy;
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.ERROR)
 public interface RecuMapper {
 
-    @Mapping(target = "motifBlocage", ignore = true)
     @Mapping(target = "prochaineTentative", ignore = true)
     @Mapping(target = "corrigeLe", ignore = true)
     RecuDTO toDto(Recu recu);

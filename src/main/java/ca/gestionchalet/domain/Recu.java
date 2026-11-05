@@ -47,6 +47,9 @@ public class Recu {
     @Column(nullable = false)
     private EtatCopie etatCopie;
 
+    @Enumerated(EnumType.STRING)
+    private MotifBlocage motifBlocage;
+
     @Column(nullable = false)
     private int version;
 
@@ -84,6 +87,24 @@ public class Recu {
         return new Recu(cleIdempotence, valeurs, empreinteContenu, montantTotalLuCents, valideLe, photos, alertes);
     }
 
+    /** Un motif de blocage est constaté : la copie attend une action de l'utilisateur (PRD, section 4.2). */
+    public void bloquer(MotifBlocage motif) {
+        if (etatCopie != EtatCopie.A_COPIER) {
+            throw new IllegalStateException("Transition refusée : " + etatCopie + " vers BLOQUEE");
+        }
+        etatCopie = EtatCopie.BLOQUEE;
+        motifBlocage = motif;
+    }
+
+    /** Le blocage est levé : la copie est à refaire (PRD, section 4.2). */
+    public void reprendre() {
+        if (etatCopie != EtatCopie.BLOQUEE) {
+            throw new IllegalStateException("Transition refusée : " + etatCopie + " vers A_COPIER");
+        }
+        etatCopie = EtatCopie.A_COPIER;
+        motifBlocage = null;
+    }
+
     public boolean hasContent(String empreinte) {
         return empreinteContenu.equals(empreinte);
     }
@@ -102,6 +123,10 @@ public class Recu {
 
     public EtatCopie getEtatCopie() {
         return etatCopie;
+    }
+
+    public MotifBlocage getMotifBlocage() {
+        return motifBlocage;
     }
 
     public int getVersion() {
