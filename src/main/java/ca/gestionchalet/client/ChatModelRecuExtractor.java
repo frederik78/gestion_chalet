@@ -1,18 +1,17 @@
 package ca.gestionchalet.client;
 
 import ca.gestionchalet.client.RecuExtractionException.Failure;
-import com.anthropic.errors.AnthropicIoException;
-import com.anthropic.errors.AnthropicServiceException;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import org.springframework.ai.anthropic.AnthropicChatOptions;
+import java.util.concurrent.TimeoutException;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
-import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.content.Media;
+import org.springframework.ai.model.tool.StructuredOutputChatOptions;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.util.MimeTypeUtils;
 import tools.jackson.core.JacksonException;
@@ -23,8 +22,12 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Appelle le modèle configuré par Spring AI (R-02) : le délai et l'absence de nouvel essai viennent de {@code spring.ai.anthropic.*}. Seules les images, la consigne fixe, la liste
  * des types et la structure attendue partent (PRD, section 7.3). Aucun message de panne n'est repris : il peut citer la réponse.
+ * <p>
+ * Indépendante du fournisseur du modèle (D-64) : la structure est imposée par l'interface commune {@link StructuredOutputChatOptions}, et les pannes sont classées par la chaîne de leurs
+ * causes, non par une exception propre au fournisseur. Un réseau en panne ou un délai dépassé ({@link IOException}, {@link TimeoutException}) est {@code UNREACHABLE} ; toute autre
+ * erreur de l'appel est {@code SERVICE_ERROR}, y compris un corps de réponse que le client du fournisseur n'a pas pu lire.
  */
-public class AnthropicRecuExtractor implements RecuExtractor {
+public class ChatModelRecuExtractor implements RecuExtractor {
 
     private static final String INSTRUCTIONS = """
             Tu relèves les valeurs d'un reçu québécois à partir de ses photos, qui montrent toutes un seul et même reçu.
@@ -45,9 +48,23 @@ public class AnthropicRecuExtractor implements RecuExtractor {
     private static final JsonMapper JSON = JsonMapper.builder().enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build();
 
     private final ChatModel chatModel;
+    private final StructuredOutputChatOptions options;
 
-    public AnthropicRecuExtractor(ChatModel chatModel) {
+    /** @throws IllegalStateException si les options par défaut du modèle ne savent pas imposer un schéma de réponse : mieux vaut échouer au démarrage que lire sans structure. */
+    public ChatModelRecuExtractor(ChatModel chatModel) {
         this.chatModel = chatModel;
+        if (!(chatModel.getDefaultOptions() instanceof StructuredOutputChatOptions defaults)) {
+            throw new IllegalStateException("Le modèle configuré n'accepte pas de schéma de réponse (StructuredOutputChatOptions).");
+        }
+        this.options = withSchema(defaults);
+    }
+
+    /**
+     * Des options d'appel remplacent celles par défaut : on part donc d'une copie des options par défaut du modèle ({@code mutate()}), qui garde le modèle, la borne de la réponse et le type
+     * d'options que le modèle comprend, sans quoi le modèle par défaut de Spring AI serait appelé ou le schéma ignoré. Aucun réglage de tirage n'est ajouté (ADR 0001).
+     */
+    private static StructuredOutputChatOptions withSchema(StructuredOutputChatOptions defaults) {
+        return (StructuredOutputChatOptions) defaults.mutate().outputSchema(schema()).build();
     }
 
     @Override
@@ -61,7 +78,7 @@ public class AnthropicRecuExtractor implements RecuExtractor {
                 .media(images.stream().map(image -> new Media(MimeTypeUtils.IMAGE_JPEG, new ByteArrayResource(image))).toList())
                 .build();
         try {
-            ChatResponse response = chatModel.call(new Prompt(message, options()));
+            ChatResponse response = chatModel.call(new Prompt(message, options));
             Generation result = response == null ? null : response.getResult();
             String text = result == null ? null : result.getOutput().getText();
             if (text == null) {
@@ -70,19 +87,18 @@ public class AnthropicRecuExtractor implements RecuExtractor {
             return text;
         } catch (RecuExtractionException e) {
             throw e;
-        } catch (AnthropicIoException e) {
-            throw new RecuExtractionException(Failure.UNREACHABLE);
-        } catch (AnthropicServiceException e) {
-            throw new RecuExtractionException(Failure.SERVICE_ERROR);
         } catch (RuntimeException e) {
-            throw new RecuExtractionException(Failure.INVALID_RESPONSE);
+            throw new RecuExtractionException(isUnreachable(e) ? Failure.UNREACHABLE : Failure.SERVICE_ERROR);
         }
     }
 
-    /** Des options d'appel remplacent celles par défaut : le modèle et la borne de la réponse y sont donc recopiés, sans quoi le modèle par défaut de Spring AI serait appelé. */
-    private ChatOptions options() {
-        ChatOptions defaults = chatModel.getDefaultOptions();
-        return AnthropicChatOptions.builder().model(defaults.getModel()).maxTokens(defaults.getMaxTokens()).outputSchema(schema()).build();
+    private static boolean isUnreachable(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof IOException || cause instanceof TimeoutException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String schema() {
