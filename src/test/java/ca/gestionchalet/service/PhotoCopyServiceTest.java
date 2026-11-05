@@ -184,6 +184,10 @@ class PhotoCopyServiceTest {
             };
         }
 
+        int opened() {
+            return reads.size();
+        }
+
         long mostRead() {
             return reads.stream().mapToLong(tally -> tally[0]).max().orElse(0);
         }
@@ -204,6 +208,19 @@ class PhotoCopyServiceTest {
         assertThat(queue.length).isGreaterThan(190_000);
         assertThat(copieCollee).isPresent().hasValue(copieSeule.orElseThrow());
         assertThat(collee.mostRead()).isLessThan(tete.length + 32_768);
+    }
+
+    /** Un flux de tables seules (SOI EOI) devant une image hostile : le décodeur le saute et décode l'image suivante. Le garde refuse après 4 octets, avant tout autre lecteur. */
+    @Test
+    void uneImageHostilePrecedeeDUnFluxDeTablesSeulesEstRefuseeSansLaDecoder() {
+        byte[] hostile = RecuRequests.avecBalayagesVides(RecuRequests.jpegProgressif(64), 20_000);
+        CountedPhoto photo = new CountedPhoto(concat(new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xD9}, hostile));
+
+        Optional<byte[]> copie = assertTimeoutPreemptively(ofSeconds(5), () -> service(20000, 1, 32, LONG, LONG).copy(photo, PhotoFormat.JPEG));
+
+        assertThat(copie).isEmpty();
+        assertThat(photo.opened()).isEqualTo(1);
+        assertThat(photo.mostRead()).isLessThanOrEqualTo(8192);
     }
 
     @Test

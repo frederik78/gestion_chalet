@@ -121,6 +121,19 @@ class JpegScanCounterTest {
         assertThat(refuses(join(jpeg(SOF, scans(1, new byte[0])), suite))).isFalse();
     }
 
+    /** Un flux de tables seules : le décodeur du JDK le saute et décode l'image qui suit, avec tous ses balayages. Une fin d'image sans balayage vu est donc refusée. */
+    @Test
+    void uneFinDImageSansAucunBalayageEstRefuseeQuoiQuiSuive() {
+        byte[] hostile = jpeg(SOF, scans(LIMIT + 50, new byte[0]));
+        byte[] tables = segment(0xDB, new byte[65]);
+
+        assertThat(refuses(join(SOI, EOI, hostile))).as("SOI EOI puis une image").isTrue();
+        assertThat(refuses(join(SOI, tables, EOI, hostile))).as("SOI DQT EOI puis une image").isTrue();
+        assertThat(refuses(join(SOI, EOI, SOI, EOI, hostile))).as("SOI EOI SOI EOI puis une image").isTrue();
+        assertThat(refuses(join(SOI, EOI))).as("SOI EOI seul").isTrue();
+        assertThat(refuses(join(SOI, EOI, jpeg(SOF, scans(1, new byte[0]))))).as("SOI EOI puis une image ordinaire").isTrue();
+    }
+
     @Test
     void desDonneesCompresseesContiennentLeBourrageEtLesRedemarrages() {
         byte[] donnees = bytes(0x12, 0xFF, 0x00, 0x34, 0xFF, 0xD3, 0x56, 0xFF, 0xD0, 0x78);

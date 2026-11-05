@@ -13,7 +13,7 @@ import java.io.InputStream;
  * <p>La grammaire : {@code FF D8}, puis des segments. Des octets {@code FF} répétés avant un marqueur sont du bourrage ; {@code 01} et {@code D0}-{@code D7} n'ont pas de longueur ;
  * tout autre marqueur a une longueur sur deux octets (au moins 2, elle compte ses propres octets) et son contenu est sauté, même s'il contient {@code FF DA} ou {@code FF D9}.
  * Après un balayage, les données compressées s'étendent jusqu'au prochain marqueur : {@code FF 00} et {@code FF D0}-{@code FF D7} en font partie, tout autre {@code FF xx} est le marqueur
- * suivant. Le parcours s'arrête à la vraie fin d'image {@code FF D9} : ce qui suit n'est pas lu, le décodeur non plus (vérifié par {@code PhotoCopyServiceTest}).
+ * suivant. Le parcours s'arrête à la vraie fin d'image {@code FF D9} : si au moins un balayage l'a précédée, ce qui suit n'est pas lu, le décodeur non plus (vérifié par {@code PhotoCopyServiceTest}). Une fin d'image sans aucun balayage est refusée : un flux de tables seules ({@code FF D8 FF D9}, ou {@code FF D8} tables {@code FF D9}) est sauté par le décodeur du JDK, qui décode l'image suivante, avec tous ses balayages (mesuré : 20 010 passes derrière un préfixe de 4 octets).
  *
  * <p>Refus par défaut : une construction inattendue (second {@code D8}, octet hors marqueur là où un marqueur est attendu, {@code FF 00} hors données compressées, longueur
  * inférieure à 2, segment qui dépasse la fin du fichier, fin du fichier entre deux segments) refuse la photo, même si libjpeg la tolère. Un fichier coupé dans des données compressées
@@ -46,7 +46,7 @@ final class JpegScanCounter {
         int marker = nextMarker(content);
         while (true) {
             if (marker == END_OF_IMAGE) {
-                return false;
+                return scans == 0;
             }
             if (marker < 0 || marker == STUFFED_BYTE || marker == START_OF_IMAGE) {
                 return true;
