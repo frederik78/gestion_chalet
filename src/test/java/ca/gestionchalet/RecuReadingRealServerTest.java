@@ -110,6 +110,31 @@ class RecuReadingRealServerTest {
         assertThat(valeurs(reponse)).isEqualTo(VALEURS_VIDES);
     }
 
+    /** D-61 : un fournisseur fait de séparateurs est vide, comme un champ absent : ni relevé, ni rejeté, et il ne fait pas un résultat {@code LU}. */
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"\u00A0", "\u00A0 \u00A0", "\u202F", "\u2007", "\u3000"})
+    void ca03_unFournisseurFaitDeSeparateursEstVideSansRejetNiResultatLu(String separateurs) {
+        Map<String, Object> reponseModele = new java.util.HashMap<>();
+        reponseModele.put("fournisseur", separateurs);
+        modele.answer(reponseModele);
+
+        Reponse reponse = RecuRequests.lire(client, RecuRequests.jpeg(8));
+
+        assertThat(reponse.statut()).isEqualTo(200);
+        assertThat(reponse.json()).containsEntry("resultat", "ILLISIBLE").containsEntry("champsRejetes", List.of());
+        assertThat(valeurs(reponse)).isEqualTo(VALEURS_VIDES);
+    }
+
+    @Test
+    void ca05_unFournisseurFaitDeSeparateursNeFaitPasLuUneLectureAutrementValide() {
+        modele.answer(Map.of("fournisseur", "\u00A0", "date", "2026-09-25"));
+
+        Reponse reponse = RecuRequests.lire(client, RecuRequests.jpeg(8));
+
+        assertThat(reponse.json()).containsEntry("resultat", "LU").containsEntry("champsRejetes", List.of());
+        assertThat(valeurs(reponse)).containsEntry("fournisseur", null).containsEntry("date", "2026-09-25");
+    }
+
     @Test
     void ca04_unModeleEnPanneDonne200EchecSansDetail() {
         modele.fail();

@@ -109,6 +109,37 @@ class RecuCheckRealServerTest {
         assertThat(controler(saisie(nom, "2026-06-16", 2501)).json().get("alertes")).isEqualTo(List.of());
     }
 
+    /** D-61 : comparaison des fournisseurs (R-15), de bout en bout par le contrôle préalable. */
+    @ParameterizedTest(name = "[{index}] {0} / {1}")
+    @org.junit.jupiter.params.provider.CsvSource(delimiter = '|', value = {
+        "Cœur de Lac|COEUR DE LAC", "Coeur de Lac|CŒUR DE LAC", "Æther|Aether", "Aether|ÆTHER", "L’Épicerie|L'Epicerie", "L'Epicerie|L’EPICERIE"})
+    void ca27_d61_laLigatureEtLApostropheCourbeNeCompterPasPourDesFournisseursDifferents(String enregistre, String controle) {
+        String suffixe = " " + UUID.randomUUID();
+        enregistrer(saisie(enregistre + suffixe, "2026-06-16", 2500));
+
+        assertThat(controler(saisie(controle + suffixe, "2026-06-16", 2500)).json().get("alertes")).isEqualTo(List.of(DOUBLON));
+    }
+
+    @Test
+    void ca27_d61_lesSeparateursEnBordureNeComptentPasMaisCeuxDuMilieuSi() {
+        String nom = unique("Espaces");
+        enregistrer(saisie(nom, "2026-06-16", 2500));
+
+        assertThat(controler(saisie("\u00A0" + nom + "\u202F\u00A0", "2026-06-16", 2500)).json().get("alertes")).isEqualTo(List.of(DOUBLON));
+        assertThat(controler(saisie(nom.replace("Espaces ", "Espaces\u00A0"), "2026-06-16", 2500)).json().get("alertes")).isEqualTo(List.of());
+    }
+
+    @Test
+    void ca27_d61_rienDAutreNEstFusionneEtLaValeurEnregistreeResteTelleQuelle() {
+        String suffixe = " " + UUID.randomUUID();
+        enregistrer(saisie("L’Épicerie Inc." + suffixe, "2026-06-16", 2500));
+
+        assertThat(controler(saisie("L’Épicerie Inc" + suffixe, "2026-06-16", 2500)).json().get("alertes")).isEqualTo(List.of());
+        assertThat(controler(saisie("Épicerie Inc." + suffixe, "2026-06-16", 2500)).json().get("alertes")).isEqualTo(List.of());
+        assertThat(base.queryForObject("select fournisseur from recu where fournisseur like ?", String.class, "L’Épicerie Inc.%"))
+                .isEqualTo("L’Épicerie Inc." + suffixe);
+    }
+
     @Test
     void ca18_unRenvoiNeSePrendPasPourSonPropreDoublon() {
         Map<String, Object> corps = RecuRequests.corps(saisie(unique("Renvoi"), "2026-06-16", 2500));
