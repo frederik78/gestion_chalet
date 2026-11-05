@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 public record CopyRules(Map<Integer, SheetTarget> sheets) {
 
     public CopyRules {
-        sheets = sheets.entrySet().stream().filter(entry -> entry.getValue().isUsable()).collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
+        sheets = Map.copyOf(sheets.entrySet().stream().filter(entry -> entry.getValue().isUsable()).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
     }
 
     /** Sans aucune entrée, aucune copie ne part : ni jeton, ni Drive, ni Sheets (D-62). */
