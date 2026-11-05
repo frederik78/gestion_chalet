@@ -27,3 +27,6 @@ HELP.md
 
 # Photos réelles de reçus : jamais dans le dépôt (AGENTS.md)
 src/main/resources/tickets/
+
+# Réglages locaux de l'IDE
+.vscode/
