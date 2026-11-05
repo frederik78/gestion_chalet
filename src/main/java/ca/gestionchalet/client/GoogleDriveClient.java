@@ -77,7 +77,12 @@ public class GoogleDriveClient implements DriveClient {
                 .body(body).retrieve().body(JsonNode.class)));
     }
 
-    /** {@code multipart/related} : les métadonnées en JSON, puis les octets de la photo tels quels (R-36). */
+    /**
+     * {@code multipart/related} : les métadonnées en JSON, puis les octets de la photo tels quels (R-36). Écrit à la main, après essai du convertisseur de Spring
+     * ({@code FormHttpMessageConverter}, parties {@code HttpEntity}, {@code MediaType.MULTIPART_RELATED}) : il ajoute à chaque partie {@code Content-Disposition: form-data; name="…"}
+     * et {@code Content-Length}, alors que le format documenté par Google pour {@code uploadType=multipart} ne porte que {@code Content-Type} par partie. L'écart n'est pas
+     * contourné sans accord de l'utilisateur ; qu'il soit refusé ou accepté par Drive ne se sait que par un essai réel (revue 001-06, I-1).
+     */
     private static byte[] related(String boundary, String metadata, DrivePhoto photo) {
         byte[] head = ("--" + boundary + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" + metadata + "\r\n--" + boundary + "\r\nContent-Type: "
                 + photo.mediaType() + "\r\n\r\n").getBytes(StandardCharsets.UTF_8);
