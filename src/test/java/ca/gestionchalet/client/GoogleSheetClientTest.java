@@ -16,7 +16,9 @@ import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
@@ -40,6 +42,8 @@ class GoogleSheetClientTest {
 
     private ApiStub sheets;
     private Supplier<Optional<String>> jetons = () -> Optional.of("jeton-d-essai");
+    private static final List<String> ENTETES = List.of("DATE", "BOUTIQUE", "OBJET", "TYPE", "MONTANT HT", "TPS", "TVQ", "MONTANT TOTAL", "NOTES", "PHOTO");
+    private List<String> entetes = ENTETES;
     private int lignesUtilisees = 12;
     private int lignesDeLOnglet = 100;
     private String reponseRecherche = "{}";
@@ -64,8 +68,13 @@ class GoogleSheetClientTest {
         if (requete.is("POST", "/v4/spreadsheets/" + FICHIER + "/developerMetadata:search")) {
             return Response.json(reponseRecherche);
         }
-        if (requete.is("GET", "/v4/spreadsheets/" + FICHIER + "/values/'" + ONGLET + "'!A:Z")) {
-            return Response.json("{\"values\":[" + "[\"x\"],".repeat(Math.max(0, lignesUtilisees - 1)) + (lignesUtilisees > 0 ? "[\"x\"]" : "") + "]}");
+        if (requete.is("GET", "/v4/spreadsheets/" + FICHIER + "/values/'" + ONGLET + "'")) {
+            List<List<String>> grille = new ArrayList<>();
+            grille.add(entetes);
+            for (int i = 1; i < lignesUtilisees; i++) {
+                grille.add(List.of("x"));
+            }
+            return Response.json(JSON.writeValueAsString(Map.of("values", grille)));
         }
         if (requete.is("POST", "/v4/spreadsheets/" + FICHIER + ":batchUpdate")) {
             return Response.json("{}");
@@ -111,9 +120,25 @@ class GoogleSheetClientTest {
         return JSON.missingNode();
     }
 
-    /** Les dix cellules de la ligne écrite : DATE, BOUTIQUE, OBJET, TYPE, MONTANT HT, TPS, TVQ, MONTANT TOTAL, NOTES, PHOTO. */
+    /** Les cellules écrites dans la ligne, une demande par colonne, rangées par colonne : DATE, BOUTIQUE, OBJET, TYPE, MONTANT HT, TPS, TVQ, MONTANT TOTAL, NOTES, PHOTO dans l'ordre observé. */
     private JsonNode cellules() {
-        return demande("updateCells").get("rows").get(0).get("values");
+        Map<Integer, JsonNode> parColonne = new java.util.TreeMap<>();
+        for (JsonNode demande : corps(lot()).get("requests")) {
+            if (demande.has("updateCells") && demande.at("/updateCells/start/rowIndex").asInt() != 0) {
+                parColonne.put(demande.at("/updateCells/start/columnIndex").asInt(), demande.at("/updateCells/rows/0/values/0"));
+            }
+        }
+        return JSON.valueToTree(new ArrayList<>(parColonne.values()));
+    }
+
+    /** La cellule écrite sous cette colonne du Sheet, ou le vide : la ligne écrite n'est jamais celle des en-têtes (rang 0). */
+    private JsonNode cellule(int colonne) {
+        for (JsonNode demande : corps(lot()).get("requests")) {
+            if (demande.has("updateCells") && demande.at("/updateCells/start/rowIndex").asInt() != 0 && demande.at("/updateCells/start/columnIndex").asInt() == colonne) {
+                return demande.at("/updateCells/rows/0/values/0");
+            }
+        }
+        return JSON.missingNode();
     }
 
     @Test
@@ -141,6 +166,96 @@ class GoogleSheetClientTest {
         assertThat(cellules.get(7).at("/userEnteredValue/numberValue").decimalValue()).isEqualByComparingTo("710.85");
         assertThat(cellules.get(8).at("/userEnteredValue/stringValue").asString())
                 .isEqualTo("Numéros d'inscription manquants : TPS, TVQ ; Pièce à vérifier : nom de l'acheteur, description, conditions de paiement");
+    }
+
+    @Test
+    void ca30_chaqueValeurArriveSousSonEnTeteMemeSiLesColonnesSontDansUnAutreOrdre() {
+        entetes = List.of("NOTES", "PHOTO", "TVQ", "TPS", "MONTANT TOTAL", "MONTANT HT", "TYPE", "OBJET", "BOUTIQUE", "DATE");
+
+        ecrire(avec("Garage Iberville", "Pneus", new BigDecimal("30.91"), "Pièce à vérifier : description", List.of(new PhotoLink("Photo 1", "fichier-a"))));
+
+        assertThat(cellule(9).at("/userEnteredValue/numberValue").decimalValue()).as("DATE").isEqualByComparingTo("46306");
+        assertThat(cellule(8).at("/userEnteredValue/stringValue").asString()).as("BOUTIQUE").isEqualTo("Garage Iberville");
+        assertThat(cellule(7).at("/userEnteredValue/stringValue").asString()).as("OBJET").isEqualTo("Pneus");
+        assertThat(cellule(6).at("/userEnteredValue/stringValue").asString()).as("TYPE").isEqualTo("Fournitures");
+        assertThat(cellule(5).has("userEnteredValue")).as("MONTANT HT absent").isFalse();
+        assertThat(cellule(3).at("/userEnteredValue/numberValue").decimalValue()).as("TPS").isEqualByComparingTo("30.91");
+        assertThat(cellule(2).has("userEnteredValue")).as("TVQ absente").isFalse();
+        assertThat(cellule(4).at("/userEnteredValue/numberValue").decimalValue()).as("MONTANT TOTAL").isEqualByComparingTo("35.00");
+        assertThat(cellule(0).at("/userEnteredValue/stringValue").asString()).as("NOTES").isEqualTo("Pièce à vérifier : description");
+        assertThat(cellule(1).at("/userEnteredValue/stringValue").asString()).as("PHOTO").isEqualTo("Photo 1");
+        assertThat(demande("repeatCell").at("/range/startColumnIndex").asInt()).as("le format de date suit la colonne DATE").isEqualTo(9);
+        assertThat(demande("repeatCell").at("/range/endColumnIndex").asInt()).isEqualTo(10);
+    }
+
+    @Test
+    void ca30_lesEnTetesSeLisentSansTenirCompteDeLaCasseNiDesAccentsEtUneColonneInconnueNEstJamaisEcrite() {
+        entetes = List.of("date", "Boutique", "CALCUL", "Objet", "Type", "montant ht", "Tps", "TVQ", "Montant Total", "Notes", "photo");
+
+        ecrire(garageIberville());
+
+        assertThat(cellule(1).at("/userEnteredValue/stringValue").asString()).isEqualTo("Garage Iberville");
+        assertThat(cellule(2).isMissingNode()).as("la colonne CALCUL du propriétaire n'est jamais écrite, donc jamais effacée").isTrue();
+        assertThat(cellule(5).at("/userEnteredValue/numberValue").decimalValue()).isEqualByComparingTo("618.27");
+        assertThat(cellule(8).at("/userEnteredValue/numberValue").decimalValue()).isEqualByComparingTo("710.85");
+        assertThat(cellule(0).at("/userEnteredValue/numberValue").isNumber()).isTrue();
+    }
+
+    @Test
+    void ca43_sansEnTeteBoutiqueAucuneEcritureEtLaCopieEstBloqueePourStructure() {
+        entetes = List.of("DATE", "OBJET", "TYPE", "MONTANT HT", "TPS", "TVQ", "MONTANT TOTAL", "NOTES", "PHOTO");
+
+        assertThatThrownBy(() -> ecrire(garageIberville())).isInstanceOfSatisfying(BlockedGoogleException.class,
+                e -> assertThat(e.motif()).isEqualTo(MotifBlocage.STRUCTURE_SHEET));
+
+        assertThat(sheets.requests()).noneSatisfy(requete -> assertThat(requete.path()).endsWith(":batchUpdate"));
+    }
+
+    @Test
+    void ca43_r24_unEnTeteEnDoubleBloquePourStructureSansRienEcrire() {
+        entetes = List.of("DATE", "BOUTIQUE", "OBJET", "TYPE", "MONTANT HT", "TPS", "tps", "TVQ", "MONTANT TOTAL", "NOTES", "PHOTO");
+
+        assertThatThrownBy(() -> ecrire(garageIberville())).isInstanceOfSatisfying(BlockedGoogleException.class,
+                e -> assertThat(e.motif()).isEqualTo(MotifBlocage.STRUCTURE_SHEET));
+
+        assertThat(sheets.requests()).noneSatisfy(requete -> assertThat(requete.path()).endsWith(":batchUpdate"));
+    }
+
+    @Test
+    void ca43_r24_unOngletSansAucuneLigneDEnTetesBloquePourStructureSansRienEcrire() {
+        entetes = List.of("n'importe quoi", "=HYPERLINK(\"https://exemple.invalid\")");
+
+        assertThatThrownBy(() -> ecrire(garageIberville())).isInstanceOfSatisfying(BlockedGoogleException.class,
+                e -> assertThat(e.motif()).isEqualTo(MotifBlocage.STRUCTURE_SHEET));
+
+        assertThat(sheets.requests()).noneSatisfy(requete -> assertThat(requete.path()).endsWith(":batchUpdate"));
+    }
+
+    @Test
+    void r24_unEnTeteHostileDuSheetEstIgnoreSansEtreRecopieDansLEnvoi() {
+        String formule = "=IMPORTXML(\"https://exemple.invalid\",\"//a\")";
+        entetes = List.of("DATE", "BOUTIQUE", formule, "x".repeat(50_000), "OBJET", "TYPE", "MONTANT HT", "TPS", "TVQ", "MONTANT TOTAL", "NOTES", "PHOTO");
+
+        ecrire(garageIberville());
+
+        assertThat(cellule(1).at("/userEnteredValue/stringValue").asString()).isEqualTo("Garage Iberville");
+        assertThat(cellule(4).isMissingNode()).as("OBJET").isFalse();
+        assertThat(new String(lot().body(), StandardCharsets.UTF_8)).doesNotContain("IMPORTXML").doesNotContain("xxxxxxxxxx");
+    }
+
+    @Test
+    void a03_unOngletEtUnFichierHostilesSontEncodesDansLesAdressesEtLesGuillemetsDoubles() {
+        String fichier = "../x?y=1#z";
+        String onglet = "L'été/2026?#";
+        sheets.answer(requete -> requete.method().equals("GET") && requete.path().equals("/v4/spreadsheets/" + fichier + "/values/'L''été/2026?#'") ? Response.json("{\"values\":[[\"DATE\",\"BOUTIQUE\",\"OBJET\",\"TYPE\",\"MONTANT HT\",\"TPS\",\"TVQ\",\"MONTANT TOTAL\",\"NOTES\",\"PHOTO\"]]}")
+                : requete.method().equals("GET") ? Response.json("{\"sheets\":[{\"properties\":{\"sheetId\":7,\"title\":\"" + onglet + "\",\"gridProperties\":{\"rowCount\":100}}}]}")
+                : Response.json("{}"));
+
+        ecrire(new SheetTarget(fichier, onglet), garageIberville());
+
+        assertThat(sheets.requests()).allSatisfy(requete -> assertThat(requete.rawPath()).startsWith("/v4/spreadsheets/..%2Fx%3Fy%3D1%23z"));
+        assertThat(sheets.requests().stream().map(Request::rawPath)).contains("/v4/spreadsheets/..%2Fx%3Fy%3D1%23z/values/%27L%27%27%C3%A9t%C3%A9%2F2026%3F%23%27");
+        assertThat(sheets.requests()).anySatisfy(requete -> assertThat(requete.path()).endsWith(":batchUpdate"));
     }
 
     @Test
@@ -220,7 +335,7 @@ class GoogleSheetClientTest {
     void r21_uneNouvelleLigneEstCreeeApresLaDerniereLigneGarnieAvecSonIdentifiantInvisibleDansLeMemeLot() {
         ecrire(garageIberville());
 
-        assertThat(corps(lot()).get("requests")).hasSize(3);
+        assertThat(corps(lot()).get("requests")).hasSize(12);
         assertThat(demande("updateCells").at("/start/sheetId").asInt()).isEqualTo(7);
         assertThat(demande("updateCells").at("/start/rowIndex").asInt()).isEqualTo(12);
         assertThat(demande("updateCells").at("/start/columnIndex").asInt()).isZero();
@@ -241,12 +356,12 @@ class GoogleSheetClientTest {
         ecrire(garageIberville());
 
         JsonNode demandes = corps(lot()).get("requests");
-        assertThat(demandes).hasSize(4);
+        assertThat(demandes).hasSize(13);
         assertThat(demandes.get(0).at("/appendDimension/sheetId").asInt()).isEqualTo(7);
         assertThat(demandes.get(0).at("/appendDimension/dimension").asString()).isEqualTo("ROWS");
         assertThat(demandes.get(0).at("/appendDimension/length").asInt()).isEqualTo(1);
         assertThat(demandes.get(1).has("updateCells")).isTrue();
-        assertThat(demandes.get(3).has("createDeveloperMetadata")).isTrue();
+        assertThat(demandes.get(12).has("createDeveloperMetadata")).isTrue();
     }
 
     @Test
@@ -259,11 +374,10 @@ class GoogleSheetClientTest {
         Request recherche = sheets.requests().stream().filter(requete -> requete.path().endsWith("developerMetadata:search")).findFirst().orElseThrow();
         assertThat(corps(recherche).at("/dataFilters/0/developerMetadataLookup/metadataKey").asString()).isEqualTo("recuId");
         assertThat(corps(recherche).at("/dataFilters/0/developerMetadataLookup/metadataValue").asString()).isEqualTo(LIGNE);
-        assertThat(corps(lot()).get("requests")).hasSize(2);
+        assertThat(corps(lot()).get("requests")).hasSize(11);
         assertThat(demande("updateCells").at("/start/rowIndex").asInt()).isEqualTo(4);
         assertThat(demande("repeatCell").at("/range/startRowIndex").asInt()).isEqualTo(4);
         assertThat(demande("createDeveloperMetadata").isMissingNode()).isTrue();
-        assertThat(sheets.requests()).noneSatisfy(requete -> assertThat(requete.path()).contains("/values/"));
     }
 
     @Test

@@ -292,6 +292,20 @@ class RecuCopyServiceTest {
     }
 
     @Test
+    void ca43_uneStructureInattendueDuSheetBloqueLeRecuPourCeMotifApresLeDepotDesPhotosSansEcrireLaLigne() {
+        UUID id = valider(simple("F", null)).recu().id();
+        google.failNextWrite(new BlockedGoogleException(MotifBlocage.STRUCTURE_SHEET));
+
+        copie.processNext();
+
+        assertThat(etat(id)).isEqualTo("BLOQUEE");
+        assertThat(motif(id)).isEqualTo("STRUCTURE_SHEET");
+        assertThat(base.queryForObject("select drive_file_id from photo where recu_id = ?", String.class, id)).isNotNull();
+        assertThat(google.rows()).isEmpty();
+        assertThat(copie.processNext()).isFalse();
+    }
+
+    @Test
     void ca45_uneAutorisationManquanteEnCoursDeCopieBloqueLeRecuPourCeMotif() {
         UUID id = valider(simple("F", null)).recu().id();
         google.failNextDeposit(new BlockedGoogleException(MotifBlocage.AUTORISATION_GOOGLE));

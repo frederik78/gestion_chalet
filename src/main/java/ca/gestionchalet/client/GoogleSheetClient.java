@@ -29,8 +29,6 @@ import tools.jackson.databind.JsonNode;
 public class GoogleSheetClient implements SheetClient {
 
     private static final String METADATA_KEY = "recuId";
-    private static final String USED_RANGE_COLUMNS = "A:Z";
-    private static final int COLUMNS = 10;
     private static final long DAYS_FROM_SHEETS_EPOCH_TO_UNIX_EPOCH = 25569;
     private static final String PHOTO_SEPARATOR = ", ";
 
@@ -58,17 +56,21 @@ public class GoogleSheetClient implements SheetClient {
         JsonNode tabProperties = findTab(authorization, fileId, tab);
         int sheetId = tabProperties.at("/sheetId").asInt();
         Optional<Integer> existing = findRow(authorization, fileId, sheetId, row.rowId());
-        int rowIndex = existing.orElseGet(() -> countUsedRows(authorization, fileId, tab));
+        SheetLayout layout = SheetLayout.read(readGrid(authorization, fileId, tab));
+        int rowIndex = existing.orElseGet(layout::usedRows);
         List<Map<String, Object>> requests = new ArrayList<>();
         if (existing.isEmpty() && rowIndex >= tabProperties.at("/gridProperties/rowCount").asInt()) {
             requests.add(Map.of("appendDimension", Map.of("sheetId", sheetId, "dimension", "ROWS", "length", 1)));
         }
-        requests.add(Map.of("updateCells", Map.of(
-                "start", Map.of("sheetId", sheetId, "rowIndex", rowIndex, "columnIndex", 0),
-                "rows", List.of(Map.of("values", cells(row))),
-                "fields", "userEnteredValue,textFormatRuns")));
+        for (SheetColumn column : SheetColumn.values()) {
+            requests.add(Map.of("updateCells", Map.of(
+                    "start", Map.of("sheetId", sheetId, "rowIndex", rowIndex, "columnIndex", layout.columnOf(column)),
+                    "rows", List.of(Map.of("values", List.of(cell(column, row)))),
+                    "fields", "userEnteredValue,textFormatRuns")));
+        }
+        int dateColumn = layout.columnOf(SheetColumn.DATE);
         requests.add(Map.of("repeatCell", Map.of(
-                "range", Map.of("sheetId", sheetId, "startRowIndex", rowIndex, "endRowIndex", rowIndex + 1, "startColumnIndex", 0, "endColumnIndex", 1),
+                "range", Map.of("sheetId", sheetId, "startRowIndex", rowIndex, "endRowIndex", rowIndex + 1, "startColumnIndex", dateColumn, "endColumnIndex", dateColumn + 1),
                 "cell", Map.of("userEnteredFormat", Map.of("numberFormat", Map.of("type", "DATE", "pattern", "d mmmm yyyy"))),
                 "fields", "userEnteredFormat.numberFormat")));
         if (existing.isEmpty()) {
@@ -114,30 +116,38 @@ public class GoogleSheetClient implements SheetClient {
         return Optional.empty();
     }
 
-    /** Le rang, à partir de 0, de la première ligne libre : l'API ne rend que jusqu'à la dernière ligne garnie. */
-    private int countUsedRows(String authorization, String fileId, String tab) {
-        JsonNode values = calls.call(() -> restClient.get().uri("/v4/spreadsheets/{id}/values/{range}", fileId, "'" + tab.replace("'", "''") + "'!" + USED_RANGE_COLUMNS)
+    /** Les valeurs affichées de l'onglet entier, ligne par ligne : l'API ne rend que jusqu'à la dernière ligne garnie. */
+    private List<List<String>> readGrid(String authorization, String fileId, String tab) {
+        JsonNode values = calls.call(() -> restClient.get().uri("/v4/spreadsheets/{id}/values/{range}", fileId, "'" + tab.replace("'", "''") + "'")
                 .header(HttpHeaders.AUTHORIZATION, authorization).retrieve().body(JsonNode.class));
         if (values == null) {
             throw new TransientGoogleException("REPONSE_ILLISIBLE");
         }
-        return values.path("values").size();
+        List<List<String>> grid = new ArrayList<>();
+        for (JsonNode line : values.path("values")) {
+            List<String> cells = new ArrayList<>();
+            for (JsonNode cell : line) {
+                cells.add(cell.asString(""));
+            }
+            grid.add(cells);
+        }
+        return grid;
     }
 
-    /** DATE, BOUTIQUE, OBJET, TYPE, MONTANT HT, TPS, TVQ, MONTANT TOTAL, NOTES, PHOTO : l'ordre observé. Une valeur absente donne une cellule sans valeur, donc vide (R-08). */
-    private List<Map<String, Object>> cells(SheetRow row) {
-        List<Map<String, Object>> cells = new ArrayList<>(COLUMNS);
-        cells.add(number(row.date() == null ? null : BigDecimal.valueOf(row.date().toEpochDay() + DAYS_FROM_SHEETS_EPOCH_TO_UNIX_EPOCH)));
-        cells.add(text(row.supplier()));
-        cells.add(text(row.object()));
-        cells.add(text(row.expenseType()));
-        cells.add(number(row.amountBeforeTax()));
-        cells.add(number(row.gst()));
-        cells.add(number(row.qst()));
-        cells.add(number(row.total()));
-        cells.add(text(row.notes()));
-        cells.add(photos(row.photos()));
-        return cells;
+    /** Une valeur absente donne une cellule sans valeur, donc vide (R-08). */
+    private Map<String, Object> cell(SheetColumn column, SheetRow row) {
+        return switch (column) {
+            case DATE -> number(row.date() == null ? null : BigDecimal.valueOf(row.date().toEpochDay() + DAYS_FROM_SHEETS_EPOCH_TO_UNIX_EPOCH));
+            case SUPPLIER -> text(row.supplier());
+            case OBJECT -> text(row.object());
+            case EXPENSE_TYPE -> text(row.expenseType());
+            case AMOUNT_BEFORE_TAX -> number(row.amountBeforeTax());
+            case GST -> number(row.gst());
+            case QST -> number(row.qst());
+            case TOTAL -> number(row.total());
+            case NOTES -> text(row.notes());
+            case PHOTO -> photos(row.photos());
+        };
     }
 
     private static Map<String, Object> text(String value) {
