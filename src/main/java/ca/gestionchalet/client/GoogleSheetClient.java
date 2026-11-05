@@ -2,6 +2,7 @@ package ca.gestionchalet.client;
 
 import ca.gestionchalet.client.SheetClient.PhotoLink;
 import ca.gestionchalet.domain.MotifBlocage;
+import ca.gestionchalet.domain.SheetTarget;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -12,7 +13,6 @@ import java.util.Optional;
 import java.util.function.Supplier;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriUtils;
 import tools.jackson.databind.JsonNode;
@@ -36,31 +36,29 @@ public class GoogleSheetClient implements SheetClient {
 
     private final RestClient restClient;
     private final GoogleCalls calls;
-    private final String fileId;
-    private final String tab;
     private final String photoLinkTemplate;
 
     /**
      * @param photoLinkTemplate adresse d'un fichier Drive, où {@code {id}} est l'identifiant renvoyé par Drive
      */
-    public GoogleSheetClient(RestClient restClient, Supplier<Optional<String>> accessTokens, String fileId, String tab, String photoLinkTemplate) {
+    public GoogleSheetClient(RestClient restClient, Supplier<Optional<String>> accessTokens, String photoLinkTemplate) {
         this.restClient = restClient;
         this.calls = new GoogleCalls(accessTokens);
-        this.fileId = fileId;
-        this.tab = tab;
         this.photoLinkTemplate = photoLinkTemplate;
     }
 
     @Override
-    public void write(SheetRow row) {
-        if (!StringUtils.hasText(fileId) || !StringUtils.hasText(tab)) {
+    public void write(SheetTarget target, SheetRow row) {
+        if (!target.isUsable()) {
             throw new BlockedGoogleException(MotifBlocage.FICHIER_INACCESSIBLE);
         }
+        String fileId = target.fileId();
+        String tab = target.tab();
         String authorization = calls.bearer();
-        JsonNode tabProperties = findTab(authorization);
+        JsonNode tabProperties = findTab(authorization, fileId, tab);
         int sheetId = tabProperties.at("/sheetId").asInt();
-        Optional<Integer> existing = findRow(authorization, sheetId, row.rowId());
-        int rowIndex = existing.orElseGet(() -> countUsedRows(authorization));
+        Optional<Integer> existing = findRow(authorization, fileId, sheetId, row.rowId());
+        int rowIndex = existing.orElseGet(() -> countUsedRows(authorization, fileId, tab));
         List<Map<String, Object>> requests = new ArrayList<>();
         if (existing.isEmpty() && rowIndex >= tabProperties.at("/gridProperties/rowCount").asInt()) {
             requests.add(Map.of("appendDimension", Map.of("sheetId", sheetId, "dimension", "ROWS", "length", 1)));
@@ -83,7 +81,7 @@ public class GoogleSheetClient implements SheetClient {
     }
 
     /** L'onglet de la configuration, par son titre exact : absent, il est refusé comme un fichier inaccessible (section 8 du PRD). */
-    private JsonNode findTab(String authorization) {
+    private JsonNode findTab(String authorization, String fileId, String tab) {
         JsonNode file = calls.call(() -> restClient.get()
                 .uri(uri -> uri.path("/v4/spreadsheets/{id}").queryParam("fields", "sheets.properties(sheetId,title,gridProperties.rowCount)").build(fileId))
                 .header(HttpHeaders.AUTHORIZATION, authorization).retrieve().body(JsonNode.class));
@@ -99,7 +97,7 @@ public class GoogleSheetClient implements SheetClient {
     }
 
     /** La ligne qui porte déjà cet identifiant dans cet onglet, où qu'elle ait été déplacée (R-21). */
-    private Optional<Integer> findRow(String authorization, int sheetId, String rowId) {
+    private Optional<Integer> findRow(String authorization, String fileId, int sheetId, String rowId) {
         Map<String, Object> lookup = Map.of("dataFilters", List.of(Map.of("developerMetadataLookup",
                 Map.of("metadataKey", METADATA_KEY, "metadataValue", rowId))));
         JsonNode result = calls.call(() -> restClient.post().uri("/v4/spreadsheets/{id}/developerMetadata:search", fileId)
@@ -117,7 +115,7 @@ public class GoogleSheetClient implements SheetClient {
     }
 
     /** Le rang, à partir de 0, de la première ligne libre : l'API ne rend que jusqu'à la dernière ligne garnie. */
-    private int countUsedRows(String authorization) {
+    private int countUsedRows(String authorization, String fileId, String tab) {
         JsonNode values = calls.call(() -> restClient.get().uri("/v4/spreadsheets/{id}/values/{range}", fileId, "'" + tab.replace("'", "''") + "'!" + USED_RANGE_COLUMNS)
                 .header(HttpHeaders.AUTHORIZATION, authorization).retrieve().body(JsonNode.class));
         if (values == null) {

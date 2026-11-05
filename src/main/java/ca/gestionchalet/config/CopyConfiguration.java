@@ -5,8 +5,11 @@ import ca.gestionchalet.client.GoogleDriveClient;
 import ca.gestionchalet.client.GoogleSheetClient;
 import ca.gestionchalet.client.SheetClient;
 import ca.gestionchalet.domain.CopyRules;
+import ca.gestionchalet.domain.SheetTarget;
 import ca.gestionchalet.service.GoogleTokenService;
 import java.net.http.HttpClient;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -29,7 +32,8 @@ public class CopyConfiguration {
 
     @Bean
     CopyRules copyRules() {
-        return new CopyRules(copy.fichier(), copy.onglet());
+        return new CopyRules(copy.annees().entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, entry -> new SheetTarget(entry.getValue().fichier(), entry.getValue().onglet()))));
     }
 
     @Bean
@@ -39,7 +43,7 @@ public class CopyConfiguration {
 
     @Bean
     SheetClient sheetClient(GoogleTokenService tokens) {
-        return new GoogleSheetClient(restClient(copy.adresseSheets()), tokens::accessToken, copy.fichier(), copy.onglet(), copy.adresseLienFichier());
+        return new GoogleSheetClient(restClient(copy.adresseSheets()), tokens::accessToken, copy.adresseLienFichier());
     }
 
     /** Le client HTTP du JDK, comme celui des jetons : en mode flux, {@code HttpURLConnection} perd le corps d'un 401. Sans délai, un Google muet retiendrait la copie sans fin. */

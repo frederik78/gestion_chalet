@@ -7,6 +7,7 @@ import ca.gestionchalet.client.SheetClient.PhotoLink;
 import ca.gestionchalet.client.SheetClient.SheetRow;
 import ca.gestionchalet.client.TransientGoogleException;
 import ca.gestionchalet.domain.MotifBlocage;
+import ca.gestionchalet.domain.SheetTarget;
 import ca.gestionchalet.repository.RecuRepository;
 import ca.gestionchalet.service.dto.RecuValidationDTO;
 import ca.gestionchalet.service.dto.RecuValidationResult;
@@ -128,6 +129,18 @@ class RecuCopyServiceTest {
         assertThat(ligne.total()).isEqualByComparingTo("710.85");
         assertThat(ligne.notes()).isEqualTo(NOTES_GARAGE);
         assertThat(etat(id)).isEqualTo("COPIEE");
+    }
+
+    @Test
+    void ca31_lAnneeDuRecuChoisitLeFichierEtLOngletDeLaCorrespondanceEtAucunAutre() {
+        UUID de2026 = valider(garageIberville()).recu().id();
+        UUID de2025 = valider(new ValeursDTO(LocalDate.of(2025, 11, 20), "Familiprix", null, "Fournitures", null, null, null, 1586L, null, null)).recu().id();
+
+        copie.processNext();
+        copie.processNext();
+
+        assertThat(google.targetOf(de2026.toString())).isEqualTo(new SheetTarget("fichier-essai", "Comptes 2026"));
+        assertThat(google.targetOf(de2025.toString())).isEqualTo(new SheetTarget("fichier-essai-2025", "Comptes 2025"));
     }
 
     @Test

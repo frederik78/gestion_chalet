@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import ca.gestionchalet.client.SheetClient.PhotoLink;
 import ca.gestionchalet.client.SheetClient.SheetRow;
 import ca.gestionchalet.domain.MotifBlocage;
+import ca.gestionchalet.domain.SheetTarget;
 import ca.gestionchalet.support.ApiStub;
 import ca.gestionchalet.support.ApiStub.Request;
 import ca.gestionchalet.support.ApiStub.Response;
@@ -72,14 +73,14 @@ class GoogleSheetClientTest {
         return Response.status(404);
     }
 
-    private GoogleSheetClient client() {
-        return client(FICHIER, ONGLET);
+    private void ecrire(SheetRow ligne) {
+        ecrire(new SheetTarget(FICHIER, ONGLET), ligne);
     }
 
-    private GoogleSheetClient client(String fichier, String onglet) {
+    private void ecrire(SheetTarget cible, SheetRow ligne) {
         JdkClientHttpRequestFactory fabrique = new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build());
         fabrique.setReadTimeout(Duration.ofSeconds(3));
-        return new GoogleSheetClient(RestClient.builder().requestFactory(fabrique).baseUrl(sheets.address()).build(), () -> jetons.get(), fichier, onglet, LIEN);
+        new GoogleSheetClient(RestClient.builder().requestFactory(fabrique).baseUrl(sheets.address()).build(), () -> jetons.get(), LIEN).write(cible, ligne);
     }
 
     private static SheetRow garageIberville() {
@@ -117,7 +118,7 @@ class GoogleSheetClientTest {
 
     @Test
     void ca38_laLigneEcriteVautLesValeursDuRecuEnVraiesDatesEtEnNombres() {
-        client().write(garageIberville());
+        ecrire(garageIberville());
 
         JsonNode cellules = cellules();
         assertThat(cellules).hasSize(10);
@@ -144,7 +145,7 @@ class GoogleSheetClientTest {
 
     @Test
     void ca38_lesMontantsSontDesNombresDuCorpsJsonEtNonDesTextes() {
-        client().write(garageIberville());
+        ecrire(garageIberville());
 
         assertThat(cellules().get(4).at("/userEnteredValue/numberValue").isNumber()).isTrue();
         assertThat(new String(lot().body(), StandardCharsets.UTF_8)).contains("\"numberValue\":618.27").contains("\"numberValue\":710.85");
@@ -152,10 +153,10 @@ class GoogleSheetClientTest {
 
     @Test
     void ca13_uneTaxeAbsenteDonneUneCelluleVideEtUnZeroUneCelluleAZero() {
-        client().write(avec("F", null, null, "", List.of()));
+        ecrire(avec("F", null, null, "", List.of()));
         JsonNode sansTps = cellules();
         sheets.forget();
-        client().write(avec("F", null, BigDecimal.ZERO, "", List.of()));
+        ecrire(avec("F", null, BigDecimal.ZERO, "", List.of()));
         JsonNode avecZero = cellules();
 
         assertThat(sansTps.get(5).has("userEnteredValue")).isFalse();
@@ -165,7 +166,7 @@ class GoogleSheetClientTest {
 
     @Test
     void ca40_sansAlerteLaCelluleNotesEstVide() {
-        client().write(avec("F", null, null, "", List.of()));
+        ecrire(avec("F", null, null, "", List.of()));
 
         assertThat(cellules().get(8).has("userEnteredValue")).isFalse();
         assertThat(cellules().get(2).has("userEnteredValue")).isFalse();
@@ -173,7 +174,7 @@ class GoogleSheetClientTest {
 
     @Test
     void ca44_lesLiensDeLaCellulePhotoVisentLesFichiersDriveDansUneSeuleCellule() {
-        client().write(avec("F", null, null, "", List.of(new PhotoLink("Photo 1", "fichier-a"), new PhotoLink("Photo 2", "fichier-b"))));
+        ecrire(avec("F", null, null, "", List.of(new PhotoLink("Photo 1", "fichier-a"), new PhotoLink("Photo 2", "fichier-b"))));
 
         JsonNode photo = cellules().get(9);
         assertThat(photo.at("/userEnteredValue/stringValue").asString()).isEqualTo("Photo 1, Photo 2");
@@ -189,14 +190,14 @@ class GoogleSheetClientTest {
 
     @Test
     void a03_unIdentifiantDeFichierNeSortPasDeLAdresseDuLien() {
-        client().write(avec("F", null, null, "", List.of(new PhotoLink("Photo 1", "a/b?c=d#e"))));
+        ecrire(avec("F", null, null, "", List.of(new PhotoLink("Photo 1", "a/b?c=d#e"))));
 
         assertThat(cellules().get(9).at("/textFormatRuns/0/format/link/uri").asString()).isEqualTo("https://drive.exemple.invalid/fichier/a%2Fb%3Fc=d%23e/voir");
     }
 
     @Test
     void ca44_unSeulLienNeLaisseAucunPassageSansLien() {
-        client().write(avec("F", null, null, "", List.of(new PhotoLink("Photo 1", "fichier-a"))));
+        ecrire(avec("F", null, null, "", List.of(new PhotoLink("Photo 1", "fichier-a"))));
 
         assertThat(cellules().get(9).get("textFormatRuns")).hasSize(1);
         assertThat(cellules().get(9).at("/userEnteredValue/stringValue").asString()).isEqualTo("Photo 1");
@@ -204,7 +205,7 @@ class GoogleSheetClientTest {
 
     @Test
     void cs16_desValeursQuiRessemblentADesFormulesSontEcritesCommeTextesLitteraux() {
-        client().write(avec("=IMPORTXML(\"https://exemple.invalid\",\"//a\")", "+SOMME(1;1)", null, "@notes", List.of()));
+        ecrire(avec("=IMPORTXML(\"https://exemple.invalid\",\"//a\")", "+SOMME(1;1)", null, "@notes", List.of()));
 
         JsonNode cellules = cellules();
         assertThat(cellules.get(1).at("/userEnteredValue/stringValue").asString()).isEqualTo("=IMPORTXML(\"https://exemple.invalid\",\"//a\")");
@@ -217,7 +218,7 @@ class GoogleSheetClientTest {
 
     @Test
     void r21_uneNouvelleLigneEstCreeeApresLaDerniereLigneGarnieAvecSonIdentifiantInvisibleDansLeMemeLot() {
-        client().write(garageIberville());
+        ecrire(garageIberville());
 
         assertThat(corps(lot()).get("requests")).hasSize(3);
         assertThat(demande("updateCells").at("/start/sheetId").asInt()).isEqualTo(7);
@@ -237,7 +238,7 @@ class GoogleSheetClientTest {
     void r21_sansPlaceDansLOngletUneLigneEstAjouteeDansLeMemeLot() {
         lignesDeLOnglet = 12;
 
-        client().write(garageIberville());
+        ecrire(garageIberville());
 
         JsonNode demandes = corps(lot()).get("requests");
         assertThat(demandes).hasSize(4);
@@ -253,7 +254,7 @@ class GoogleSheetClientTest {
         reponseRecherche = "{\"matchedDeveloperMetadata\":[{\"developerMetadata\":{\"location\":{\"dimensionRange\":"
                 + "{\"sheetId\":7,\"dimension\":\"ROWS\",\"startIndex\":4,\"endIndex\":5}}}}]}";
 
-        client().write(garageIberville());
+        ecrire(garageIberville());
 
         Request recherche = sheets.requests().stream().filter(requete -> requete.path().endsWith("developerMetadata:search")).findFirst().orElseThrow();
         assertThat(corps(recherche).at("/dataFilters/0/developerMetadataLookup/metadataKey").asString()).isEqualTo("recuId");
@@ -270,7 +271,7 @@ class GoogleSheetClientTest {
         reponseRecherche = "{\"matchedDeveloperMetadata\":[{\"developerMetadata\":{\"location\":{\"dimensionRange\":"
                 + "{\"sheetId\":3,\"dimension\":\"ROWS\",\"startIndex\":4,\"endIndex\":5}}}}]}";
 
-        client().write(garageIberville());
+        ecrire(garageIberville());
 
         assertThat(demande("updateCells").at("/start/sheetId").asInt()).isEqualTo(7);
         assertThat(demande("updateCells").at("/start/rowIndex").asInt()).isEqualTo(12);
@@ -278,7 +279,7 @@ class GoogleSheetClientTest {
 
     @Test
     void r21_aucuneRequeteNeVaVersUnAutreOngletQueCeluiDeLaConfiguration() {
-        client().write(garageIberville());
+        ecrire(garageIberville());
 
         assertThat(sheets.requests()).allSatisfy(requete -> assertThat(requete.path()).startsWith("/v4/spreadsheets/" + FICHIER));
         assertThat(sheets.requests()).noneSatisfy(requete -> assertThat(requete.path()).contains("Autre"));
@@ -287,16 +288,16 @@ class GoogleSheetClientTest {
     @ParameterizedTest
     @ValueSource(strings = {"", " "})
     void r24_sansFichierOuSansOngletConfiguresAucuneRequeteNePartEtLaCopieEstBloquee(String vide) {
-        assertThatThrownBy(() -> client(vide, ONGLET).write(garageIberville())).isInstanceOfSatisfying(BlockedGoogleException.class,
+        assertThatThrownBy(() -> ecrire(new SheetTarget(vide, ONGLET), garageIberville())).isInstanceOfSatisfying(BlockedGoogleException.class,
                 e -> assertThat(e.motif()).isEqualTo(MotifBlocage.FICHIER_INACCESSIBLE));
-        assertThatThrownBy(() -> client(FICHIER, vide).write(garageIberville())).isInstanceOf(BlockedGoogleException.class);
+        assertThatThrownBy(() -> ecrire(new SheetTarget(FICHIER, vide), garageIberville())).isInstanceOf(BlockedGoogleException.class);
 
         assertThat(sheets.requests()).isEmpty();
     }
 
     @Test
     void r24_unOngletAbsentBloqueLaCopieSansRienEcrire() {
-        assertThatThrownBy(() -> client(FICHIER, "Comptes 2030").write(garageIberville())).isInstanceOfSatisfying(BlockedGoogleException.class,
+        assertThatThrownBy(() -> ecrire(new SheetTarget(FICHIER, "Comptes 2030"), garageIberville())).isInstanceOfSatisfying(BlockedGoogleException.class,
                 e -> assertThat(e.motif()).isEqualTo(MotifBlocage.FICHIER_INACCESSIBLE));
 
         assertThat(sheets.requests()).noneSatisfy(requete -> assertThat(requete.path()).endsWith(":batchUpdate"));
@@ -306,7 +307,7 @@ class GoogleSheetClientTest {
     void r20_sansAutorisationAucuneRequeteNePart() {
         jetons = Optional::empty;
 
-        assertThatThrownBy(() -> client().write(garageIberville())).isInstanceOfSatisfying(BlockedGoogleException.class,
+        assertThatThrownBy(() -> ecrire(garageIberville())).isInstanceOfSatisfying(BlockedGoogleException.class,
                 e -> assertThat(e.motif()).isEqualTo(MotifBlocage.AUTORISATION_GOOGLE));
 
         assertThat(sheets.requests()).isEmpty();
@@ -317,7 +318,7 @@ class GoogleSheetClientTest {
     void r20_uneReponse429OuServeurOuUnJetonRefuseEstUnePannePassagere(int statut) {
         sheets.answer(requete -> Response.status(statut));
 
-        assertThatThrownBy(() -> client().write(garageIberville())).isInstanceOf(TransientGoogleException.class);
+        assertThatThrownBy(() -> ecrire(garageIberville())).isInstanceOf(TransientGoogleException.class);
     }
 
     @ParameterizedTest
@@ -325,7 +326,7 @@ class GoogleSheetClientTest {
     void r20_unFichierRefuseOuIntrouvableBloqueLaCopie(int statut) {
         sheets.answer(requete -> Response.status(statut));
 
-        assertThatThrownBy(() -> client().write(garageIberville())).isInstanceOfSatisfying(BlockedGoogleException.class,
+        assertThatThrownBy(() -> ecrire(garageIberville())).isInstanceOfSatisfying(BlockedGoogleException.class,
                 e -> assertThat(e.motif()).isEqualTo(MotifBlocage.FICHIER_INACCESSIBLE));
     }
 
@@ -333,13 +334,13 @@ class GoogleSheetClientTest {
     void r20_uneReponseDeSuccesIllisibleEstUnePannePassagere() {
         sheets.answer(requete -> Response.text(200, "<html>mandataire</html>"));
 
-        assertThatThrownBy(() -> client().write(garageIberville())).isInstanceOf(TransientGoogleException.class);
+        assertThatThrownBy(() -> ecrire(garageIberville())).isInstanceOf(TransientGoogleException.class);
     }
 
     @Test
     void r20_uneEcritureQuiEchoueApresLaLectureEstUnePannePassagereSansRienPerdre() {
         sheets.answer(requete -> requete.path().endsWith(":batchUpdate") ? Response.status(503) : repondre(requete));
 
-        assertThatThrownBy(() -> client().write(garageIberville())).isInstanceOf(TransientGoogleException.class);
+        assertThatThrownBy(() -> ecrire(garageIberville())).isInstanceOf(TransientGoogleException.class);
     }
 }

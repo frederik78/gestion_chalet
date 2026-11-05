@@ -156,10 +156,15 @@ recus:
     adresse-drive: https://www.googleapis.com
     adresse-sheets: https://sheets.googleapis.com
     adresse-lien-fichier: https://drive.google.com/file/d/{id}/view
-    # Avant la structure du Sheet (001-11) : un seul fichier et un seul onglet, colonnes dans l'ordre observé. Vides, aucune ligne n'est écrite et la copie est bloquée.
-    # Ne pas renseigner sur un vrai Sheet avant 001-11 : une ligne s'y ajouterait après la dernière ligne garnie de l'onglet, hors de toute section de mois.
-    fichier: ${RECUS_COPIE_FICHIER:}
-    onglet: ${RECUS_COPIE_ONGLET:}
+    # Le fichier et l'onglet de chaque année de la date d'un reçu (D-18) : aucune entrée par défaut, aucune copie ne part (D-62). Une année absente : le reçu est conservé, ses photos sont
+    # déposées, la ligne attend l'ajout de l'année (ANNEE_NON_CONFIGUREE). Une entrée sans fichier ou sans onglet est ignorée. Se renseigne par l'environnement, une année à la fois :
+    #   RECUS_COPIE_ANNEES_2026_FICHIER=<identifiant du fichier>   RECUS_COPIE_ANNEES_2026_ONGLET=Comptes 2026
+    # Avant un vrai Sheet, reste à confirmer sur un fichier d'essai (PRD, section 13) : Q-07 (métadonnée de ligne), la liste déroulante de TYPE conservée à l'insertion, les liens
+    # multiples d'une cellule, et la forme des titres de mois (colonne A, seule cellule de la ligne), non observée.
+    # annees:
+    #   2026:
+    #     fichier: ...
+    #     onglet: Comptes 2026
   securite:
     # Aucun condensé par défaut : à fournir par l'environnement (RECUS_SECURITE_CONDENSE_MOT_DE_PASSE), sinon l'application refuse de démarrer.
     echecs-avant-blocage: 5

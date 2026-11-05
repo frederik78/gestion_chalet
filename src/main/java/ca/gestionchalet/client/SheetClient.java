@@ -1,5 +1,6 @@
 package ca.gestionchalet.client;
 
+import ca.gestionchalet.domain.SheetTarget;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -8,13 +9,13 @@ import java.util.List;
 public interface SheetClient {
 
     /**
-     * Écrit la ligne : si une ligne porte déjà l'identifiant {@link SheetRow#rowId()}, elle est mise à jour, sinon une ligne est créée (R-21). Les valeurs sont écrites
+     * Écrit la ligne dans l'onglet de {@code target} et nulle part ailleurs : si une ligne porte déjà l'identifiant {@link SheetRow#rowId()}, elle est mise à jour, sinon une ligne est créée (R-21). Les valeurs sont écrites
      * telles quelles, jamais interprétées comme une formule (D-19).
      *
      * @throws TransientGoogleException panne passagère : l'appelant réessaiera
      * @throws BlockedGoogleException refus qui attend une action de l'utilisateur
      */
-    void write(SheetRow row);
+    void write(SheetTarget target, SheetRow row);
 
     /**
      * Les valeurs d'une ligne, rien d'autre : les numéros d'inscription n'y figurent pas (D-03, R-25). Un montant absent est {@code null} et donne une cellule vide (R-08).

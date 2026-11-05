@@ -19,8 +19,13 @@ recus:
   # Aucune copie en tâche de fond : un test appelle « traiter le suivant » lui-même ; et aucune adresse de Drive ni de Sheets ne mène hors de la machine.
   copie:
     automatique: false
-    # Un Sheet configuré : sans lui, aucune copie ne part (D-62) ; RecuCopyUnconfiguredRealServerTest les vide.
-    fichier: fichier-essai
-    onglet: Comptes 2026
+    # Deux années configurées : sans entrée, aucune copie ne part (D-62) ; RecuCopyUnconfiguredRealServerTest les vide.
+    annees:
+      2026:
+        fichier: fichier-essai
+        onglet: Comptes 2026
+      2025:
+        fichier: fichier-essai-2025
+        onglet: Comptes 2025
     adresse-drive: http://localhost:9
     adresse-sheets: http://localhost:9

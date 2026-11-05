@@ -27,7 +27,7 @@ import org.springframework.test.context.TestPropertySource;
  * un seul serveur local qui garde chaque requête reçue : il n'en reçoit aucune. Le reçu reste en base, bloqué, et la réponse de validation le dit.
  */
 @RealServerTest
-@TestPropertySource(properties = {"essai.google-en-memoire=false", "recus.copie.automatique=true", "recus.copie.intervalle=1h", "recus.copie.fichier=", "recus.copie.onglet="})
+@TestPropertySource(properties = {"essai.google-en-memoire=false", "recus.copie.automatique=true", "recus.copie.intervalle=1h", "recus.copie.annees.2026.fichier=", "recus.copie.annees.2026.onglet=", "recus.copie.annees.2025.fichier=", "recus.copie.annees.2025.onglet="})
 class RecuCopyUnconfiguredRealServerTest {
 
     private static final GoogleStub GOOGLE = demarrerGoogle();

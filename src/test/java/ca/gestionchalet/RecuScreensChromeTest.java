@@ -33,7 +33,7 @@ import tools.jackson.databind.JsonNode;
  * avec {@code -Dessai.captures=<dossier>} pour garder les captures.
  */
 @RealServerTest
-@TestPropertySource(properties = {"recus.securite.cookie-securise=false", "recus.copie.fichier=", "recus.copie.onglet="})
+@TestPropertySource(properties = {"recus.securite.cookie-securise=false", "recus.copie.annees.2026.fichier=", "recus.copie.annees.2026.onglet="})
 @EnabledIfSystemProperty(named = "essai.chrome", matches = ".*")
 class RecuScreensChromeTest {
 

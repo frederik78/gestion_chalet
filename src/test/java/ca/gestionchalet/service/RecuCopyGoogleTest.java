@@ -54,8 +54,8 @@ class RecuCopyGoogleTest {
     static void adresses(DynamicPropertyRegistry registre) {
         registre.add("recus.copie.adresse-drive", GOOGLE_API::address);
         registre.add("recus.copie.adresse-sheets", GOOGLE_API::address);
-        registre.add("recus.copie.fichier", () -> "fichier-essai");
-        registre.add("recus.copie.onglet", () -> "Comptes 2026");
+        registre.add("recus.copie.annees.2026.fichier", () -> "fichier-essai");
+        registre.add("recus.copie.annees.2026.onglet", () -> "Comptes 2026");
     }
 
     @AfterAll
