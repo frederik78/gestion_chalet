@@ -158,6 +158,9 @@ public class RecuCopyService {
 
     /** Hors transaction : toutes les photos d'abord (R-18), puis la ligne. Une photo déjà déposée n'est pas redéposée. */
     private Outcome send(Job job) {
+        if (!rules.sheetConfigured()) {
+            return new Outcome(Map.of(), Optional.of(MotifBlocage.FICHIER_INACCESSIBLE), false);
+        }
         Map<UUID, String> deposited = new LinkedHashMap<>();
         try {
             List<PhotoLink> links = new ArrayList<>();

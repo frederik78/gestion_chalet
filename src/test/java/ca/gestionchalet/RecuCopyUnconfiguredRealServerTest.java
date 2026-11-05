@@ -2,6 +2,7 @@ package ca.gestionchalet;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ca.gestionchalet.service.RecuCopyService;
 import ca.gestionchalet.support.GoogleStub;
 import ca.gestionchalet.support.RealServerTest;
 import ca.gestionchalet.support.RecuRequests;
@@ -58,6 +59,9 @@ class RecuCopyUnconfiguredRealServerTest {
     @Autowired
     JdbcTemplate base;
 
+    @Autowired
+    RecuCopyService copie;
+
     private TestClient client;
 
     @BeforeEach
@@ -85,5 +89,17 @@ class RecuCopyUnconfiguredRealServerTest {
         assertThat(base.queryForObject("select count(drive_file_id) from photo where recu_id = ?", Long.class, id)).isZero();
         TimeUnit.MILLISECONDS.sleep(500);
         assertThat(GOOGLE.requetes()).as("aucune requête vers Google (jeton, Drive, Sheets)").isEmpty();
+    }
+
+    @Test
+    void d62_unRecuDejaACopierSansFichierNiOngletEstBloqueAvantToutePhotoEtToutJeton() throws Exception {
+        Object id = RecuRequests.valider(client, RecuRequests.corps(RecuRequests.valeurs()), RecuRequests.png()).json().get("id");
+        base.update("update recu set etat_copie = 'A_COPIER', motif_blocage = null where id = ?", id);
+
+        assertThat(copie.processNext()).isTrue();
+
+        assertThat(base.queryForObject("select etat_copie from recu where id = ?", String.class, id)).isEqualTo("BLOQUEE");
+        assertThat(base.queryForObject("select motif_blocage from recu where id = ?", String.class, id)).isEqualTo("FICHIER_INACCESSIBLE");
+        assertThat(GOOGLE.requetes()).as("aucune requête vers Google").isEmpty();
     }
 }
