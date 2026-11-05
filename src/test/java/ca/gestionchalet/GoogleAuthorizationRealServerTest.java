@@ -81,6 +81,7 @@ class GoogleAuthorizationRealServerTest {
 
     @BeforeEach
     void repartirDeZero() {
+        base.update("delete from recu_alerte");
         base.update("delete from photo");
         base.update("delete from recu");
         base.update("delete from autorisation_google");
