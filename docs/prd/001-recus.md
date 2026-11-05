@@ -110,7 +110,7 @@ Transitions autorisées, les seules possibles :
 
 | De | Vers | Quand |
 |---|---|---|
-| (création) | `A_COPIER` | validation ; sans autorisation Google, le reçu passe aussitôt à `BLOQUEE` (CA64) |
+| (création) | `A_COPIER` | validation ; sans fichier ou onglet du Sheet configuré, le reçu passe aussitôt à `BLOQUEE` motif `FICHIER_INACCESSIBLE` (D-62), motif qui l'emporte sur l'absence d'autorisation (D-63) ; sinon, sans autorisation Google, il passe aussitôt à `BLOQUEE` (CA64) |
 | `A_COPIER` | `COPIEE` | photos déposées et ligne écrite, sans changement de version entre-temps |
 | `A_COPIER` | `A_COPIER` | panne passagère : nouvel essai programmé |
 | `A_COPIER` | `BLOQUEE` | un motif de blocage est constaté |
@@ -476,7 +476,7 @@ Sauf mention contraire, Anthropic, Google Sheets et Google Drive sont doublés :
 - **CA63** Given une correction portant le total de 40,00 $ à 600,00 $ When elle est enregistrée Then les alertes et NOTES sont recalculées avec `PIECE_A_VERIFIER`.
 
 ### Autorisation Google
-- **CA64** Given aucune autorisation donnée When un reçu est validé Then il est enregistré (201), `BLOQUEE`, motif `AUTORISATION_GOOGLE`, et `GET /api/google/etat` répond `ABSENTE` (D-17).
+- **CA64** Given aucune autorisation donnée When un reçu est validé Then il est enregistré (201), `BLOQUEE`, motif `AUTORISATION_GOOGLE`, et `GET /api/google/etat` répond `ABSENTE` (D-17). Ce motif suppose le fichier et l'onglet du Sheet configurés ; sinon `FICHIER_INACCESSIBLE` l'emporte (D-63).
 - **CA65** Given l'utilisateur connecté When il suit `GET /api/google/autorisation` et que le rappel revient avec un `state` valide et tous les droits Then l'état est `VALIDE`, les reçus bloqués pour ce motif sont repris aussitôt, et aucune nouvelle autorisation n'est demandée pour les copies suivantes ni après un redémarrage.
 - **CA66** Given une autorisation valide When Google répond `invalid_grant` au renouvellement (expiration ou révocation) Then l'état est `A_RENOUVELER`, les reçus en attente sont `BLOQUEE`, motif `AUTORISATION_GOOGLE`, une validation reste possible, et aucun reçu n'est perdu ; après une nouvelle autorisation, ils sont copiés sans doublon.
 - **CA67** Given un consentement où le droit Drive a été décoché When le rappel arrive Then l'état est `A_RENOUVELER`.
