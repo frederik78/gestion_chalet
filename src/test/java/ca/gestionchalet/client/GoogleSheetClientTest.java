@@ -246,6 +246,20 @@ class GoogleSheetClientTest {
     }
 
     @Test
+    void r24_unEnTeteAcceptePasseLaBorneDeCentCaracteresMaisPasCentUn() {
+        entetes = List.of("DATE" + " ".repeat(96), "BOUTIQUE", "OBJET", "TYPE", "MONTANT HT", "TPS", "TVQ", "MONTANT TOTAL", "NOTES", "PHOTO");
+        ecrire(garageIberville());
+        assertThat(cellule(1).at("/userEnteredValue/stringValue").asString()).isEqualTo("Garage Iberville");
+        sheets.forget();
+
+        entetes = List.of("DATE" + " ".repeat(97), "BOUTIQUE", "OBJET", "TYPE", "MONTANT HT", "TPS", "TVQ", "MONTANT TOTAL", "NOTES", "PHOTO");
+        assertThatThrownBy(() -> ecrire(garageIberville())).isInstanceOfSatisfying(BlockedGoogleException.class,
+                e -> assertThat(e.motif()).isEqualTo(MotifBlocage.STRUCTURE_SHEET));
+
+        assertThat(sheets.requests()).noneSatisfy(requete -> assertThat(requete.path()).endsWith(":batchUpdate"));
+    }
+
+    @Test
     void a03_unOngletEtUnFichierHostilesSontEncodesDansLesAdressesEtLesGuillemetsDoubles() {
         String fichier = "../x?y=1#z";
         String onglet = "L'été/2026?#";

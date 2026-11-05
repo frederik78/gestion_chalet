@@ -99,4 +99,17 @@ class RecuCopyYearNotConfiguredRealServerTest {
         assertThat(google.rows()).hasSize(1);
         assertThat(google.depositCalls()).as("les photos ne sont pas redéposées").isEqualTo(2);
     }
+
+    @Test
+    void ca32_d63_sansAutorisationGoogleUneAnneeAbsenteAttendLAutorisationCarElleSeuleLaisseDeposerLesPhotos() {
+        base.update("delete from autorisation_google");
+        Map<String, Object> valeurs = RecuRequests.valeurs();
+        valeurs.put("date", "2024-05-02");
+
+        Reponse reponse = RecuRequests.valider(client, RecuRequests.corps(valeurs), RecuRequests.png());
+
+        assertThat(reponse.statut()).isEqualTo(201);
+        assertThat(reponse.json()).containsEntry("etatCopie", "BLOQUEE").containsEntry("motifBlocage", "AUTORISATION_GOOGLE");
+        assertThat(google.journal()).isEmpty();
+    }
 }

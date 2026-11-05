@@ -18,13 +18,16 @@ import org.springframework.web.util.UriUtils;
 import tools.jackson.databind.JsonNode;
 
 /**
- * Google Sheets par son API REST (v4), sans bibliothèque cliente (voir {@link GoogleDriveClient}). Une ligne s'écrit en un seul lot, donc tout ou rien : ses cellules et son
- * identifiant invisible, une métadonnée de développeur attachée à la ligne, qui la suit quand d'autres lignes s'insèrent (R-21, Q-07 à confirmer à l'essai réel).
- * Les valeurs s'écrivent par {@code userEnteredValue.stringValue}, jamais par {@code formulaValue} ni par un mode de saisie qui interprète le texte (D-19).
+ * Google Sheets par son API REST (v4), sans bibliothèque cliente (voir {@link GoogleDriveClient}). Le fichier et l'onglet viennent de l'appelant ({@link SheetTarget}) : aucune requête
+ * ne vise un autre onglet. Une ligne s'écrit en un seul lot, donc tout ou rien : ses cellules et son identifiant invisible, une métadonnée de développeur attachée à la ligne, qui la suit
+ * quand d'autres lignes s'insèrent (R-21, Q-07 à confirmer à l'essai réel). Les valeurs s'écrivent par {@code userEnteredValue.stringValue}, jamais par {@code formulaValue} ni par un
+ * mode de saisie qui interprète le texte (D-19).
  *
- * <p><b>Limite, jusqu'à la structure du Sheet (001-11) et le placement par mois (001-07) :</b> les colonnes sont celles de l'ordre observé (DATE à PHOTO, de A à J), une nouvelle
- * ligne se place après la dernière ligne garnie de l'onglet, et le fichier et l'onglet viennent de la configuration, sans repérage des en-têtes. Sans fichier ou sans onglet
- * configuré, aucune requête ne part : la copie est bloquée. Ne pas configurer un vrai Sheet avant 001-11.
+ * <p>Les colonnes se repèrent par leur en-tête, PHOTO s'ajoute si elle manque, et la ligne s'insère dans la section de son mois ({@link SheetLayout}) ; une structure inattendue
+ * bloque la copie avant toute écriture. Le nom de l'onglet et l'identifiant du fichier, venus de la configuration, sont encodés dans les adresses, et les guillemets simples d'une
+ * plage doublés. Ce que le Sheet contient (en-têtes, titres) est une entrée externe : comparé, jamais réécrit ni journalisé.
+ *
+ * <p><b>Limite, jusqu'au placement par la date (001-07) :</b> la ligne se place à la fin de la section du mois, sans tenir compte de sa date, et un mois sans section bloque la copie.
  */
 public class GoogleSheetClient implements SheetClient {
 
