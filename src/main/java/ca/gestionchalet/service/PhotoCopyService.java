@@ -61,8 +61,8 @@ public class PhotoCopyService {
             return Optional.empty();
         }
         try {
-            if (format == PhotoFormat.JPEG && hasTooManyScans(file)) {
-                LOG.warn("Copie d'une photo impossible : trop de balayages");
+            if (format == PhotoFormat.JPEG && hasRefusedStructure(file)) {
+                LOG.warn("Copie d'une photo impossible : structure JPEG refusée ou trop de balayages");
                 return Optional.empty();
             }
             int orientation = format == PhotoFormat.JPEG ? readOrientation(file) : ExifOrientation.NONE;
@@ -75,9 +75,9 @@ public class PhotoCopyService {
         }
     }
 
-    private boolean hasTooManyScans(MultipartFile file) throws IOException {
+    private boolean hasRefusedStructure(MultipartFile file) throws IOException {
         try (InputStream content = file.getInputStream()) {
-            return JpegScanCounter.exceeds(content, rules.passesDecodageMax());
+            return JpegScanCounter.refuses(content, rules.passesDecodageMax());
         }
     }
 
@@ -165,7 +165,7 @@ public class PhotoCopyService {
         }
     }
 
-    /** Interrompt un décodage trop long ; le nombre de balayages, lui, est contrôlé avant le décodage par {@link JpegScanCounter}. */
+    /** Interrompt un décodage trop long ; la structure et le nombre de balayages, eux, sont contrôlés avant le décodage par {@link JpegScanCounter}. */
     private static final class DecodingGuard implements IIOReadUpdateListener {
 
         private final ImageReader reader;

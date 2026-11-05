@@ -130,6 +130,82 @@ class PhotoCopyServiceTest {
         assertThat(copier(service(20000, 1, 32, LONG, LONG), photo)).isPresent();
     }
 
+    private static byte[] avecSuite(byte[] jpeg, byte[] suite) {
+        return concat(jpeg, suite);
+    }
+
+    /** Une photo Motion : des FF DA et un FF D9 dans une miniature (Exif), un seul vrai balayage, puis une carte de gain et une vidéo aux FF DA nombreux après la fin d'image. */
+    @Test
+    void uneMotionPhotoAuxFFDANombreuxHorsDeLImageEstCopiee() {
+        byte[] exif = concat(concat(RecuRequests.exif(1, true, "t"), repeter(new byte[] {(byte) 0xFF, (byte) 0xDA}, 40)), new byte[] {(byte) 0xFF, (byte) 0xD9});
+        byte[] photo = RecuRequests.avecSegment(RecuRequests.jpegProgressif(64), 0xE1, concat(exif, repeter(new byte[] {(byte) 0xFF, (byte) 0xDA}, 40)));
+        byte[] motion = avecSuite(photo, concat(new byte[] {0, 0, 0, 1}, repeter(new byte[] {(byte) 0xFF, (byte) 0xDA, 7}, 100)));
+
+        assertThat(copier(service(20000, 1, 32, LONG, LONG), photo)).isPresent();
+        assertThat(copier(service(20000, 1, 32, LONG, LONG), motion)).isPresent();
+    }
+
+    /** Une fausse fin d'image dans un segment ne dispense pas du compte : s'y arrêter laisserait passer les vrais balayages qui suivent. */
+    @Test
+    void desBalayagesEnExcesApresUneFausseFinDImageDansUnSegmentSontRefuses() {
+        byte[] fausseFin = {1, 2, (byte) 0xFF, (byte) 0xD9, 3};
+        byte[] hostile = RecuRequests.avecSegment(RecuRequests.avecBalayagesVides(RecuRequests.jpegProgressif(64), 100), 0xE1, fausseFin);
+
+        assertThat(copier(service(20000, 1, 32, LONG, LONG), hostile)).isEmpty();
+    }
+
+    /** Un flux dont on mesure ce que la copie en lit. */
+    private static final class CountedPhoto extends MockMultipartFile {
+
+        private final java.util.List<long[]> reads = new java.util.ArrayList<>();
+
+        CountedPhoto(byte[] content) {
+            super("photos", content);
+        }
+
+        @Override
+        public InputStream getInputStream() throws IOException {
+            long[] tally = new long[1];
+            reads.add(tally);
+            return new ByteArrayInputStream(getBytes()) {
+                @Override
+                public synchronized int read() {
+                    int value = super.read();
+                    tally[0] += value >= 0 ? 1 : 0;
+                    return value;
+                }
+
+                @Override
+                public synchronized int read(byte[] buffer, int offset, int length) {
+                    int read = super.read(buffer, offset, length);
+                    tally[0] += Math.max(read, 0);
+                    return read;
+                }
+            };
+        }
+
+        long mostRead() {
+            return reads.stream().mapToLong(tally -> tally[0]).max().orElse(0);
+        }
+    }
+
+    /** Le point de sécurité du parcours : un fichier hostile entier collé après une vraie fin d'image n'est ni lu ni décodé, la copie est celle de l'image de tête. */
+    @Test
+    void unFichierHostileColleApresLaFinDImageNEstNiLuNiDecode() {
+        byte[] tete = RecuRequests.jpegProgressif(512);
+        byte[] queue = RecuRequests.avecBalayagesVides(RecuRequests.jpegProgressif(64), 20_000);
+        CountedPhoto seule = new CountedPhoto(tete);
+        CountedPhoto collee = new CountedPhoto(concat(tete, queue));
+        PhotoCopyService service = service(20000, 1, 32, LONG, LONG);
+
+        Optional<byte[]> copieSeule = service.copy(seule, PhotoFormat.JPEG);
+        Optional<byte[]> copieCollee = assertTimeoutPreemptively(ofSeconds(5), () -> service.copy(collee, PhotoFormat.JPEG));
+
+        assertThat(queue.length).isGreaterThan(190_000);
+        assertThat(copieCollee).isPresent().hasValue(copieSeule.orElseThrow());
+        assertThat(collee.mostRead()).isLessThan(tete.length + 32_768);
+    }
+
     @Test
     void unDecodageAuDelaDuDelaiEstInterrompu() {
         byte[] hostile = RecuRequests.avecBalayagesVides(RecuRequests.jpegProgressif(512), 100_000);
