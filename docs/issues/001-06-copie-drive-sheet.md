@@ -3,7 +3,7 @@ id: 001-06
 titre: Dépôt Drive et ligne écrite
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: En cours
+statut: En revue
 depend_de: [001-03, 001-05]
 criteres: [CA13, CA17, CA38, CA39, CA40, CA44, CA45, CS12, CS16, CS26]
 branche: feat/001-06-copie-drive-sheet
