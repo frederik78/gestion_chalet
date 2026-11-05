@@ -28,3 +28,4 @@ Tests rouges puis verts avec un Sheet doublé en mémoire, `scripts/verify-clean
 
 ## Notes
 - 2026-11-04 : Issue issue du découpage de 001-06, approuvé par l'utilisateur. Q-07 reste à confirmer sur un fichier d'essai (section 13 du PRD).
+- 2026-11-04 : Architecture (D-60) : le choix du fichier, de l'onglet et les blocages de structure passent par `RecuCopyService` et son adapter du Sheet.
