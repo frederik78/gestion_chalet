@@ -21,7 +21,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/** Un reçu enregistré est toujours validé : il naît à la validation, à l'état {@code A_COPIER}, quoi que dise le client. */
+/**
+ * Un reçu enregistré est toujours validé : il naît à la validation, à l'état {@code A_COPIER}, quoi que dise le client. Seul il change l'état de sa copie, par les
+ * transitions de la section 4.2 du PRD, les seules possibles : tout autre départ lève {@link IllegalStateException}. Seul le cycle de la copie les appelle (règle d'architecture).
+ */
 @Entity
 @Table(name = "recu")
 public class Recu {
@@ -87,22 +90,50 @@ public class Recu {
         return new Recu(cleIdempotence, valeurs, empreinteContenu, montantTotalLuCents, valideLe, photos, alertes);
     }
 
-    /** Un motif de blocage est constaté : la copie attend une action de l'utilisateur (PRD, section 4.2). */
+    /** {@code A_COPIER} vers {@code BLOQUEE} : un motif de blocage est constaté, la copie attend une action de l'utilisateur. */
     public void bloquer(MotifBlocage motif) {
-        if (etatCopie != EtatCopie.A_COPIER) {
-            throw new IllegalStateException("Transition refusée : " + etatCopie + " vers BLOQUEE");
-        }
+        requireState("BLOQUEE", EtatCopie.A_COPIER);
         etatCopie = EtatCopie.BLOQUEE;
         motifBlocage = motif;
     }
 
-    /** Le blocage est levé : la copie est à refaire (PRD, section 4.2). */
+    /** {@code BLOQUEE} vers {@code A_COPIER} : le blocage est levé, la copie est à refaire. */
     public void reprendre() {
-        if (etatCopie != EtatCopie.BLOQUEE) {
-            throw new IllegalStateException("Transition refusée : " + etatCopie + " vers A_COPIER");
-        }
+        requireState("A_COPIER", EtatCopie.BLOQUEE);
         etatCopie = EtatCopie.A_COPIER;
         motifBlocage = null;
+    }
+
+    /**
+     * {@code A_COPIER} vers {@code COPIEE} : photos déposées et ligne écrite, mais seulement si la version n'a pas changé depuis le début de la copie.
+     *
+     * @return faux si la version a changé : le reçu reste {@code A_COPIER}, à recopier
+     */
+    public boolean terminerCopie(int versionCopiee) {
+        requireState("COPIEE", EtatCopie.A_COPIER);
+        if (versionCopiee != version) {
+            return false;
+        }
+        etatCopie = EtatCopie.COPIEE;
+        return true;
+    }
+
+    /** {@code A_COPIER} vers {@code A_COPIER} : panne passagère, nouvel essai. */
+    public void reessayer() {
+        requireState("A_COPIER", EtatCopie.A_COPIER);
+    }
+
+    /** Vers {@code A_COPIER}, depuis tout état : une correction change la version, et la copie en cours, s'il y en a une, est à refaire (section 8). */
+    public void corriger() {
+        version++;
+        etatCopie = EtatCopie.A_COPIER;
+        motifBlocage = null;
+    }
+
+    private void requireState(String target, EtatCopie... allowed) {
+        if (!List.of(allowed).contains(etatCopie)) {
+            throw new IllegalStateException("Transition refusée : " + etatCopie + " vers " + target);
+        }
     }
 
     public boolean hasContent(String empreinte) {
