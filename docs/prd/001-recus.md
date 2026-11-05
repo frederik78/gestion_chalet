@@ -110,7 +110,7 @@ Transitions autorisées, les seules possibles :
 
 | De | Vers | Quand |
 |---|---|---|
-| (création) | `A_COPIER` | validation |
+| (création) | `A_COPIER` | validation ; sans autorisation Google, le reçu passe aussitôt à `BLOQUEE` (CA64) |
 | `A_COPIER` | `COPIEE` | photos déposées et ligne écrite, sans changement de version entre-temps |
 | `A_COPIER` | `A_COPIER` | panne passagère : nouvel essai programmé |
 | `A_COPIER` | `BLOQUEE` | un motif de blocage est constaté |
@@ -246,6 +246,7 @@ Corps d'erreur : `{ "erreur": "<message générique en français>", "code": "<CO
 | 415 | `FORMAT_NON_ACCEPTE` | format hors liste |
 | 429 | `TROP_DE_TENTATIVES` | avec en-tête `Retry-After` |
 | 500 | `ERREUR_INTERNE` | sans détail |
+| 503 | `GOOGLE_NON_CONFIGURE` | autorisation demandée sans identifiants Google dans la configuration (D-42) |
 
 **Objet `valeurs`** (lecture, contrôle, validation, correction) :
 ```json
@@ -278,7 +279,7 @@ Valeurs fictives pour les numéros et le type.
 | `GET /api/recus/{id}/photos/{rang}` | | 200 : image ; 404 |
 | `POST /api/recus/{id}/copie` | | 202 : relance immédiate, sans effet si `COPIEE` ; 404 |
 | `GET /api/google/etat` | | 200 : `{ "etat": "ABSENTE" \| "VALIDE" \| "A_RENOUVELER" }` |
-| `GET /api/google/autorisation` | | 302 vers le consentement Google |
+| `GET /api/google/autorisation` | | 302 vers le consentement Google ; 503 `GOOGLE_NON_CONFIGURE` sans identifiants Google (D-42) |
 | `GET /api/google/rappel` | `code`, `state` | 302 vers la PWA, toujours vers une adresse fixe |
 
 **Objet lecture** : `{ "resultat": "LU" | "ILLISIBLE" | "ECHEC", "valeurs": { … }, "champsRejetes": ["date"] }`.

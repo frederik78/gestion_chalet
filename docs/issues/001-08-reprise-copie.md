@@ -28,3 +28,4 @@ Tests rouges puis verts avec une horloge doublée, `scripts/verify-clean.sh` à 
 
 ## Notes
 - 2026-11-01 : Parallélisable avec 001-07.
+- 2026-11-04 : Architecture (D-60) : le rythme des essais, `prochaineTentative`, la relance et la reprise au démarrage s'ajoutent à `RecuCopyService`, pas dans un nouveau module. L'heure d'essai est portée par la transition `A_COPIER` vers `A_COPIER` de `Recu`, les durées par `recus.copie.*`.

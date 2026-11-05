@@ -27,3 +27,4 @@ dont le nom ou le `@DisplayName` contient son identifiant (ex. `ca10_…`, `cs07
 Tests rouges puis verts, `scripts/verify-clean.sh` à `VERIFY OK`.
 
 ## Notes
+- 2026-11-04 : Architecture (D-60) : la correction repasse à `A_COPIER` par `RecuCopyService`, seul autorisé à appeler les transitions d'état de copie de `Recu`.
