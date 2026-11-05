@@ -8,6 +8,7 @@ import ca.gestionchalet.client.SheetClient.PhotoLink;
 import ca.gestionchalet.client.SheetClient.SheetRow;
 import ca.gestionchalet.client.TransientGoogleException;
 import ca.gestionchalet.domain.Alerte;
+import ca.gestionchalet.domain.CopyRules;
 import ca.gestionchalet.domain.EtatCopie;
 import ca.gestionchalet.domain.MotifBlocage;
 import ca.gestionchalet.domain.Photo;
@@ -63,9 +64,11 @@ public class RecuCopyService {
     private final TransactionTemplate transactionTemplate;
     private final ObjectProvider<TaskScheduler> scheduler;
     private final Clock clock;
+    private final CopyRules rules;
 
     public RecuCopyService(RecuRepository recuRepository, GoogleAuthorizationService googleAuthorizationService, DriveClient driveClient, SheetClient sheetClient,
-            PhotoStorage photoStorage, TransactionTemplate transactionTemplate, ObjectProvider<TaskScheduler> scheduler, Clock clock) {
+            PhotoStorage photoStorage, TransactionTemplate transactionTemplate, ObjectProvider<TaskScheduler> scheduler, Clock clock,
+            CopyRules rules) {
         this.recuRepository = recuRepository;
         this.googleAuthorizationService = googleAuthorizationService;
         this.driveClient = driveClient;
@@ -74,6 +77,7 @@ public class RecuCopyService {
         this.transactionTemplate = transactionTemplate;
         this.scheduler = scheduler;
         this.clock = clock;
+        this.rules = rules;
     }
 
     /** Ce qu'une copie lit du reçu au premier temps : tout ce qu'il lui faut, hors de la transaction. */
@@ -84,10 +88,15 @@ public class RecuCopyService {
     private record Outcome(Map<UUID, String> deposited, Optional<MotifBlocage> blocked, boolean copied) {
     }
 
-    /** Un reçu vient d'être validé, dans la transaction de la validation : sans autorisation Google, il attend (CA64) ; sinon, la copie est réveillée une fois la validation enregistrée. */
+    /**
+     * Un reçu vient d'être validé, dans la transaction de la validation : sans fichier ou onglet du Sheet configuré (D-62), il est bloqué sans qu'aucun appel à Google ne
+     * parte, pas même celui d'un jeton ; sans autorisation Google, il attend (CA64) ; sinon, la copie est réveillée une fois la validation enregistrée.
+     */
     @Transactional(propagation = Propagation.MANDATORY)
     public void receiptValidated(Recu recu) {
-        if (googleAuthorizationService.isValid()) {
+        if (!rules.sheetConfigured()) {
+            recu.bloquer(MotifBlocage.FICHIER_INACCESSIBLE);
+        } else if (googleAuthorizationService.isValid()) {
             wakeAfterCommit();
         } else {
             recu.bloquer(MotifBlocage.AUTORISATION_GOOGLE);

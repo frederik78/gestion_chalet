@@ -272,7 +272,7 @@ Valeurs fictives pour les numéros et le type.
 | `GET /api/configuration` | | 200 : `{ "typesDepense": […], "photosParRecuMax": 5, "tailleParPhotoMaxOctets": …, "formats": ["image/jpeg", "image/png"] }` |
 | `POST /api/lectures` | multipart, parties `photos` | 200 : objet lecture ; 400, 413, 415, 429 |
 | `POST /api/recus/controles` | JSON : `valeurs`, `montantTotalLuCents` (facultatif), `recuId` (facultatif, en correction) | 200 : `{ "alertes": [ … ] }` ; 400. N'enregistre rien |
-| `POST /api/recus` | multipart : partie `recu` en JSON (`cleIdempotence`, `valeurs`, `montantTotalLuCents`) et parties `photos` | 201 : objet reçu ; 200 si la clé est déjà connue avec le même contenu ; 400, 409, 413, 415 |
+| `POST /api/recus` | multipart : partie `recu` en JSON (`cleIdempotence`, `valeurs`, `montantTotalLuCents`) et parties `photos` | 201 : objet reçu, dont l'état de copie est déjà `BLOQUEE` avec le motif `FICHIER_INACCESSIBLE` quand le fichier ou l'onglet du Sheet n'est pas configuré (D-62) ; 200 si la clé est déjà connue avec le même contenu ; 400, 409, 413, 415 |
 | `GET /api/recus` | `annee`, `etatCopie`, `page`, `taille` (100 au plus) | 200 : `{ "recus": [ … ], "total": n }`, par date décroissante |
 | `GET /api/recus/{id}` | | 200 : objet reçu ; 404 |
 | `PUT /api/recus/{id}` | JSON : `version`, `valeurs` | 200 : objet reçu ; 400, 404, 409 |
@@ -289,11 +289,11 @@ Valeurs fictives pour les numéros et le type.
 
 Les trois résultats répondent 200 : un échec de lecture n'est pas une erreur de la requête, et mène à la saisie manuelle.
 
-**Objet reçu** : `{ "id", "version", "valeurs", "montantTotalLuCents", "alertes": [{ "code", "message", "ecartCents" }], "etatCopie", "motifBlocage", "prochaineTentative", "photos": [{ "rang", "format", "taille", "lienDrive" }], "valideLe", "corrigeLe" }`. `ecartCents` n'existe que pour `ECART_CALCUL`. Aucun jeton, aucun chemin de fichier local, aucun identifiant technique de fichier ou d'onglet.
+**Objet reçu** : `{ "id", "version", "valeurs", "montantTotalLuCents", "alertes": [{ "code", "message", "ecartCents" }], "etatCopie", "motifBlocage", "prochaineTentative", "photos": [{ "rang", "format", "taille", "lienDrive" }], "valideLe", "corrigeLe" }`. `ecartCents` n'existe que pour `ECART_CALCUL`. `etatCopie` et `motifBlocage` sont ceux de la validation même : sans fichier ou onglet du Sheet configuré, aucun appel à Google ne part (ni jeton, ni Drive, ni Sheets), aucune photo n'est déposée, et la réponse porte `BLOQUEE` et `FICHIER_INACCESSIBLE` (D-62). Aucun jeton, aucun chemin de fichier local, aucun identifiant technique de fichier ou d'onglet.
 
 ### 7.2 PWA
 
-Application installable (D-13), sans mode hors ligne : aucune réponse de l'API ni photo n'est mise en cache. Écrans : connexion ; prise de vue (photographier ou importer, plusieurs photos, retrait d'une photo avant lecture) ; validation (photos à côté du formulaire, alertes visibles, action d'abandon) ; liste et détail des reçus avec état de la copie, relance et correction. Un bandeau signale une autorisation Google à donner ou à renouveler et le nombre de reçus bloqués.
+Application installable (D-13), sans mode hors ligne : aucune réponse de l'API ni photo n'est mise en cache. Écrans : connexion ; prise de vue (photographier ou importer, plusieurs photos, retrait d'une photo avant lecture) ; validation (photos à côté du formulaire, alertes visibles, action d'abandon) ; liste et détail des reçus avec état de la copie, relance et correction. Un bandeau signale une autorisation Google à donner ou à renouveler et le nombre de reçus bloqués. Après une validation dont la réponse porte le motif `FICHIER_INACCESSIBLE`, l'écran affiche « Reçu enregistré. Copie vers Google en attente : fichier ou onglet du Sheet non configuré. » (D-62).
 
 ### 7.3 Lecture par le modèle (Anthropic)
 

@@ -4,6 +4,7 @@ import ca.gestionchalet.client.DriveClient;
 import ca.gestionchalet.client.GoogleDriveClient;
 import ca.gestionchalet.client.GoogleSheetClient;
 import ca.gestionchalet.client.SheetClient;
+import ca.gestionchalet.domain.CopyRules;
 import ca.gestionchalet.service.GoogleTokenService;
 import java.net.http.HttpClient;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -24,6 +25,11 @@ public class CopyConfiguration {
 
     public CopyConfiguration(ApplicationProperties applicationProperties) {
         copy = applicationProperties.copie();
+    }
+
+    @Bean
+    CopyRules copyRules() {
+        return new CopyRules(copy.fichier(), copy.onglet());
     }
 
     @Bean
