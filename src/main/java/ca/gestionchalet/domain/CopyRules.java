@@ -8,8 +8,8 @@ package ca.gestionchalet.domain;
  */
 public record CopyRules(String fichier, String onglet) {
 
-    /** Sans fichier ou sans onglet, aucune copie ne part : ni jeton, ni Drive, ni Sheets. */
+    /** Sans fichier ou sans onglet, aucune copie ne part : ni jeton, ni Drive, ni Sheets. Un texte fait de séparateurs, espace insécable compris, est vide ({@link ReceiptText#isEmpty}) : {@code isBlank} ne le voit pas. */
     public boolean sheetConfigured() {
-        return fichier != null && !fichier.isBlank() && onglet != null && !onglet.isBlank();
+        return !ReceiptText.isEmpty(fichier) && !ReceiptText.isEmpty(onglet);
     }
 }
