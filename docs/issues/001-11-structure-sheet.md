@@ -3,7 +3,7 @@ id: 001-11
 titre: Structure du Sheet
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: En cours
+statut: En revue
 depend_de: [001-06]
 criteres: [CA30, CA31, CA32, CA41, CA42, CA43]
 branche: feat/001-11-structure-sheet
