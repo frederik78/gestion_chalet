@@ -157,10 +157,12 @@ public class RecuCopyService {
         job.ifPresent(todo -> finish(todo, send(todo)));
     }
 
-    /** Hors transaction : toutes les photos d'abord (R-18), puis la ligne. Une photo déjà déposée n'est pas redéposée. */
+    /**
+     * Hors transaction : toutes les photos d'abord (R-18), puis la ligne. Une photo déjà déposée n'est pas redéposée. Sans aucune entrée de configuration (D-62), rien ne part ; avec des
+     * entrées mais aucune pour l'année du reçu, les photos sont déposées quand même et la ligne attend l'année (D-18, section 8 du PRD).
+     */
     private Outcome send(Job job) {
-        Optional<SheetTarget> target = rules.sheetFor(job.valeurs().date().getYear());
-        if (target.isEmpty()) {
+        if (!rules.anySheetConfigured()) {
             return new Outcome(Map.of(), Optional.of(MotifBlocage.FICHIER_INACCESSIBLE), false);
         }
         Map<UUID, String> deposited = new LinkedHashMap<>();
@@ -173,6 +175,10 @@ public class RecuCopyService {
                     deposited.put(photo.getId(), fileId);
                 }
                 links.add(new PhotoLink("Photo " + photo.getRang(), fileId));
+            }
+            Optional<SheetTarget> target = rules.sheetFor(job.valeurs().date().getYear());
+            if (target.isEmpty()) {
+                return new Outcome(deposited, Optional.of(MotifBlocage.ANNEE_NON_CONFIGUREE), false);
             }
             sheetClient.write(target.get(), row(job, links));
             return new Outcome(deposited, Optional.empty(), true);
