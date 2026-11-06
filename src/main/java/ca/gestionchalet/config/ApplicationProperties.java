@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.unit.DataSize;
 import org.springframework.validation.annotation.Validated;
@@ -71,20 +72,28 @@ public record ApplicationProperties(@Valid @NotNull Security securite, @Valid @N
     }
 
     /**
-     * Le fichier et l'onglet sont ceux de l'unique copie d'avant la structure du Sheet (001-11) : vides, aucune ligne n'est écrite et la copie est bloquée.
-     *
      * @param automatique vrai : un fil copie les reçus validés, dès qu'ils le sont puis à chaque passage périodique ; faux : seul un appel direct copie
      * @param intervalle attente entre deux passages périodiques
      * @param delaiAppel délai maximal d'un appel à Drive ou à Sheets
      * @param dossierDrive nom du dossier que l'application crée dans Drive (R-28)
-     * @param fichier identifiant du fichier du Sheet
-     * @param onglet titre de l'onglet où s'écrivent les lignes
+     * @param annees le fichier et l'onglet du Sheet de chaque année, clés = année de la date du reçu (D-18) ; sans entrée, ou avec une entrée dont le fichier ou l'onglet est vide, aucune copie ne part
      * @param adresseDrive adresse de l'API de Drive
      * @param adresseSheets adresse de l'API de Sheets
      * @param adresseLienFichier adresse d'un fichier Drive, où {@code {id}} est l'identifiant renvoyé par Drive
      */
     public record Copy(boolean automatique, @NotNull Duration intervalle, @NotNull Duration delaiAppel, @NotBlank String dossierDrive,
-            String fichier, String onglet, @NotBlank String adresseDrive, @NotBlank String adresseSheets, @NotBlank String adresseLienFichier) {
+            Map<Integer, YearSheet> annees, @NotBlank String adresseDrive, @NotBlank String adresseSheets, @NotBlank String adresseLienFichier) {
+
+        public Copy {
+            annees = annees == null ? Map.of() : Map.copyOf(annees);
+        }
+    }
+
+    /**
+     * @param fichier identifiant du fichier du Sheet de l'année
+     * @param onglet titre exact de l'onglet de l'année où s'écrivent les lignes
+     */
+    public record YearSheet(String fichier, String onglet) {
     }
 
     /**

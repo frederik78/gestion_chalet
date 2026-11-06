@@ -15,8 +15,8 @@ import java.util.function.Function;
 /** Serveur HTTP local qui double les API REST de Drive et de Sheets : il garde chaque requête reçue et répond ce que le test décide. Aucun appel ne quitte la machine. */
 public final class ApiStub implements AutoCloseable {
 
-    /** Une requête reçue, corps compris. */
-    public record Request(String method, String path, String query, Map<String, List<String>> headers, byte[] body) {
+    /** Une requête reçue, corps compris ; {@code rawPath} est le chemin tel qu'il est parti, encodé. */
+    public record Request(String method, String path, String rawPath, String query, Map<String, List<String>> headers, byte[] body) {
 
         public String bodyText() {
             return new String(body, StandardCharsets.ISO_8859_1);
@@ -86,7 +86,7 @@ public final class ApiStub implements AutoCloseable {
 
     private void handle(HttpExchange exchange) throws IOException {
         try (exchange) {
-            Request request = new Request(exchange.getRequestMethod(), exchange.getRequestURI().getPath(), exchange.getRequestURI().getQuery(),
+            Request request = new Request(exchange.getRequestMethod(), exchange.getRequestURI().getPath(), exchange.getRequestURI().getRawPath(), exchange.getRequestURI().getQuery(),
                     Map.copyOf(exchange.getRequestHeaders()), exchange.getRequestBody().readAllBytes());
             requests.add(request);
             Response response = handler.apply(request);

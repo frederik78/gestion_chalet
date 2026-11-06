@@ -54,8 +54,8 @@ class RecuCopyGoogleTest {
     static void adresses(DynamicPropertyRegistry registre) {
         registre.add("recus.copie.adresse-drive", GOOGLE_API::address);
         registre.add("recus.copie.adresse-sheets", GOOGLE_API::address);
-        registre.add("recus.copie.fichier", () -> "fichier-essai");
-        registre.add("recus.copie.onglet", () -> "Comptes 2026");
+        registre.add("recus.copie.annees.2026.fichier", () -> "fichier-essai");
+        registre.add("recus.copie.annees.2026.onglet", () -> "Comptes 2026");
     }
 
     @AfterAll
@@ -88,7 +88,7 @@ class RecuCopyGoogleTest {
         GOOGLE_API.answer(RecuCopyGoogleTest::unGoogleVide);
     }
 
-    /** Un Drive sans dossier ni fichier, et un Sheet dont l'onglet de 2026 est vide. */
+    /** Un Drive sans dossier ni fichier, et un Sheet dont l'onglet de 2026 n'a que sa ligne d'en-têtes et les titres de septembre et d'octobre. */
     private static Response unGoogleVide(Request requete) {
         if (requete.is("GET", "/drive/v3/files")) {
             return Response.json("{\"files\":[]}");
@@ -106,7 +106,7 @@ class RecuCopyGoogleTest {
             return Response.json("{}");
         }
         if (requete.path().contains("/values/")) {
-            return Response.json("{}");
+            return Response.json("{\"values\":[[\"DATE\",\"BOUTIQUE\",\"OBJET\",\"TYPE\",\"MONTANT HT\",\"TPS\",\"TVQ\",\"MONTANT TOTAL\",\"NOTES\",\"PHOTO\"],[\"septembre\"],[\"octobre\"]]}");
         }
         return requete.path().endsWith(":batchUpdate") ? Response.json("{}") : Response.status(404);
     }

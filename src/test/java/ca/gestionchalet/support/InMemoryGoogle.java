@@ -3,6 +3,7 @@ package ca.gestionchalet.support;
 import ca.gestionchalet.client.DriveClient;
 import ca.gestionchalet.client.SheetClient;
 import ca.gestionchalet.client.TransientGoogleException;
+import ca.gestionchalet.domain.SheetTarget;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,6 +25,7 @@ public final class InMemoryGoogle implements DriveClient, SheetClient {
     private final List<String> journal = new CopyOnWriteArrayList<>();
     private final Map<UUID, DriveFile> files = new LinkedHashMap<>();
     private final Map<String, SheetRow> rows = new LinkedHashMap<>();
+    private final Map<String, SheetTarget> targets = new LinkedHashMap<>();
     private final AtomicInteger identifiers = new AtomicInteger();
     private final AtomicInteger depositCalls = new AtomicInteger();
     private final AtomicInteger writeCalls = new AtomicInteger();
@@ -50,6 +52,11 @@ public final class InMemoryGoogle implements DriveClient, SheetClient {
     /** Les lignes du Sheet, dans l'ordre où elles ont été créées. */
     public synchronized List<SheetRow> rows() {
         return new ArrayList<>(rows.values());
+    }
+
+    /** Où la ligne d'un reçu a été écrite : le fichier et l'onglet, et nulle part ailleurs (D-18). */
+    public synchronized SheetTarget targetOf(String rowId) {
+        return targets.get(rowId);
     }
 
     public int depositCalls() {
@@ -92,6 +99,7 @@ public final class InMemoryGoogle implements DriveClient, SheetClient {
         journal.clear();
         files.clear();
         rows.clear();
+        targets.clear();
         depositCalls.set(0);
         writeCalls.set(0);
         depositFailure = null;
@@ -125,7 +133,7 @@ public final class InMemoryGoogle implements DriveClient, SheetClient {
     }
 
     @Override
-    public void write(SheetRow row) {
+    public void write(SheetTarget target, SheetRow row) {
         beforeWrite.run();
         writeCalls.incrementAndGet();
         journal.add("sheet:" + row.rowId());
@@ -136,6 +144,7 @@ public final class InMemoryGoogle implements DriveClient, SheetClient {
         }
         synchronized (this) {
             rows.put(row.rowId(), row);
+            targets.put(row.rowId(), target);
         }
         if (loseWriteResponse) {
             loseWriteResponse = false;

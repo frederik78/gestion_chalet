@@ -13,6 +13,7 @@ import ca.gestionchalet.domain.EtatCopie;
 import ca.gestionchalet.domain.MotifBlocage;
 import ca.gestionchalet.domain.Photo;
 import ca.gestionchalet.domain.Recu;
+import ca.gestionchalet.domain.SheetTarget;
 import ca.gestionchalet.domain.Valeurs;
 import ca.gestionchalet.repository.PhotoStorage;
 import ca.gestionchalet.repository.RecuRepository;
@@ -94,7 +95,7 @@ public class RecuCopyService {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void receiptValidated(Recu recu) {
-        if (!rules.sheetConfigured()) {
+        if (!rules.anySheetConfigured()) {
             recu.bloquer(MotifBlocage.FICHIER_INACCESSIBLE);
         } else if (googleAuthorizationService.isValid()) {
             wakeAfterCommit();
@@ -156,9 +157,12 @@ public class RecuCopyService {
         job.ifPresent(todo -> finish(todo, send(todo)));
     }
 
-    /** Hors transaction : toutes les photos d'abord (R-18), puis la ligne. Une photo déjà déposée n'est pas redéposée. */
+    /**
+     * Hors transaction : toutes les photos d'abord (R-18), puis la ligne. Une photo déjà déposée n'est pas redéposée. Sans aucune entrée de configuration (D-62), rien ne part ; avec des
+     * entrées mais aucune pour l'année du reçu, les photos sont déposées quand même et la ligne attend l'année (D-18, section 8 du PRD).
+     */
     private Outcome send(Job job) {
-        if (!rules.sheetConfigured()) {
+        if (!rules.anySheetConfigured()) {
             return new Outcome(Map.of(), Optional.of(MotifBlocage.FICHIER_INACCESSIBLE), false);
         }
         Map<UUID, String> deposited = new LinkedHashMap<>();
@@ -172,7 +176,11 @@ public class RecuCopyService {
                 }
                 links.add(new PhotoLink("Photo " + photo.getRang(), fileId));
             }
-            sheetClient.write(row(job, links));
+            Optional<SheetTarget> target = rules.sheetFor(job.valeurs().date().getYear());
+            if (target.isEmpty()) {
+                return new Outcome(deposited, Optional.of(MotifBlocage.ANNEE_NON_CONFIGUREE), false);
+            }
+            sheetClient.write(target.get(), row(job, links));
             return new Outcome(deposited, Optional.empty(), true);
         } catch (BlockedGoogleException e) {
             return new Outcome(deposited, Optional.of(e.motif()), false);

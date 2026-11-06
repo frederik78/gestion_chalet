@@ -74,4 +74,17 @@ class ReceiptTextTest {
     void d61_lesSeparateursEnBordureSontRetiresDesDeuxCotesMemeSiLeTexteNEnAQueDeLaMatiere() {
         assertThat(ReceiptText.sameSupplier("\u00A0\t \u3000a\u2003\n", "A")).isTrue();
     }
+
+    /** R-22, R-24 : un en-tête ou un titre de mois du Sheet se reconnaît sans tenir compte de la casse, des accents ni des séparateurs en bordure. */
+    @ParameterizedTest
+    @CsvSource({"Montant HT, MONTANT HT", "février, FEVRIER", "Août, aout", "\u00A0décembre , Décembre"})
+    void r22_r24_unLibelleDuSheetSeReconnaitSansCasseNiAccents(String first, String second) {
+        assertThat(ReceiptText.sameLabel(first, second)).isTrue();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"MONTANT HT, MONTANT  HT", "mars, mai", "TPS, TPS."})
+    void r22_r24_deuxLibellesDifferentsRestentDistincts(String first, String second) {
+        assertThat(ReceiptText.sameLabel(first, second)).isFalse();
+    }
 }

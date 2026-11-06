@@ -2,6 +2,7 @@ package ca.gestionchalet.client;
 
 import ca.gestionchalet.client.SheetClient.PhotoLink;
 import ca.gestionchalet.domain.MotifBlocage;
+import ca.gestionchalet.domain.SheetTarget;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -12,65 +13,69 @@ import java.util.Optional;
 import java.util.function.Supplier;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriUtils;
 import tools.jackson.databind.JsonNode;
 
 /**
- * Google Sheets par son API REST (v4), sans bibliothèque cliente (voir {@link GoogleDriveClient}). Une ligne s'écrit en un seul lot, donc tout ou rien : ses cellules et son
- * identifiant invisible, une métadonnée de développeur attachée à la ligne, qui la suit quand d'autres lignes s'insèrent (R-21, Q-07 à confirmer à l'essai réel).
- * Les valeurs s'écrivent par {@code userEnteredValue.stringValue}, jamais par {@code formulaValue} ni par un mode de saisie qui interprète le texte (D-19).
+ * Google Sheets par son API REST (v4), sans bibliothèque cliente (voir {@link GoogleDriveClient}). Le fichier et l'onglet viennent de l'appelant ({@link SheetTarget}) : aucune requête
+ * ne vise un autre onglet. Une ligne s'écrit en un seul lot, donc tout ou rien : ses cellules et son identifiant invisible, une métadonnée de développeur attachée à la ligne, qui la suit
+ * quand d'autres lignes s'insèrent (R-21, Q-07 à confirmer à l'essai réel). Les valeurs s'écrivent par {@code userEnteredValue.stringValue}, jamais par {@code formulaValue} ni par un
+ * mode de saisie qui interprète le texte (D-19).
  *
- * <p><b>Limite, jusqu'à la structure du Sheet (001-11) et le placement par mois (001-07) :</b> les colonnes sont celles de l'ordre observé (DATE à PHOTO, de A à J), une nouvelle
- * ligne se place après la dernière ligne garnie de l'onglet, et le fichier et l'onglet viennent de la configuration, sans repérage des en-têtes. Sans fichier ou sans onglet
- * configuré, aucune requête ne part : la copie est bloquée. Ne pas configurer un vrai Sheet avant 001-11.
+ * <p>Les colonnes se repèrent par leur en-tête, PHOTO s'ajoute si elle manque, et la ligne s'insère dans la section de son mois ({@link SheetLayout}) ; une structure inattendue
+ * bloque la copie avant toute écriture. Le nom de l'onglet et l'identifiant du fichier, venus de la configuration, sont encodés dans les adresses, et les guillemets simples d'une
+ * plage doublés. Ce que le Sheet contient (en-têtes, titres) est une entrée externe : comparé, jamais réécrit ni journalisé.
+ *
+ * <p><b>Limite, jusqu'au placement par la date (001-07) :</b> la ligne se place à la fin de la section du mois, sans tenir compte de sa date, et un mois sans section bloque la copie.
  */
 public class GoogleSheetClient implements SheetClient {
 
     private static final String METADATA_KEY = "recuId";
-    private static final String USED_RANGE_COLUMNS = "A:Z";
-    private static final int COLUMNS = 10;
     private static final long DAYS_FROM_SHEETS_EPOCH_TO_UNIX_EPOCH = 25569;
     private static final String PHOTO_SEPARATOR = ", ";
 
     private final RestClient restClient;
     private final GoogleCalls calls;
-    private final String fileId;
-    private final String tab;
     private final String photoLinkTemplate;
 
     /**
      * @param photoLinkTemplate adresse d'un fichier Drive, où {@code {id}} est l'identifiant renvoyé par Drive
      */
-    public GoogleSheetClient(RestClient restClient, Supplier<Optional<String>> accessTokens, String fileId, String tab, String photoLinkTemplate) {
+    public GoogleSheetClient(RestClient restClient, Supplier<Optional<String>> accessTokens, String photoLinkTemplate) {
         this.restClient = restClient;
         this.calls = new GoogleCalls(accessTokens);
-        this.fileId = fileId;
-        this.tab = tab;
         this.photoLinkTemplate = photoLinkTemplate;
     }
 
     @Override
-    public void write(SheetRow row) {
-        if (!StringUtils.hasText(fileId) || !StringUtils.hasText(tab)) {
+    public void write(SheetTarget target, SheetRow row) {
+        if (!target.isUsable()) {
             throw new BlockedGoogleException(MotifBlocage.FICHIER_INACCESSIBLE);
         }
+        String fileId = target.fileId();
+        String tab = target.tab();
         String authorization = calls.bearer();
-        JsonNode tabProperties = findTab(authorization);
+        JsonNode tabProperties = findTab(authorization, fileId, tab);
         int sheetId = tabProperties.at("/sheetId").asInt();
-        Optional<Integer> existing = findRow(authorization, sheetId, row.rowId());
-        int rowIndex = existing.orElseGet(() -> countUsedRows(authorization));
+        Optional<Integer> existing = findRow(authorization, fileId, sheetId, row.rowId());
+        SheetLayout layout = SheetLayout.read(readGrid(authorization, fileId, tab));
+        Optional<SheetLayout.Placement> placement = existing.isEmpty() ? Optional.of(layout.placementFor(row.date().getMonth())) : Optional.empty();
+        int rowIndex = existing.orElseGet(() -> placement.orElseThrow().insertAt());
         List<Map<String, Object>> requests = new ArrayList<>();
-        if (existing.isEmpty() && rowIndex >= tabProperties.at("/gridProperties/rowCount").asInt()) {
-            requests.add(Map.of("appendDimension", Map.of("sheetId", sheetId, "dimension", "ROWS", "length", 1)));
+        if (layout.photoColumnToAdd()) {
+            addPhotoColumn(requests, layout, sheetId, tabProperties.at("/gridProperties/columnCount").asInt());
         }
-        requests.add(Map.of("updateCells", Map.of(
-                "start", Map.of("sheetId", sheetId, "rowIndex", rowIndex, "columnIndex", 0),
-                "rows", List.of(Map.of("values", cells(row))),
-                "fields", "userEnteredValue,textFormatRuns")));
+        placement.ifPresent(where -> requests.addAll(newRow(layout, where, sheetId, tabProperties.at("/gridProperties/rowCount").asInt())));
+        for (SheetColumn column : SheetColumn.values()) {
+            requests.add(Map.of("updateCells", Map.of(
+                    "start", Map.of("sheetId", sheetId, "rowIndex", rowIndex, "columnIndex", layout.columnOf(column)),
+                    "rows", List.of(Map.of("values", List.of(cell(column, row)))),
+                    "fields", "userEnteredValue,textFormatRuns")));
+        }
+        int dateColumn = layout.columnOf(SheetColumn.DATE);
         requests.add(Map.of("repeatCell", Map.of(
-                "range", Map.of("sheetId", sheetId, "startRowIndex", rowIndex, "endRowIndex", rowIndex + 1, "startColumnIndex", 0, "endColumnIndex", 1),
+                "range", Map.of("sheetId", sheetId, "startRowIndex", rowIndex, "endRowIndex", rowIndex + 1, "startColumnIndex", dateColumn, "endColumnIndex", dateColumn + 1),
                 "cell", Map.of("userEnteredFormat", Map.of("numberFormat", Map.of("type", "DATE", "pattern", "d mmmm yyyy"))),
                 "fields", "userEnteredFormat.numberFormat")));
         if (existing.isEmpty()) {
@@ -83,9 +88,9 @@ public class GoogleSheetClient implements SheetClient {
     }
 
     /** L'onglet de la configuration, par son titre exact : absent, il est refusé comme un fichier inaccessible (section 8 du PRD). */
-    private JsonNode findTab(String authorization) {
+    private JsonNode findTab(String authorization, String fileId, String tab) {
         JsonNode file = calls.call(() -> restClient.get()
-                .uri(uri -> uri.path("/v4/spreadsheets/{id}").queryParam("fields", "sheets.properties(sheetId,title,gridProperties.rowCount)").build(fileId))
+                .uri(uri -> uri.path("/v4/spreadsheets/{id}").queryParam("fields", "sheets.properties(sheetId,title,gridProperties.rowCount,gridProperties.columnCount)").build(fileId))
                 .header(HttpHeaders.AUTHORIZATION, authorization).retrieve().body(JsonNode.class));
         if (file == null || !file.path("sheets").isArray()) {
             throw new TransientGoogleException("REPONSE_ILLISIBLE");
@@ -99,7 +104,7 @@ public class GoogleSheetClient implements SheetClient {
     }
 
     /** La ligne qui porte déjà cet identifiant dans cet onglet, où qu'elle ait été déplacée (R-21). */
-    private Optional<Integer> findRow(String authorization, int sheetId, String rowId) {
+    private Optional<Integer> findRow(String authorization, String fileId, int sheetId, String rowId) {
         Map<String, Object> lookup = Map.of("dataFilters", List.of(Map.of("developerMetadataLookup",
                 Map.of("metadataKey", METADATA_KEY, "metadataValue", rowId))));
         JsonNode result = calls.call(() -> restClient.post().uri("/v4/spreadsheets/{id}/developerMetadata:search", fileId)
@@ -116,30 +121,81 @@ public class GoogleSheetClient implements SheetClient {
         return Optional.empty();
     }
 
-    /** Le rang, à partir de 0, de la première ligne libre : l'API ne rend que jusqu'à la dernière ligne garnie. */
-    private int countUsedRows(String authorization) {
-        JsonNode values = calls.call(() -> restClient.get().uri("/v4/spreadsheets/{id}/values/{range}", fileId, "'" + tab.replace("'", "''") + "'!" + USED_RANGE_COLUMNS)
+    /**
+     * Une ligne vide à sa place, qui reprend la mise en forme de la ligne de données la plus proche, et sa liste déroulante de TYPE : PASTE_FORMAT exclut la validation des données
+     * (documentation de Google), qui se colle à part. Au bout de l'onglet, une ligne s'ajoute au lieu de s'insérer.
+     */
+    private static List<Map<String, Object>> newRow(SheetLayout layout, SheetLayout.Placement placement, int sheetId, int rowCount) {
+        int at = placement.insertAt();
+        List<Map<String, Object>> requests = new ArrayList<>();
+        if (at >= rowCount) {
+            requests.add(Map.of("appendDimension", Map.of("sheetId", sheetId, "dimension", "ROWS", "length", 1)));
+        } else {
+            requests.add(Map.of("insertDimension", Map.of(
+                    "range", Map.of("sheetId", sheetId, "dimension", "ROWS", "startIndex", at, "endIndex", at + 1), "inheritFromBefore", true)));
+        }
+        placement.formatSourceRow().ifPresent(source -> {
+            int sourceRow = source < at ? source : source + 1;
+            int typeColumn = layout.columnOf(SheetColumn.EXPENSE_TYPE);
+            requests.add(copyPaste(sheetId, sourceRow, at, 0, layout.width(), "PASTE_FORMAT"));
+            requests.add(copyPaste(sheetId, sourceRow, at, typeColumn, typeColumn + 1, "PASTE_DATA_VALIDATION"));
+        });
+        return requests;
+    }
+
+    private static Map<String, Object> copyPaste(int sheetId, int sourceRow, int destinationRow, int firstColumn, int endColumn, String pasteType) {
+        return Map.of("copyPaste", Map.of("source", cells(sheetId, sourceRow, firstColumn, endColumn), "destination", cells(sheetId, destinationRow, firstColumn, endColumn),
+                "pasteType", pasteType, "pasteOrientation", "NORMAL"));
+    }
+
+    private static Map<String, Object> cells(int sheetId, int row, int firstColumn, int endColumn) {
+        return Map.of("sheetId", sheetId, "startRowIndex", row, "endRowIndex", row + 1, "startColumnIndex", firstColumn, "endColumnIndex", endColumn);
+    }
+
+    /** Ajoute l'en-tête PHOTO après la dernière colonne (D-07), avec une colonne de plus dans l'onglet s'il n'y a plus de place. Aucun autre en-tête n'est touché. */
+    private static void addPhotoColumn(List<Map<String, Object>> requests, SheetLayout layout, int sheetId, int columnCount) {
+        int photoColumn = layout.columnOf(SheetColumn.PHOTO);
+        if (photoColumn >= columnCount) {
+            requests.add(Map.of("appendDimension", Map.of("sheetId", sheetId, "dimension", "COLUMNS", "length", photoColumn + 1 - columnCount)));
+        }
+        requests.add(Map.of("updateCells", Map.of(
+                "start", Map.of("sheetId", sheetId, "rowIndex", layout.headerRow(), "columnIndex", photoColumn),
+                "rows", List.of(Map.of("values", List.of(text(SheetColumn.PHOTO.header())))),
+                "fields", "userEnteredValue")));
+    }
+
+    /** Les valeurs affichées de l'onglet entier, ligne par ligne : l'API ne rend que jusqu'à la dernière ligne garnie. */
+    private List<List<String>> readGrid(String authorization, String fileId, String tab) {
+        JsonNode values = calls.call(() -> restClient.get().uri("/v4/spreadsheets/{id}/values/{range}", fileId, "'" + tab.replace("'", "''") + "'")
                 .header(HttpHeaders.AUTHORIZATION, authorization).retrieve().body(JsonNode.class));
         if (values == null) {
             throw new TransientGoogleException("REPONSE_ILLISIBLE");
         }
-        return values.path("values").size();
+        List<List<String>> grid = new ArrayList<>();
+        for (JsonNode line : values.path("values")) {
+            List<String> cells = new ArrayList<>();
+            for (JsonNode cell : line) {
+                cells.add(cell.asString(""));
+            }
+            grid.add(cells);
+        }
+        return grid;
     }
 
-    /** DATE, BOUTIQUE, OBJET, TYPE, MONTANT HT, TPS, TVQ, MONTANT TOTAL, NOTES, PHOTO : l'ordre observé. Une valeur absente donne une cellule sans valeur, donc vide (R-08). */
-    private List<Map<String, Object>> cells(SheetRow row) {
-        List<Map<String, Object>> cells = new ArrayList<>(COLUMNS);
-        cells.add(number(row.date() == null ? null : BigDecimal.valueOf(row.date().toEpochDay() + DAYS_FROM_SHEETS_EPOCH_TO_UNIX_EPOCH)));
-        cells.add(text(row.supplier()));
-        cells.add(text(row.object()));
-        cells.add(text(row.expenseType()));
-        cells.add(number(row.amountBeforeTax()));
-        cells.add(number(row.gst()));
-        cells.add(number(row.qst()));
-        cells.add(number(row.total()));
-        cells.add(text(row.notes()));
-        cells.add(photos(row.photos()));
-        return cells;
+    /** Une valeur absente donne une cellule sans valeur, donc vide (R-08). */
+    private Map<String, Object> cell(SheetColumn column, SheetRow row) {
+        return switch (column) {
+            case DATE -> number(row.date() == null ? null : BigDecimal.valueOf(row.date().toEpochDay() + DAYS_FROM_SHEETS_EPOCH_TO_UNIX_EPOCH));
+            case SUPPLIER -> text(row.supplier());
+            case OBJECT -> text(row.object());
+            case EXPENSE_TYPE -> text(row.expenseType());
+            case AMOUNT_BEFORE_TAX -> number(row.amountBeforeTax());
+            case GST -> number(row.gst());
+            case QST -> number(row.qst());
+            case TOTAL -> number(row.total());
+            case NOTES -> text(row.notes());
+            case PHOTO -> photos(row.photos());
+        };
     }
 
     private static Map<String, Object> text(String value) {
