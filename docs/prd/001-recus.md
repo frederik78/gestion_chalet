@@ -2,7 +2,7 @@
 
 - Besoin : F-01 (priorité P1) ; sécurité : NF-01
 - Décisions appliquées : D-01 à D-13, D-16 à D-26, D-66, D-67, D-68, D-69 ; architecture : `docs/adr/0001-architecture.md`
-- Statut : validé par l'utilisateur le 2026-11-01 ; révisé le 2026-11-10 pour D-66 (Google Sheet régénéré à la demande), D-67 (contre-vérification des taxes), D-68 (réponses aux questions Q-15 à Q-23) et D-69 (import du Sheet vers la base). Questions Q-34 à Q-39 tranchées le 2026-11-10 (D-70, section 15.6) ; révision en attente de validation.
+- Statut : validé par l'utilisateur le 2026-11-01 ; révisé le 2026-11-10 pour D-66 (Google Sheet régénéré à la demande), D-67 (contre-vérification des taxes), D-68 (réponses aux questions Q-15 à Q-23) et D-69 (import du Sheet vers la base). Questions Q-34 à Q-39 tranchées le 2026-11-10 (D-70, section 15.6). Révision validée par l'utilisateur le 2026-11-10.
 
 Les références `Q-xx` renvoient aux décisions de clarification de la section 14 (Q-01 à Q-14), aux réponses de la section 15.3 (Q-15 à Q-23, D-68) et de la section 15.4 (Q-24, D-67), et aux questions en attente de la section 15.6 (Q-34 à Q-39). Q-25 à Q-33 ont servi en discussion pour des questions déjà tranchées (consignées en D-67 et D-69) : elles n'ont pas de marque dans ce PRD. La section 15 résume ce que D-66, D-67, D-68 et D-69 changent. Un critère **retiré** garde son identifiant, qui n'est jamais réutilisé ; la table de correspondance est à la fin de la section 10.
 
