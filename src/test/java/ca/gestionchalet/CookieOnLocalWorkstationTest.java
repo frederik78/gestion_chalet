@@ -8,18 +8,18 @@ import ca.gestionchalet.support.TestDoublesConfiguration;
 import ca.gestionchalet.support.RealServerTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.ActiveProfiles;
 
-/** Sur le poste local (HTTP), le cookie n'est pas {@code Secure} ; la valeur par défaut, hors poste local, l'est. */
+/** Mode dev (profil Spring explicite, HTTP sur le poste ou le réseau local) : les cookies ne sont pas {@code Secure}. */
 @RealServerTest
-@TestPropertySource(properties = "recus.securite.cookie-securise=false")
+@ActiveProfiles("dev")
 class CookieOnLocalWorkstationTest {
 
     @LocalServerPort
     int port;
 
     @Test
-    void cs04_laConfigurationDuPosteLocalRetireSecureDesCookies() {
+    void mode_dev_leProfilDevRetireSecureDesCookies() {
         TestClient client = new TestClient(port, "source-poste-local");
 
         Reponse reponse = client.connecter(TestDoublesConfiguration.MOT_DE_PASSE);
