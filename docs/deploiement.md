@@ -8,13 +8,20 @@ Le déploiement lui-même est reporté (backlog, NF-03). Ce fichier liste ce que
 | `RECUS_SECURITE_CONDENSE_MOT_DE_PASSE` | Condensé bcrypt du mot de passe du compte local, de coût 10 à 31 | aucun : l'application refuse de démarrer |
 | `RECUS_GOOGLE_CLIENT_ID`, `RECUS_GOOGLE_CLIENT_SECRET` | Identifiants du client OAuth2 du projet Google, dont l'adresse de rappel autorisée est `<adresse de la PWA>/api/google/rappel`. Facultatifs : sans eux, l'autorisation reste `ABSENTE`, les reçus sont enregistrés et bloqués, et `GET /api/google/autorisation` répond 503 | aucun |
 | `RECUS_GOOGLE_CLE_CHIFFREMENT` | Clé des jetons Google au repos : 32 octets aléatoires en base 64 (`openssl rand -base64 32`). La perdre ou la changer fait passer l'autorisation à `A_RENOUVELER` au premier usage du jeton : il faut autoriser Google de nouveau | aucun : l'application refuse de démarrer |
-| `RECUS_SECURITE_COOKIE_SECURISE` | `false` seulement sur le poste local en HTTP | `true` |
+| `SPRING_PROFILES_ACTIVE` | `dev` seulement sur le poste ou le réseau local en HTTP (voir « Modes dev et prod ») ; jamais en production | aucun : mode prod |
+| `RECUS_SECURITE_COOKIE_SECURISE` | Surcharge ponctuelle de `recus.securite.cookie-securise` (le profil `dev` le met à `false`) | `true` |
 | `RECUS_DOSSIER_DONNEES` | Dossier de la base SQLite et, par défaut, des photos (`photos/`) ; à placer sur un volume conservé, hors de la racine web | `data` |
 | `ANTHROPIC_API_KEY` | Clé du modèle, lue par le client au moment de l'appel | aucune : le démarrage n'en dépend pas |
 
 Produire le condensé, sans laisser le mot de passe dans l'historique du shell : `htpasswd -nBC 12 "" | tr -d ':\n'`. Le condensé contient des `$` : le placer entre apostrophes.
 
 bcrypt ne prend en compte que les 72 premiers octets du mot de passe : ce qui suit est ignoré, quelle que soit sa longueur (formulaire borné à 64 Ko). Choisir un mot de passe fort dans cette limite.
+
+## Modes dev et prod
+- **Prod** (sans profil) : cookies de session et CSRF `Secure`, donc HTTPS obligatoire (sauf `localhost`, que les navigateurs traitent comme sécurisé).
+- **Dev** (`SPRING_PROFILES_ACTIVE=dev`, ou `-Dspring-boot.run.profiles=dev`) : `application-dev.yml` met `recus.securite.cookie-securise` à `false`, pour se connecter en HTTP sur une adresse du réseau local (téléphone, `http://192.168.50.115:8080`). L'application journalise `MODE DEV ACTIF` au démarrage. Lancement : `set -a; source .env; set +a; SPRING_PROFILES_ACTIVE=dev ./mvnw spring-boot:run`.
+- **Jamais dev en production.** Rien d'autre n'est assoupli : les en-têtes de sécurité sont identiques dans les deux modes (ni HSTS ni `upgrade-insecure-requests` n'est émis aujourd'hui).
+- Hors contexte sécurisé, le navigateur n'offre ni service worker ni installation de la PWA ; la page fonctionne sans.
 
 ## Réglages (`recus.securite.*`, surchargeables par l'environnement)
 Blocage : 5 échecs par source, 15 minutes. Inactivité de session : 8 heures (`server.servlet.session.timeout`). Corps de requête hors multipart : 64 Ko ; formulaire lu par Tomcat : 64 Ko (`server.tomcat.max-http-form-post-size`). Multipart (`spring.servlet.multipart.*`) : 15 Mo par fichier, 75 Mo par requête, et refusé sans session. Filtres de formulaire de Spring désactivés, car ils liraient le corps avant la sécurité : `spring.mvc.formcontent.filter.enabled`, et `spring.mvc.hiddenmethod.filter.enabled`, dont c'est déjà le défaut.
