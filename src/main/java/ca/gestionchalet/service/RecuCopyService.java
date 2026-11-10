@@ -151,6 +151,7 @@ public class RecuCopyService {
             } catch (RuntimeException e) {
                 // Jamais le message : il peut citer une valeur de reçu.
                 LOG.error("Copie du reçu {} interrompue : {}", id, e.getClass().getName());
+                waitingAfterFailure.add(id);
             }
         }
     }
