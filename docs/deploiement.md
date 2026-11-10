@@ -27,7 +27,6 @@ Ce même lien unique permet à deux validations simultanées de se voir comme do
 ## Google Drive et Sheet (copie des reçus)
 - Le dossier Drive « Reçus du chalet » est créé par l'application au premier dépôt. Un dossier du même nom créé à la main reste invisible pour elle (droit `drive.file`, limité aux fichiers qu'elle crée) et reste vide : ne pas le créer, ne pas y chercher les photos.
 - Le fichier configuré (`RECUS_COPIE_ANNEES_<année>_FICHIER`) doit être un vrai Google Sheet, pas un `.xlsx` stocké dans Drive, que l'API Sheets refuse (400). Un `.xlsx` s'ouvre dans Google Sheets, puis Fichier › Enregistrer au format Google Sheets ; le nouveau fichier a un nouvel identifiant, à reporter dans la configuration.
-- Un 400 de Google bloque le reçu (`BLOQUEE`, motif `FICHIER_INACCESSIBLE`) au lieu d'être retenté sans fin ; le journal porte alors le code et, s'ils existent, le statut et les raisons de Google (par exemple `Google : réponse 400 (FAILED_PRECONDITION)`), jamais son message.
 
 ## À reprendre avec NF-03
 - Derrière Cloudflare Tunnel, toutes les requêtes semblent venir de la même source : le blocage devra lire l'en-tête de confiance du tunnel, sans quoi il deviendrait global. Aucun en-tête `X-Forwarded-*` n'est lu aujourd'hui.
