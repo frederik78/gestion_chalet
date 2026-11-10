@@ -262,6 +262,51 @@ class RecuCopyServiceTest {
     }
 
     @Test
+    void ca45_unReveilApresUnePanneNeRetenteJamaisLeRecuAvantLePassagePeriodique() {
+        UUID enPanne = valider(simple("A", null)).recu().id();
+        google.failNextWrite(new TransientGoogleException("PANNE"));
+
+        copie.processPending();
+
+        assertThat(etat(enPanne)).isEqualTo("A_COPIER");
+        assertThat(google.writeCalls()).isEqualTo(1);
+        UUID suivant = valider(simple("B", null)).recu().id();
+
+        copie.processAfterWake();
+
+        assertThat(etat(suivant)).isEqualTo("COPIEE");
+        assertThat(etat(enPanne)).isEqualTo("A_COPIER");
+        assertThat(google.writeCalls()).isEqualTo(2);
+
+        copie.processPending();
+
+        assertThat(etat(enPanne)).isEqualTo("COPIEE");
+        assertThat(google.writeCalls()).isEqualTo(3);
+    }
+
+    @Test
+    void d60_uneErreurInattendueNeRetenteLeRecuAucunReveilAvantLePassagePeriodique() {
+        UUID enErreur = valider(simple("A", null)).recu().id();
+        google.failNextWrite(new IllegalStateException("ERREUR"));
+
+        copie.processPending();
+
+        assertThat(etat(enErreur)).isEqualTo("A_COPIER");
+        assertThat(google.writeCalls()).isEqualTo(1);
+        UUID suivant = valider(simple("B", null)).recu().id();
+
+        copie.processAfterWake();
+
+        assertThat(etat(suivant)).isEqualTo("COPIEE");
+        assertThat(etat(enErreur)).isEqualTo("A_COPIER");
+        assertThat(google.writeCalls()).isEqualTo(2);
+
+        copie.processPending();
+
+        assertThat(etat(enErreur)).isEqualTo("COPIEE");
+    }
+
+    @Test
     void r21_uneReponseDeDepotOuDEcriturePerdueNeCreeNiFichierNiLigneEnDouble() {
         UUID id = valider(simple("F", null), null, photo(4)).recu().id();
         google.loseNextDepositResponse();

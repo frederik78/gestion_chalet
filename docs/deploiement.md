@@ -24,6 +24,10 @@ Le lien unique vers la base (`maximum-pool-size: 1`) garantit l'idempotence de d
 
 Ce même lien unique permet à deux validations simultanées de se voir comme doublons possibles : relever ce réglage ou remplacer SQLite demande de revoir cette détection, faute de quoi aucune alerte de doublon ne serait levée entre elles (D-56, 15 tours de 4 validations simultanées mesurés).
 
+## Google Drive et Sheet (copie des reçus)
+- Le dossier Drive « Reçus du chalet » est créé par l'application au premier dépôt. Un dossier du même nom créé à la main reste invisible pour elle (droit `drive.file`, limité aux fichiers qu'elle crée) et reste vide : ne pas le créer, ne pas y chercher les photos.
+- Le fichier configuré (`RECUS_COPIE_ANNEES_<année>_FICHIER`) doit être un vrai Google Sheet, pas un `.xlsx` stocké dans Drive, que l'API Sheets refuse (400). Un `.xlsx` s'ouvre dans Google Sheets, puis Fichier › Enregistrer au format Google Sheets ; le nouveau fichier a un nouvel identifiant, à reporter dans la configuration.
+
 ## À reprendre avec NF-03
 - Derrière Cloudflare Tunnel, toutes les requêtes semblent venir de la même source : le blocage devra lire l'en-tête de confiance du tunnel, sans quoi il deviendrait global. Aucun en-tête `X-Forwarded-*` n'est lu aujourd'hui.
 - HSTS n'est pas émis : à ajouter avec HTTPS.

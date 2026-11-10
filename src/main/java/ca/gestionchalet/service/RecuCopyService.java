@@ -26,7 +26,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,7 +51,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * serait tenu pendant le réseau. (1) Une transaction courte lit le reçu et en tire ce qu'il faut. (2) Hors transaction, les photos sont déposées une à une dans Drive, puis,
  * toutes déposées (R-18), la ligne est écrite. (3) Une transaction courte garde les fichiers déposés et change l'état. La base sert de file : les reçus {@code A_COPIER}, par
  * ordre de validation (R-19) ; un seul fil les prend, réveillé après chaque validation et périodiquement. Une panne passagère laisse le reçu {@code A_COPIER}, repris au
- * prochain passage ; le rythme des essais (R-20) et la reprise des reçus bloqués viennent avec 001-08.
+ * prochain passage périodique, jamais à un réveil ; le rythme des essais (R-20) et la reprise des reçus bloqués viennent avec 001-08.
  */
 @Service
 public class RecuCopyService {
@@ -66,6 +68,8 @@ public class RecuCopyService {
     private final ObjectProvider<TaskScheduler> scheduler;
     private final Clock clock;
     private final CopyRules rules;
+    /** Les reçus en panne passagère depuis le dernier passage périodique : en mémoire, car un redémarrage vaut un passage périodique. */
+    private final Set<UUID> waitingAfterFailure = ConcurrentHashMap.newKeySet();
 
     public RecuCopyService(RecuRepository recuRepository, GoogleAuthorizationService googleAuthorizationService, DriveClient driveClient, SheetClient sheetClient,
             PhotoStorage photoStorage, TransactionTemplate transactionTemplate, ObjectProvider<TaskScheduler> scheduler, Clock clock,
@@ -104,10 +108,11 @@ public class RecuCopyService {
         }
     }
 
-    /** Une nouvelle autorisation reprend les reçus bloqués pour ce motif, et la copie est réveillée aussitôt (CA65, section 7.6). */
+    /** Une nouvelle autorisation reprend les reçus bloqués pour ce motif, et la copie est réveillée aussitôt (CA65, section 7.6) ; la panne qui attendait le passage périodique est oubliée. */
     @EventListener
     @Transactional(propagation = Propagation.MANDATORY)
     public void on(GoogleAuthorizationGranted event) {
+        waitingAfterFailure.clear();
         recuRepository.findByEtatCopieAndMotifBlocage(EtatCopie.BLOQUEE, MotifBlocage.AUTORISATION_GOOGLE).forEach(Recu::reprendre);
         wakeAfterCommit();
     }
@@ -119,15 +124,34 @@ public class RecuCopyService {
         recuRepository.findByEtatCopie(EtatCopie.A_COPIER).forEach(recu -> recu.bloquer(MotifBlocage.AUTORISATION_GOOGLE));
     }
 
-    /** Le passage périodique : chaque reçu à copier, une fois, dans l'ordre de validation. Un reçu en échec ne retient pas les suivants. */
+    /** Le passage périodique : chaque reçu à copier, une fois, dans l'ordre de validation. Il reprend aussi les reçus laissés en attente par une panne (D-60). */
     @Scheduled(fixedDelayString = "${recus.copie.intervalle}")
     public synchronized void processPending() {
+        waitingAfterFailure.clear();
+        pass();
+    }
+
+    /**
+     * Le passage d'un réveil (validation, autorisation) : un reçu en panne passagère depuis le dernier passage périodique n'est pas retenté, sinon chaque réveil
+     * relancerait les essais bien avant l'intervalle configuré (mesuré : 3 à 9 s au lieu d'une minute).
+     */
+    public synchronized void processAfterWake() {
+        pass();
+    }
+
+    private void pass() {
         for (UUID id : pendingIds()) {
+            if (waitingAfterFailure.contains(id)) {
+                continue;
+            }
             try {
-                copy(id);
+                if (copy(id)) {
+                    waitingAfterFailure.add(id);
+                }
             } catch (RuntimeException e) {
                 // Jamais le message : il peut citer une valeur de reçu.
                 LOG.error("Copie du reçu {} interrompue : {}", id, e.getClass().getName());
+                waitingAfterFailure.add(id);
             }
         }
     }
@@ -150,11 +174,17 @@ public class RecuCopyService {
                 .toList());
     }
 
-    private void copy(UUID id) {
+    /** @return vrai si une panne passagère laisse le reçu à copier */
+    private boolean copy(UUID id) {
         Optional<Job> job = transactionTemplate.execute(status -> recuRepository.findById(id)
                 .filter(recu -> recu.getEtatCopie() == EtatCopie.A_COPIER)
                 .map(recu -> new Job(recu.getId(), recu.getVersion(), recu.getValeurs(), recu.getAlertes(), recu.getPhotos())));
-        job.ifPresent(todo -> finish(todo, send(todo)));
+        if (job.isEmpty()) {
+            return false;
+        }
+        Outcome outcome = send(job.get());
+        finish(job.get(), outcome);
+        return !outcome.copied() && outcome.blocked().isEmpty();
     }
 
     /**
@@ -239,7 +269,7 @@ public class RecuCopyService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                taskScheduler.schedule(RecuCopyService.this::processPending, clock.instant());
+                taskScheduler.schedule(RecuCopyService.this::processAfterWake, clock.instant());
             }
         });
     }

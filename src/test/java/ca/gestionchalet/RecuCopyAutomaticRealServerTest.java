@@ -163,6 +163,35 @@ class RecuCopyAutomaticRealServerTest {
     }
 
     @Test
+    void ca45_laValidationDUnAutreRecuNeRetenteJamaisUnRecuEnPanneAvantLePassagePeriodique() throws Exception {
+        autorisationDirecte();
+        google.failNextWrite(new TransientGoogleException("PANNE"));
+        Object enPanne = valider().json().get("id");
+        attendre("ligne tentée et en panne", () -> google.writeCalls() == 1);
+
+        Object suivant = valider().json().get("id");
+
+        attendre("reçu suivant copié", () -> "COPIEE".equals(etat(suivant)));
+        assertThat(etat(enPanne)).isEqualTo("A_COPIER");
+        assertThat(google.writeCalls()).isEqualTo(2);
+    }
+
+    @Test
+    void ca65_uneNouvelleAutorisationRetenteAussitotUnRecuEnPanneSansAttendreLePassagePeriodique() throws Exception {
+        GOOGLE.repondreJeton(1, GoogleStub.SHEETS + " " + GoogleStub.DRIVE_FILE, GoogleStub.JETON_RENOUVELLEMENT);
+        autoriser();
+        google.failNextWrite(new TransientGoogleException("PANNE"));
+        Object enPanne = valider().json().get("id");
+        attendre("ligne tentée et en panne", () -> google.writeCalls() == 1);
+        assertThat(etat(enPanne)).isEqualTo("A_COPIER");
+
+        autoriser();
+
+        attendre("reçu retenté et copié", () -> "COPIEE".equals(etat(enPanne)));
+        assertThat(google.writeCalls()).isEqualTo(2);
+    }
+
+    @Test
     void ca66_apresUneNouvelleAutorisationLesRecusSontCopiesSansDoublonNiFichierNiLigne() throws Exception {
         GOOGLE.repondreJeton(1, GoogleStub.SHEETS + " " + GoogleStub.DRIVE_FILE, GoogleStub.JETON_RENOUVELLEMENT);
         autoriser();
