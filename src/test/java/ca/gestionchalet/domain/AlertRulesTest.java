@@ -79,7 +79,7 @@ class AlertRulesTest {
 
     @Test
     void ca26_sansMontantAvantTaxesLEcartNEstPasCalcule() {
-        assertThat(codes(valeurs(null, 500L, 998L, 3_500L, null, null), null)).isEmpty();
+        assertThat(codes(valeurs(null, 500L, 998L, 3_500L, null, null), null)).doesNotContain(AlerteCode.ECART_CALCUL);
     }
 
     @Test
@@ -202,5 +202,13 @@ class AlertRulesTest {
         AlertRules tolerante = new AlertRules(10_000L, 50_000L, 2L, 5_000L, 9_975L, 5L);
         assertThat(taxes(tolerante, null, 1_000L, 1_998L, 2_998L)).isEmpty();
         assertThat(taxes(null, 1_000L, 1_998L, 2_998L)).extracting(Alerte::code).containsExactly(AlerteCode.RAPPORT_TVQ_TPS);
+    }
+
+    @Test
+    void ca113_laToleranceDesTaxesDuPlafondDeTpsEstDistincteDeCelleDeLEcartDeCalcul() {
+        AlertRules tolerante = new AlertRules(10_000L, 50_000L, 2L, 5_000L, 9_975L, 5L);
+
+        assertThat(taxes(tolerante, 40_000L, 2_004L, null, 42_004L)).isEmpty();
+        assertThat(taxes(40_000L, 2_004L, null, 42_004L)).containsExactly(auDela("20,04 $", "400,00 $"));
     }
 }
