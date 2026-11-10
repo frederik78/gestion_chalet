@@ -226,9 +226,21 @@ function invaliderLectureSiPhotosChangees() {
   }
 }
 
+/**
+ * UUID v4 par getRandomValues, disponible en HTTP : crypto.randomUUID n'existe qu'en contexte sécurisé, donc pas sur le réseau local (mode dev).
+ * Le serveur attend un UUID écrit sur ses 36 caractères (clé d'idempotence).
+ */
+function nouvelUuid() {
+  const octets = crypto.getRandomValues(new Uint8Array(16));
+  octets[6] = (octets[6] & 0x0f) | 0x40;
+  octets[8] = (octets[8] & 0x3f) | 0x80;
+  const hex = Array.from(octets, (octet) => octet.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 /** Après un retour aux photos, la saisie reste telle quelle : pas de nouvelle lecture sans le demander. */
 async function continuer() {
-  cleIdempotence = cleIdempotence || crypto.randomUUID();
+  cleIdempotence = cleIdempotence || nouvelUuid();
   if (lectureFaite) {
     invaliderLectureSiPhotosChangees();
     await montrerValidation();

@@ -350,6 +350,20 @@ class RecuScreensChromeTest {
         assertThat(chrome.eval("document.getElementById('message-succes').textContent").asString()).isEqualTo("Reçu enregistré.");
     }
 
+    /** En HTTP sur une adresse du réseau local (mode dev, téléphone), le contexte n'est pas sécurisé : {@code crypto.randomUUID} n'existe pas. */
+    @Test
+    void mode_dev_sansRandomUUIDLeBoutonContinuerFonctionneEtLaCleEstUnUuidV4() throws InterruptedException {
+        chrome.eval("delete Crypto.prototype.randomUUID; typeof crypto.randomUUID === 'undefined'");
+        chrome.eval(ENREGISTRER_LES_ENVOIS);
+        allerALaValidationAvecDeuxPhotos();
+        saisirLesValeurs("Sans randomUUID");
+        cliquer("valider");
+        chrome.waitUntil("window.envois.length === 1");
+
+        JsonNode envois = chrome.eval("window.envois");
+        assertThat(envois.get(0).get("cle").asString()).matches("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}");
+    }
+
     @Test
     void ca81_uneNouvelleValidationApresUnSuccesPrendUneAutreCle() throws InterruptedException {
         chrome.eval(ENREGISTRER_LES_ENVOIS);
