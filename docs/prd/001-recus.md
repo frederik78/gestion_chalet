@@ -1,19 +1,21 @@
 # PRD 001 : module Reçus
 
 - Besoin : F-01 (priorité P1) ; sécurité : NF-01
-- Décisions appliquées : D-01 à D-13, D-16 à D-26 ; architecture : `docs/adr/0001-architecture.md`
-- Statut : validé par l'utilisateur le 2026-11-01
+- Décisions appliquées : D-01 à D-13, D-16 à D-26, D-66 ; architecture : `docs/adr/0001-architecture.md`
+- Statut : validé par l'utilisateur le 2026-11-01 ; révisé le 2026-11-10 pour D-66 (Google Sheet régénéré à la demande). **Révision non validée** : les points marqués « (en attente : Q-xx) » dépendent des réponses de la section 15.3.
 
-Les références `Q-xx` renvoient aux décisions de clarification de la section 14.
+Les références `Q-xx` renvoient aux décisions de clarification de la section 14 (Q-01 à Q-14) et aux questions de la section 15.3 (Q-15 à Q-23). La section 15 résume ce que D-66 change. Un critère **retiré** garde son identifiant, qui n'est jamais réutilisé ; la table de correspondance est à la fin de la section 10.
 
 ## 1. Contexte et besoin
 
-Le propriétaire du chalet, seul utilisateur, photographie un reçu avec son téléphone. L'application lit les valeurs sur la photo, les lui présente à côté de celle-ci, et, une fois qu'il les a validées, enregistre le reçu en base puis en fait une copie : les photos dans Google Drive, une ligne dans le Google Sheet de l'année (F-01). La base est la référence, le Sheet une copie (D-05).
+Le propriétaire du chalet, seul utilisateur, photographie un reçu avec son téléphone. L'application lit les valeurs sur la photo, les lui présente à côté de celle-ci, et, une fois qu'il les a validées, enregistre le reçu en base et dépose ses photos dans Google Drive. Sur demande, par un bouton, elle régénère en entier un onglet du Google Sheet de l'année qui reproduit les reçus de la base (F-01, D-66). La base est la référence, le Sheet une projection de la base (D-05, D-66).
 
 Volume : moins de 50 reçus par mois. Langue : français. Montants : dollars canadiens.
 
 ### Hors périmètre
 Calcul de la déclaration de TPS et de TVQ (D-21), revenus de location, autres modules, PDF (D-21), mode hors ligne (D-13), déploiement (NF-03), sauvegardes (NF-02), import des anciennes lignes du Sheet (D-06), destruction des reçus papier (backlog, « À trancher » : l'application n'invite jamais à les détruire).
+
+Évolutions possibles, non faites dans cette version : régénération automatique après une validation ou une correction (D-66 : le bouton est le seul déclencheur) ; exclusion d'un reçu de l'onglet généré (Q-20).
 
 ## 2. Analyse des exemples
 
@@ -58,7 +60,9 @@ Lignes vérifiées (valeurs fictives pour le fournisseur et l'objet quand ils d�
 
 L'écart de 5,70 $ de la ligne Hydro Québec est signalé. Sa cause est inconnue (supposé : un montant non taxable sur la facture). Ces lignes ne sont pas importées (D-06) ; un reçu de cette forme déclenchera l'alerte de calcul sans être bloqué (D-04, D-23).
 
-Non observé, donc supposé : qu'une cellule DATE contient une vraie date plutôt que du texte ; l'absence de ligne de total après le dernier mois. La lecture du Sheet accepte les deux formes de date (R-22) ; la section 8 traite une ligne de total éventuelle.
+Non observé, donc supposé : qu'une cellule DATE contient une vraie date plutôt que du texte ; l'absence de ligne de total après le dernier mois.
+
+Depuis D-66, cet onglet de l'utilisateur n'est plus lu ni écrit par l'application. Il sert de modèle pour les noms de colonnes et le format des dates et des montants de l'onglet généré (section 7.4). Ses lignes, formules et totaux restent intacts, et ses calculs peuvent lire l'onglet généré. Ses lignes antérieures ne sont pas importées (D-06).
 
 ## 3. Vocabulaire complémentaire
 
@@ -67,9 +71,13 @@ Termes ajoutés au glossaire pour ce PRD. Les termes de `GLOSSARY.md` s'applique
 - **Lecture** : extraction, par le modèle, des valeurs visibles sur les photos d'un reçu. Son résultat n'est qu'une proposition.
 - **Validation** : acte par lequel l'utilisateur accepte les valeurs, éventuellement corrigées ; c'est à cet instant que le reçu est enregistré.
 - **Alerte** : avertissement calculé par l'application, jamais bloquant.
-- **Copie** : report d'un reçu validé vers Google Drive (photos) et le Sheet (ligne).
-- **Section de mois** : dans un onglet, la ligne de titre d'un mois et les lignes qui la suivent jusqu'au titre suivant.
+- **Dépôt** : copie des photos d'un reçu validé dans Google Drive, reçu par reçu. Depuis D-66, il n'y a plus de « copie » d'un reçu vers le Sheet.
+- **Régénération** : écriture complète, à la demande, de l'onglet généré de chaque fichier d'année à partir de la base.
+- **Onglet généré** : l'onglet que l'application seule crée et réécrit dans le fichier d'une année (section 7.4). Aucun autre onglet n'est jamais modifié.
+- **Onglet temporaire** : onglet de travail de l'application, où une régénération écrit d'abord ; il disparaît à la fin de la régénération, réussie ou non.
+- **État de la régénération** : état global, un seul pour l'application : jamais, en cours, réussie, ou échec avec son motif (section 4.2).
 - **Relevé de carte** : document de paiement par carte, sans détail des taxes.
+- **Section de mois** : dans un onglet, la ligne de titre d'un mois et les lignes qui la suivent jusqu'au titre suivant. Ne décrit plus que l'onglet de l'utilisateur : l'onglet généré n'en comporte pas (en attente : Q-16).
 
 ## 4. Parcours et états
 
@@ -88,36 +96,44 @@ Les photos restent dans la mémoire de la page jusqu'à la validation, et sont r
 
 Si la lecture échoue ou si le reçu est illisible, l'utilisateur saisit les valeurs à la main ou relance la lecture. Au moins une photo reste obligatoire (Q-02).
 
-### 4.2 Après la validation : état de la copie
+### 4.2 Après la validation : photos et état de la régénération (D-66)
 
-Un reçu enregistré est toujours validé. Seul varie l'état de sa copie.
+Un reçu enregistré est toujours validé. Il n'a plus d'état de copie : les états `A_COPIER`, `BLOQUEE` et `COPIEE` et leurs motifs de blocage (`ANNEE_NON_CONFIGUREE`, `AUTORISATION_GOOGLE`, `FICHIER_INACCESSIBLE`, `STRUCTURE_SHEET`, `FORMULE_PRESENTE`) n'existent plus.
+
+**Photos.** Chaque photo est « déposée » (son identifiant Drive est connu) ou « à déposer ». Une photo déposée n'est jamais redéposée (R-29, CA73). Une photo à déposer est reprise par des essais programmés (R-20) ; l'utilisateur n'a pas d'action à faire, sauf renouveler l'autorisation Google si elle est absente ou perdue. Rien dans l'API n'expose un état par photo : le lien Drive est absent tant que la photo n'est pas déposée (section 7.1). Le dépôt suit la validation sans dépendre du Sheet (en attente : Q-21).
+
+**Régénération.** L'état est unique pour l'application et conservé au redémarrage.
 
 | État | Sens |
 |---|---|
-| `A_COPIER` | au moins une action de copie reste à faire ; nouvel essai programmé après une panne passagère |
-| `BLOQUEE` | la copie attend une action de l'utilisateur ; `motifBlocage` en donne la raison |
-| `COPIEE` | toutes les photos sont dans Drive et la ligne du Sheet est à jour |
+| `JAMAIS` | aucune régénération n'a été demandée |
+| `EN_COURS` | une régénération est en train d'écrire ; il n'y en a jamais deux à la fois (R-43) |
+| `REUSSIE` | la dernière régénération a remplacé l'onglet généré de chaque fichier d'année configuré ; la date de réussite est connue |
+| `ECHEC` | la dernière régénération a échoué avec un motif ; l'onglet généré de chaque fichier est celui de la dernière réussite, intact ; la date de la dernière réussite est conservée |
 
-| Motif de blocage | Levé par |
-|---|---|
-| `ANNEE_NON_CONFIGUREE` | l'ajout de l'année à la configuration (D-18) |
-| `AUTORISATION_GOOGLE` | une nouvelle autorisation Google |
-| `FICHIER_INACCESSIBLE` | le partage du fichier ou de l'onglet, ou la correction de la configuration |
-| `STRUCTURE_SHEET` | la remise en état de l'onglet (en-têtes, sections) |
-| `FORMULE_PRESENTE` | le retrait de la formule de la ligne du reçu (D-19) |
+| Motif d'échec | Sens | Levé par |
+|---|---|---|
+| `AUTORISATION_GOOGLE` | autorisation absente, perdue ou à renouveler | une nouvelle autorisation Google, puis un nouveau clic |
+| `FICHIER_INACCESSIBLE` | aucun fichier configuré, ou fichier refusé ou absent (403, 404) | la correction de la configuration ou du partage, puis un nouveau clic |
+| `ANNEE_NON_CONFIGUREE` | des reçus ont une année sans fichier configuré (en attente : Q-22) | l'ajout de l'année à la configuration |
+| `ONGLET_NON_RECONNU` | un onglet du nom de l'onglet généré existe sans avoir été créé par l'application (R-41) | le renommage de cet onglet par l'utilisateur, ou un autre nom en configuration |
+| `GOOGLE_INDISPONIBLE` | panne, délai dépassé, réponse 429 ou 5xx de Google, réponse illisible | un nouveau clic, plus tard ; aucun nouvel essai automatique (R-44) |
+| `INTERROMPUE` | l'application s'est arrêtée pendant la régénération | un nouveau clic |
+
+Si plusieurs motifs s'appliquent, le premier de cette liste d'évaluation l'emporte : `FICHIER_INACCESSIBLE` (aucun fichier configuré) avant `AUTORISATION_GOOGLE`, car autoriser Google ne permet rien tant que le fichier manque (D-63 reconduit) ; puis `AUTORISATION_GOOGLE`, `ANNEE_NON_CONFIGUREE`, et les motifs rencontrés pendant l'écriture.
 
 Transitions autorisées, les seules possibles :
 
 | De | Vers | Quand |
 |---|---|---|
-| (création) | `A_COPIER` | validation ; sans fichier ou onglet du Sheet configuré, le reçu passe aussitôt à `BLOQUEE` motif `FICHIER_INACCESSIBLE` (D-62), motif qui l'emporte sur l'absence d'autorisation (D-63) ; sinon, sans autorisation Google, il passe aussitôt à `BLOQUEE` (CA64) |
-| `A_COPIER` | `COPIEE` | photos déposées et ligne écrite, sans changement de version entre-temps |
-| `A_COPIER` | `A_COPIER` | panne passagère : nouvel essai programmé |
-| `A_COPIER` | `BLOQUEE` | un motif de blocage est constaté |
-| `BLOQUEE` | `A_COPIER` | nouvel essai périodique, relance manuelle, nouvelle autorisation Google, ou redémarrage |
-| `COPIEE` ou `BLOQUEE` | `A_COPIER` | correction du reçu |
+| `JAMAIS`, `REUSSIE` ou `ECHEC` | `EN_COURS` | clic sur le bouton, aucune régénération en cours |
+| `EN_COURS` | `REUSSIE` | tous les onglets générés remplacés |
+| `EN_COURS` | `ECHEC` | un motif d'échec est constaté, y compris avant tout appel à Google |
+| `EN_COURS` | `ECHEC` (`INTERROMPUE`) | redémarrage de l'application trouvant `EN_COURS` |
 
-L'état et les alertes sont calculés par le serveur. Ils ne sont jamais lus de la requête du client ni de la réponse du modèle (ADR 0001).
+Toute autre transition est refusée, notamment `EN_COURS` vers `EN_COURS` et `JAMAIS` vers `REUSSIE`.
+
+L'état de la régénération et les alertes sont calculés par le serveur. Ils ne sont jamais lus de la requête du client ni de la réponse du modèle (ADR 0001).
 
 ## 5. Règles de gestion
 
@@ -137,7 +153,7 @@ L'état et les alertes sont calculés par le serveur. Ils ne sont jamais lus de 
 
 ### Validation (D-02, D-04, D-08, D-09, D-10, D-22)
 - **R-06** Date, fournisseur, montant total et type de dépense sont obligatoires, avec au moins une photo. Tous les autres champs sont facultatifs.
-- **R-07** Toutes les valeurs lues sont corrigeables. Un montant corrigé pour ne garder que la part du chalet est enregistré et copié tel quel, sans recalcul.
+- **R-07** Toutes les valeurs lues sont corrigeables. Un montant corrigé pour ne garder que la part du chalet est enregistré et écrit tel quel dans l'onglet généré, sans recalcul.
 - **R-08** Une taxe absente reste vide : ni calcul, ni mise à 0. Un 0 saisi ou imprimé reste 0. Vide et 0 restent distincts en base, dans l'API et dans le Sheet.
 - **R-09** Le type de dépense appartient à la liste fermée, tenue en configuration, dans l'orthographe du Sheet (D-20) : Honoraires professionnel, Fournitures, Entretien / Réparations, Électricité / Internet, Impôts / Taxes, Assurances, Publicité, Autres dépenses, Frais de voyage, Intérêts, Administration.
 - **R-10** La date n'est pas postérieure à la date du jour, fuseau de Montréal. Un montant vaut de 0 à 1 000 000,00 $ ; le montant total est strictement positif.
@@ -160,38 +176,44 @@ Calculées à la validation et à chaque correction, jamais bloquantes. Les seui
 - **R-16** Les alertes sont consultables avant la validation, sans rien enregistrer (`POST /api/recus/controles`), pour que l'utilisateur puisse encore abandonner.
 - **R-17** L'alerte de 500 $ reste active après vérification : la première version n'offre pas de moyen de la lever.
 
-### Copie (D-05, D-07, D-18, D-19, D-24)
-- **R-18** Ordre : les photos d'abord, puis la ligne du Sheet, qui contient leurs liens. Tant que les photos ne sont pas toutes déposées, la ligne n'est pas écrite.
-- **R-19** Les copies sont traitées une à la fois, par ordre de validation, pour que deux reçus ne calculent jamais une position d'insertion sur un même état du Sheet.
-- **R-20** Reprise : la validation n'attend pas la copie. Une panne passagère (erreur réseau, délai dépassé, réponse 429 ou 5xx de Google, réponse 2xx illisible, code `temporarily_unavailable` ou `server_error`) programme un nouvel essai, 1 minute après le premier échec, puis à intervalle doublé jusqu'à 1 heure, sans limite de tentatives. Un reçu `BLOQUEE` est réessayé à l'intervalle maximal. Après un redémarrage, tout reçu non `COPIEE` est repris.
-- **R-21** Pas de doublon dans Drive ni dans le Sheet : chaque photo et chaque ligne portent un identifiant invisible de l'utilisateur. Avant toute création, l'application cherche cet identifiant ; s'il existe, elle réutilise le fichier ou met à jour la ligne. Cet identifiant est une métadonnée attachée à la ligne, qui la suit quand elle se déplace, et n'ajoute aucune colonne (Q-07, à confirmer à l'essai réel, section 13).
-- **R-22** Placement d'une nouvelle ligne (D-24) :
-  - la section est celle du mois de la date du reçu, reconnue sans tenir compte de la casse ni des accents ;
-  - la ligne est insérée juste après la dernière ligne de la section dont la date est inférieure ou égale à celle du reçu ;
-  - sans telle ligne, elle est insérée juste après le titre de section ;
-  - sont ignorées pour cette comparaison les lignes sans date ou dont la date est illisible (acceptées : vraie date, ou texte de la forme « 6 janvier 2026 ») ;
-  - les lignes existantes gardent leur contenu et leur ordre.
-- **R-23** Section absente (D-24) : le titre du mois est créé, en minuscules, avec une ligne vide de séparation, après la dernière section d'un mois antérieur, sinon avant la première section d'un mois postérieur, sinon après la ligne d'en-têtes.
-- **R-24** Les colonnes sont repérées par le nom de leur en-tête, pas par leur position. Si un en-tête attendu manque ou si deux sections portent le même mois : aucune écriture, motif `STRUCTURE_SHEET`. Si seule PHOTO manque, l'application l'ajoute en fin de tableau (D-07).
+### Dépôt des photos dans Drive (D-05, D-07, D-18, D-66)
+- **R-18** *(reformulée)* Après la validation, les photos du reçu sont déposées dans Drive, sans que la réponse de validation attende le dépôt. La ligne du reçu dans le Sheet ne dépend plus du dépôt : une régénération écrit un lien pour chaque photo déjà déposée et laisse vide la cellule PHOTO d'un reçu dont aucune photo n'est déposée (en attente : Q-21).
+- **R-19** *(retirée, D-66)* Les copies étaient traitées une à la fois pour qu'aucun calcul de position d'insertion ne porte sur un même état du Sheet : il n'y a plus d'insertion. Le dépôt peut rester séquentiel sans que le PRD l'exige.
+- **R-20** *(reformulée)* Reprise : la validation n'attend pas le dépôt. Une panne passagère de Drive (erreur réseau, délai dépassé, réponse 429 ou 5xx, réponse 2xx illisible, code `temporarily_unavailable` ou `server_error`) programme un nouvel essai, 1 minute après le premier échec, puis à intervalle doublé jusqu'à 1 heure, sans limite de tentatives, en respectant `Retry-After`. Un dépôt qui attend une action de l'utilisateur (autorisation Google absente ou perdue, accès refusé à Drive) est réessayé à l'intervalle maximal, et aussitôt après une nouvelle autorisation. Après un redémarrage, toute photo à déposer est reprise. Une régénération ne programme jamais de nouvel essai d'elle-même (R-44).
+- **R-21** *(reformulée)* Pas de doublon dans Drive : chaque photo porte un identifiant invisible de l'utilisateur. Avant toute création, l'application cherche cet identifiant ; s'il existe, elle réutilise le fichier. Il n'y a plus d'identifiant de ligne dans le Sheet : une régénération réécrit tout et ne risque aucun doublon de ligne. Q-07 (métadonnée de ligne) est sans objet.
+- **R-22** *(retirée, D-66)* Placement d'une nouvelle ligne dans une section existante : il n'y a plus d'insertion dans un onglet de l'utilisateur.
+- **R-23** *(retirée, D-66)* Création du titre d'une section de mois dans l'onglet de l'utilisateur.
+- **R-24** *(retirée, D-66)* Colonnes repérées par le nom de leur en-tête et motif `STRUCTURE_SHEET` : l'application ne lit plus l'onglet de l'utilisateur ; l'onglet généré a des colonnes d'ordre fixe (R-39). L'ajout de PHOTO en fin de tableau (D-07) se retrouve dans l'onglet généré, où PHOTO est la dernière colonne.
 - **R-25** Les numéros d'inscription ne sont jamais écrits dans le Sheet (D-03).
 - **R-26** NOTES ne reçoit que les textes d'alertes du tableau ci-dessus, séparés par ` ; `, dans l'ordre du tableau. Sans alerte, NOTES est vide.
-- **R-27** PHOTO contient un lien cliquable par photo (« Photo 1 », « Photo 2 »), dans une seule cellule (Q-06).
+- **R-27** *(reformulée)* PHOTO contient un lien cliquable par photo déposée (« Photo 1 », « Photo 2 », selon le rang de la photo), séparés par « , », dans une seule cellule (Q-06, D-62).
 - **R-28** L'application crée elle-même son dossier Drive, dont le nom est en configuration, au premier dépôt. Elle ne voit dans Drive que ce qu'elle y a créé. Les fichiers restent privés : aucun partage ni lien public (Q-08).
 
-### Correction après validation (Q-04)
-- **R-29** Toutes les valeurs sont corrigeables, sans ajout ni retrait de photo. Les règles de validation s'appliquent, les alertes sont recalculées, le reçu repasse à `A_COPIER`. Les photos ne sont ni redéposées ni renommées.
-- **R-30** Même mois : la ligne est réécrite à son emplacement actuel, retrouvée par son identifiant même si d'autres lignes l'ont décalée. La date peut changer sans que la ligne bouge.
-- **R-31** Autre mois ou autre année : la ligne est insérée dans la section et le fichier voulus (R-22, R-23, D-18), puis l'ancienne est supprimée. Une section vidée garde son titre. Une reprise après panne n'aboutit jamais à deux lignes.
-- **R-32** La correction réécrit toutes les colonnes de la ligne, NOTES compris : la base est la référence (D-05). Si la ligne a disparu du Sheet, elle est réinsérée selon R-22.
-- **R-33** Une cellule de la ligne contenant une formule n'est jamais écrasée (D-19) : aucune cellule de la ligne n'est écrite, motif `FORMULE_PRESENTE`.
-- **R-34** Une modification manuelle dans le Sheet ne revient jamais en base (D-05) : l'application ne lit le Sheet que pour se repérer.
+### Régénération du Google Sheet (D-66)
+- **R-38** Le Sheet est une projection de la base : à la demande, l'application écrit dans chaque fichier d'année configuré un onglet généré qui reproduit les reçus de la base. L'application n'écrit rien d'autre dans le Sheet.
+- **R-39** Contenu de l'onglet généré (section 7.4) : une ligne d'en-têtes puis une ligne par reçu validé dont la date tombe dans l'année du fichier, colonnes d'ordre fixe, triées par date croissante puis par ordre de validation (en attente : Q-16), valeurs littérales, sans formule, sans total ni ligne vide. Chaque régénération réécrit l'onglet en entier : ce qu'un utilisateur y aurait modifié ou ajouté disparaît.
+- **R-40** Remplacement sûr : la régénération écrit d'abord dans un onglet temporaire, puis ne remplace l'ancien onglet généré qu'après une écriture complète réussie. En cas d'échec, l'ancien onglet généré est intact et l'onglet temporaire est retiré. À la première régénération, l'onglet généré est créé. L'onglet généré garde la même identité d'une régénération à l'autre (il n'est pas supprimé puis recréé), pour que les formules de l'utilisateur qui le lisent continuent de fonctionner (à confirmer à l'essai réel, section 13).
+- **R-41** Périmètre : l'application ne modifie, ne vide, ne renomme ni ne supprime aucun onglet qu'elle n'a pas créé, y compris l'onglet de même nom créé par l'utilisateur (échec `ONGLET_NON_RECONNU`, sans écriture). Elle ne lit du Sheet que la liste des onglets, jamais le contenu des cellules (R-34). Elle ne crée jamais le fichier.
+- **R-42** État global : l'application tient un état de la régénération (section 4.2), consultable (section 7.1), qui donne la date de la dernière réussite, ou l'échec et son motif, le nombre de reçus écrits, le nombre de reçus validés ou corrigés depuis le début de la dernière régénération réussie, le nombre de photos sans lien, et les années ayant des reçus sans fichier configuré (en attente : Q-22).
+- **R-43** Une seule régénération à la fois. Une demande pendant une régénération en cours est refusée sans effet ; un double clic ne lance pas deux écritures.
+- **R-44** Le bouton est le seul déclencheur : aucune régénération n'a lieu après une validation, une correction, une autorisation Google accordée ou un redémarrage. Une régénération qui échoue n'est pas réessayée d'elle-même ; l'utilisateur recommence.
+- **R-45** La régénération lit la base une fois, au début : un reçu validé ou corrigé pendant son déroulement figure dans la suivante. Elle ne modifie aucun reçu et ne dépose aucune photo (en attente : Q-21).
+- **R-46** Portée : une régénération traite tous les fichiers d'année configurés, l'un après l'autre ; l'échec d'un fichier arrête la régénération, et les onglets déjà remplacés restent remplacés (chaque onglet est remplacé en entier ou pas du tout) (en attente : Q-17).
 
-Pas de suppression ni d'annulation d'un reçu dans la première version. Pour écarter une erreur, l'utilisateur supprime la ligne à la main dans le Sheet ; le reçu reste en base (Q-05).
+### Correction après validation (Q-04)
+- **R-29** *(reformulée)* Toutes les valeurs sont corrigeables, sans ajout ni retrait de photo. Les règles de validation s'appliquent et les alertes sont recalculées. Les photos ne sont ni redéposées ni renommées. La correction n'écrit rien dans le Sheet : elle apparaît à la régénération suivante.
+- **R-30** *(retirée, D-66)* Réécriture de la ligne à son emplacement : il n'y a plus de ligne persistante à retrouver.
+- **R-31** *(retirée, D-66)* Déplacement de la ligne vers un autre mois ou une autre année : la régénération place chaque reçu selon sa date (R-39) ; un reçu dont l'année change passe, à la régénération suivante, d'un onglet généré à l'autre.
+- **R-32** *(retirée, D-66)* Réécriture de toutes les colonnes et réinsertion d'une ligne disparue : remplacée par la réécriture complète de R-39.
+- **R-33** *(retirée, D-66)* Refus d'écraser une formule de la ligne du reçu (D-19) : l'application n'écrit plus dans les lignes de l'utilisateur. Les valeurs écrites restent littérales (section 7.4, CS16).
+- **R-34** *(reformulée)* Une modification manuelle dans le Sheet ne revient jamais en base (D-05) : l'application ne lit pas les cellules. Dans l'onglet généré, elle est écrasée à la régénération suivante ; ailleurs, elle n'est jamais touchée.
+
+Pas de suppression ni d'annulation d'un reçu dans la première version (Q-05). Depuis D-66, supprimer la ligne à la main dans le Sheet ne l'écarte plus : le reçu, resté en base, réapparaît à la régénération suivante (en attente : Q-20).
 
 ### Conservation (backlog, contraintes fiscales)
 - **R-35** Six ans après la dernière année concernée : l'application n'offre aucun moyen de supprimer un reçu ou une photo, et ne purge rien. Aucune date de fin n'est calculée, car la « dernière année concernée » peut dépasser l'année du reçu. La purge éventuelle relèvera d'un besoin ultérieur.
 - **R-36** La photo d'origine est conservée octet pour octet (copie locale et Drive) (Q-13).
-- **R-37** Une suppression faite directement dans Drive n'est pas détectée ni réparée dans cette version. Tant que NF-02 n'est pas traité, la copie locale et Drive sont les deux seuls exemplaires (ADR 0001, Conséquences).
+- **R-37** Une suppression faite directement dans Drive n'est pas détectée ni réparée dans cette version. Tant que NF-02 n'est pas traité, la copie locale et Drive sont les deux seuls exemplaires (ADR 0001, Conséquences). La base faisant référence, l'onglet généré peut être reconstruit à tout moment (R-38) ; seuls les liens des photos supprimées de Drive restent faux.
 
 ## 6. Modèle de données (vue métier)
 
@@ -208,16 +230,20 @@ Pas de suppression ni d'annulation d'un reçu dans la première version. Pour é
 | montant total lu | facultatif, cents entiers, non modifiable après la validation |
 | numéro d'inscription TPS, TVQ | facultatifs, 30 caractères au plus, en base seulement ; un numéro fait d'espaces devient vide (D-41) |
 | alertes | calculées |
-| état de la copie, motif de blocage | calculés |
 | clé d'idempotence | UUID fourni par le client, unique |
 | version | entier, incrémenté à chaque correction |
 | validé le, corrigé le | horodatages |
+
+L'état de la copie et le motif de blocage du reçu n'existent plus (D-66).
 
 ### Photo
 Identifiant UUID ; rang dans le reçu (à partir de 1) ; format (JPEG ou PNG) ; taille ; identifiant du fichier Drive une fois déposé. Le nom du fichier local et celui du fichier Drive sont générés par le serveur (`<date>_<identifiant>.<extension>` dans Drive), jamais repris du client. Le fichier est stocké hors de la base et hors de la racine web (D-25).
 
 ### Autorisation Google
 Unique pour l'application. État : `ABSENTE`, `VALIDE`, `A_RENOUVELER`. Le jeton de renouvellement est chiffré au repos.
+
+### État de la régénération (D-66)
+Unique pour l'application. État (`JAMAIS`, `EN_COURS`, `REUSSIE`, `ECHEC`), motif d'échec, année en cause, date de la demande, date de la dernière réussite, date du dernier échec, nombre de reçus écrits par la dernière réussite. L'application mémorise aussi, pour chaque fichier d'année, l'onglet généré qu'elle y a créé, afin de ne jamais toucher un onglet qu'elle n'a pas créé (R-41).
 
 ## 7. Contrats d'interface externes
 
@@ -242,6 +268,7 @@ Corps d'erreur : `{ "erreur": "<message générique en français>", "code": "<CO
 | 404 | `INTROUVABLE` | ressource absente, ou méthode non permise sur une route existante, sans en-tête `Allow` (`OPTIONS` excepté) ; identique quelle qu'en soit la raison |
 | 409 | `VERSION_PERIMEE` | correction fondée sur une version dépassée |
 | 409 | `CLE_DEJA_UTILISEE` | clé d'idempotence déjà connue, avec des valeurs ou des photos différentes |
+| 409 | `REGENERATION_EN_COURS` | demande de régénération alors qu'une autre est en cours (D-66) |
 | 413 | `TAILLE_EXCESSIVE` | photo ou requête trop lourde |
 | 415 | `FORMAT_NON_ACCEPTE` | format hors liste |
 | 429 | `TROP_DE_TENTATIVES` | avec en-tête `Retry-After` |
@@ -272,15 +299,18 @@ Valeurs fictives pour les numéros et le type.
 | `GET /api/configuration` | | 200 : `{ "typesDepense": […], "photosParRecuMax": 5, "tailleParPhotoMaxOctets": …, "formats": ["image/jpeg", "image/png"] }` |
 | `POST /api/lectures` | multipart, parties `photos` | 200 : objet lecture ; 400, 413, 415, 429 |
 | `POST /api/recus/controles` | JSON : `valeurs`, `montantTotalLuCents` (facultatif), `recuId` (facultatif, en correction) | 200 : `{ "alertes": [ … ] }` ; 400. N'enregistre rien |
-| `POST /api/recus` | multipart : partie `recu` en JSON (`cleIdempotence`, `valeurs`, `montantTotalLuCents`) et parties `photos` | 201 : objet reçu, dont l'état de copie est déjà `BLOQUEE` avec le motif `FICHIER_INACCESSIBLE` quand le fichier ou l'onglet du Sheet n'est pas configuré (D-62) ; 200 si la clé est déjà connue avec le même contenu ; 400, 409, 413, 415 |
-| `GET /api/recus` | `annee`, `etatCopie`, `page`, `taille` (100 au plus) | 200 : `{ "recus": [ … ], "total": n }`, par date décroissante |
+| `POST /api/recus` | multipart : partie `recu` en JSON (`cleIdempotence`, `valeurs`, `montantTotalLuCents`) et parties `photos` | 201 : objet reçu ; 200 si la clé est déjà connue avec le même contenu ; 400, 409, 413, 415 |
+| `GET /api/recus` | `annee`, `page`, `taille` (100 au plus) | 200 : `{ "recus": [ … ], "total": n }`, par date décroissante |
 | `GET /api/recus/{id}` | | 200 : objet reçu ; 404 |
 | `PUT /api/recus/{id}` | JSON : `version`, `valeurs` | 200 : objet reçu ; 400, 404, 409 |
 | `GET /api/recus/{id}/photos/{rang}` | | 200 : image ; 404 |
-| `POST /api/recus/{id}/copie` | | 202 : relance immédiate, sans effet si `COPIEE` ; 404 |
+| `POST /api/sheet/regeneration` | aucun corps | 202 : demande prise en compte, état `EN_COURS` ; une condition manquante (autorisation, fichier, année) donne l'état `ECHEC` avec son motif, sans aucun appel à Google ; 409 `REGENERATION_EN_COURS` |
+| `GET /api/sheet/etat` | | 200 : objet état de la régénération |
 | `GET /api/google/etat` | | 200 : `{ "etat": "ABSENTE" \| "VALIDE" \| "A_RENOUVELER" }` |
 | `GET /api/google/autorisation` | | 302 vers le consentement Google ; 503 `GOOGLE_NON_CONFIGURE` sans identifiants Google (D-42) |
 | `GET /api/google/rappel` | `code`, `state` | 302 vers la PWA, toujours vers une adresse fixe |
+
+Retirés (D-66) : `POST /api/recus/{id}/copie` (la relance d'une copie par reçu) et le paramètre `etatCopie` de `GET /api/recus`. Un paramètre inconnu est ignoré.
 
 **Objet lecture** : `{ "resultat": "LU" | "ILLISIBLE" | "ECHEC", "valeurs": { … }, "champsRejetes": ["date"] }`.
 - `LU` : au moins une valeur valide ; les autres sont `null`.
@@ -289,11 +319,23 @@ Valeurs fictives pour les numéros et le type.
 
 Les trois résultats répondent 200 : un échec de lecture n'est pas une erreur de la requête, et mène à la saisie manuelle.
 
-**Objet reçu** : `{ "id", "version", "valeurs", "montantTotalLuCents", "alertes": [{ "code", "message", "ecartCents" }], "etatCopie", "motifBlocage", "prochaineTentative", "photos": [{ "rang", "format", "taille", "lienDrive" }], "valideLe", "corrigeLe" }`. `ecartCents` n'existe que pour `ECART_CALCUL`. `etatCopie` et `motifBlocage` sont ceux de la validation même : sans fichier ou onglet du Sheet configuré, aucun appel à Google ne part (ni jeton, ni Drive, ni Sheets), aucune photo n'est déposée, et la réponse porte `BLOQUEE` et `FICHIER_INACCESSIBLE` (D-62). Aucun jeton, aucun chemin de fichier local, aucun identifiant technique de fichier ou d'onglet.
+**Objet reçu** : `{ "id", "version", "valeurs", "montantTotalLuCents", "alertes": [{ "code", "message", "ecartCents" }], "photos": [{ "rang", "format", "taille", "lienDrive" }], "valideLe", "corrigeLe" }`. `ecartCents` n'existe que pour `ECART_CALCUL`. `lienDrive` vaut `null` tant que la photo n'est pas déposée. La validation ne dépend ni du Sheet ni de sa configuration : l'objet reçu ne porte aucun état de copie, aucun motif de blocage, aucune prochaine tentative (D-66, qui remplace D-62 sur ce point). Aucun jeton, aucun chemin de fichier local, aucun identifiant technique de fichier ou d'onglet.
+
+**Objet état de la régénération** : `{ "etat": "JAMAIS" | "EN_COURS" | "REUSSIE" | "ECHEC", "motif": null | "AUTORISATION_GOOGLE" | "FICHIER_INACCESSIBLE" | "ANNEE_NON_CONFIGUREE" | "ONGLET_NON_RECONNU" | "GOOGLE_INDISPONIBLE" | "INTERROMPUE", "anneeEnCause": null | 2026, "demandeeLe", "derniereReussiteLe", "dernierEchecLe", "recusEcrits", "recusNonReportes", "photosSansLien", "anneesNonConfigurees": [2025] }`.
+- `motif` et `anneeEnCause` ne valent autre chose que `null` que si `etat` est `ECHEC` (`anneeEnCause` seulement quand l'année est en cause) ; `recusEcrits` est le nombre de reçus écrits par la dernière réussite, `null` sans réussite.
+- `derniereReussiteLe` reste renseignée après un échec.
+- `recusNonReportes` : nombre de reçus validés ou corrigés après le début de la dernière régénération réussie (tous, si elle n'a jamais réussi).
+- `photosSansLien` : nombre de photos sans identifiant Drive.
+- `anneesNonConfigurees` : années ayant au moins un reçu sans fichier configuré (en attente : Q-22).
+- Aucun nom de fichier, d'onglet ni identifiant Google.
 
 ### 7.2 PWA
 
-Application installable (D-13), sans mode hors ligne : aucune réponse de l'API ni photo n'est mise en cache. Écrans : connexion ; prise de vue (photographier ou importer, plusieurs photos, retrait d'une photo avant lecture) ; validation (photos à côté du formulaire, alertes visibles, action d'abandon) ; liste et détail des reçus avec état de la copie, relance et correction. Un bandeau signale une autorisation Google à donner ou à renouveler et le nombre de reçus bloqués. Après une validation dont la réponse porte le motif `FICHIER_INACCESSIBLE`, l'écran affiche « Reçu enregistré. Copie vers Google en attente : fichier ou onglet du Sheet non configuré. » (D-62).
+Application installable (D-13), sans mode hors ligne : aucune réponse de l'API ni photo n'est mise en cache. Écrans : connexion ; prise de vue (photographier ou importer, plusieurs photos, retrait d'une photo avant lecture) ; validation (photos à côté du formulaire, alertes visibles, action d'abandon) ; liste et détail des reçus, avec correction, et photos sans lien signalées.
+
+**Bouton de régénération (D-66).** Sur l'écran de la liste des reçus, un bouton « Mettre à jour le Google Sheet » (libellé proposé) appelle `POST /api/sheet/regeneration`. Il est désactivé pendant `EN_COURS` et jusqu'à la réponse, de sorte qu'un double clic n'envoie qu'une demande. À côté, l'état de la régénération est affiché : « Jamais mis à jour » ; « Mise à jour en cours » ; « Mis à jour le <date> » ; ou « Échec de la mise à jour » avec le motif en français (par exemple « autorisation Google à renouveler »), la date de la dernière mise à jour réussie et le nombre de reçus validés ou corrigés depuis (`recusNonReportes`). L'état est relu périodiquement tant qu'il est `EN_COURS`. Les années ayant des reçus sans fichier configuré et le nombre de photos sans lien sont affichés quand ils ne valent pas zéro.
+
+Un bandeau signale une autorisation Google à donner ou à renouveler. Il ne compte plus de « reçus bloqués », et aucun message n'est affiché après une validation à propos du Sheet : « Reçu enregistré. Copie vers Google en attente… » (D-62) est retiré.
 
 ### 7.3 Lecture par le modèle (Anthropic)
 
@@ -322,9 +364,13 @@ Un texte absent, `null`, vide ou fait seulement de séparateurs (espace insécab
 
 Une réponse qui n'est pas du JSON conforme, ou qui ne répond pas sous 60 secondes, donne `ECHEC`. Pas de nouvel essai automatique : la PWA propose de relancer. Les réponses du modèle ne sont ni enregistrées ni journalisées.
 
-### 7.4 Écriture dans le Google Sheet
+### 7.4 Écriture dans le Google Sheet : l'onglet généré (D-66)
 
-Le fichier et l'onglet sont déduits de l'année de la date du reçu, par la correspondance en configuration (D-18). Le fichier n'est jamais créé par l'application.
+Le fichier est déduit de l'année de la date du reçu, par la correspondance année → fichier en configuration (D-18). Le fichier n'est jamais créé par l'application. L'onglet généré porte un nom fixé en configuration, recommandé « Reçus générés » (en attente : Q-15) ; l'onglet temporaire porte ce nom suivi d'un suffixe de configuration (« (temporaire) » par défaut).
+
+**Contenu** (en attente : Q-16, lecture retenue : un tableau plat). Première ligne : les en-têtes. Puis une ligne par reçu validé de l'année du fichier, triées par date croissante puis par ordre de validation. Pas de titre de mois, pas de ligne vide, pas de total, pas de formule. Un fichier sans reçu pour son année reçoit l'onglet avec ses seuls en-têtes. Les mois se retrouvent par les calculs de l'utilisateur, qui lisent la colonne DATE.
+
+Colonnes, dans cet ordre fixe, avec ces noms (ceux de l'onglet de l'utilisateur, plus PHOTO) :
 
 | Colonne du Sheet | Terme du glossaire | Valeur écrite | Vide si absent |
 |---|---|---|---|
@@ -337,15 +383,17 @@ Le fichier et l'onglet sont déduits de l'année de la date du reçu, par la cor
 | TVQ | TVQ | nombre en dollars | oui |
 | MONTANT TOTAL | Montant total | nombre en dollars | non (obligatoire) |
 | NOTES | textes des alertes (R-26) | texte littéral | oui |
-| PHOTO | liens vers Drive (R-27) | liens cliquables | non, une fois la copie faite |
+| PHOTO | liens vers Drive (R-27) | liens cliquables | oui, tant qu'aucune photo n'est déposée |
 
-- Les valeurs sont écrites telles quelles, jamais interprétées comme une formule (D-19) : un texte commençant par `=`, `+`, `-` ou `@` reste un texte.
-- La nouvelle ligne reprend la mise en forme et la liste déroulante de TYPE de la ligne de données la plus proche.
-- Aucun autre onglet, aucune autre ligne n'est modifiée. Hors de la correspondance de configuration, aucun fichier n'est ouvert.
+- Les valeurs sont écrites telles quelles, jamais interprétées comme une formule : un texte commençant par `=`, `+`, `-` ou `@` reste un texte, dans toute cellule de l'onglet généré, en-têtes et NOTES compris (D-19, CS16).
+- L'onglet généré n'a ni liste déroulante, ni mise en forme conditionnelle ; sa mise en forme se limite au format de la date, au format des montants et à la ligne d'en-têtes.
+- Aucun autre onglet, aucune autre ligne n'est modifié ; l'onglet « Comptes 2026 » et ses lignes, formules et totaux restent intacts. Hors de la correspondance de configuration, aucun fichier n'est ouvert.
+- Ce qui est écrit dans l'onglet généré à la main est perdu à la régénération suivante (R-39).
+- Séquence : lecture de la liste des onglets ; création de l'onglet temporaire ; écriture complète du contenu ; remplacement du contenu de l'onglet généré (créé s'il n'existe pas) ; retrait de l'onglet temporaire (R-40).
 
 ### 7.5 Dépôt dans Google Drive
 
-Un fichier par photo, photo d'origine (R-36), dans le dossier de l'application (R-28), sous le nom généré par le serveur, avec l'identifiant de la photo en propriété invisible (R-21). Aucune permission de partage n'est ajoutée.
+Un fichier par photo, photo d'origine (R-36), dans le dossier de l'application (R-28), sous le nom généré par le serveur, avec l'identifiant de la photo en propriété invisible (R-21). Aucune permission de partage n'est ajoutée. Le dépôt suit la validation (R-18) ; la régénération n'appelle pas Drive : elle écrit les liens construits à partir des identifiants Drive déjà connus (en attente : Q-21).
 
 ### 7.6 Autorisation Google (D-17)
 
@@ -353,8 +401,8 @@ Un fichier par photo, photo d'origine (R-36), dans le dossier de l'application (
 - Droits demandés : édition des feuilles de calcul, et accès aux seuls fichiers Drive créés par l'application. Aucun autre droit.
 - Consentement partiel (un droit décoché) : l'autorisation est `A_RENOUVELER`, et l'utilisateur en est informé.
 - Conservation : jeton de renouvellement chiffré au repos, clé fournie par l'environnement ; jamais renvoyé à la PWA ni journalisé.
-- Expiration ou révocation (`invalid_grant`, ou droits retirés) : l'état passe à `A_RENOUVELER`, les reçus en attente deviennent `BLOQUEE` (`AUTORISATION_GOOGLE`), et le bandeau de la PWA le signale. Aucun reçu n'est perdu, la validation reste possible. Le renouvellement relance aussitôt les copies.
-- Autre refus de renouvellement, sans révocation (`invalid_client`, ou 401 et 403 sans code lisible) : même état, mêmes reçus `BLOQUEE` et même bandeau, mais le jeton de renouvellement est gardé : une fois la cause corrigée, la reprise se fait sans nouveau consentement.
+- Expiration ou révocation (`invalid_grant`, ou droits retirés) : l'état passe à `A_RENOUVELER`, les dépôts de photos en attente attendent une nouvelle autorisation (R-20), une régénération en cours échoue avec `AUTORISATION_GOOGLE` (CA101), et le bandeau de la PWA le signale. Aucun reçu n'est perdu, la validation reste possible. Le renouvellement relance aussitôt les dépôts, mais non la régénération (R-44).
+- Autre refus de renouvellement, sans révocation (`invalid_client`, ou 401 et 403 sans code lisible) : même état, mêmes dépôts en attente et même bandeau, mais le jeton de renouvellement est gardé : une fois la cause corrigée, la reprise se fait sans nouveau consentement.
 - Aucune autorisation donnée : même comportement, avec l'état `ABSENTE`.
 - Condition externe : le projet Google est publié en production, sans vérification, avec un écran d'avertissement au consentement (Q-12, à confirmer dans la documentation de Google, section 13). Selon la documentation de Google, connue du rédacteur mais non vérifiée ici, un projet resté en mode test voit son autorisation expirer après 7 jours, ce qui contredirait D-17, et une autorisation inutilisée pendant 6 mois expire aussi.
 
@@ -367,20 +415,32 @@ Un fichier par photo, photo d'origine (R-36), dans le dossier de l'application (
 | Reçu de 100 $ ou plus sans aucune taxe | alerte de numéros manquants, sans exception (D-03) |
 | Montant corrigé après lecture : plus aucune taxe | taxes vides, écart recalculé |
 | Double appui sur « valider », ou réponse perdue | même clé d'idempotence : un seul reçu |
-| Correction pendant qu'une copie est en cours | la copie en cours s'achève ; à sa fin, la version ayant changé, le reçu reste `A_COPIER` et est recopié |
+| Correction pendant qu'une régénération est en cours | la régénération a lu la base à son début : la correction figure dans la suivante, et `recusNonReportes` la compte (R-45) |
+| Reçu validé pendant une régénération | idem : il figure dans la suivante |
 | Deux corrections simultanées | la seconde reçoit 409 `VERSION_PERIMEE` |
-| Année du reçu non configurée | reçu conservé, `BLOQUEE` (`ANNEE_NON_CONFIGUREE`) ; photos déposées dans Drive quand même, ligne reprise ensuite (D-18) |
-| Ligne de total sous le dernier mois (non observée) | supposé absente ; une section nouvelle s'insère après la dernière section du mois antérieur, donc avant tout contenu qui la suit |
-| Ligne vide au milieu d'une section | la section court jusqu'au titre suivant ; R-22 s'applique |
-| Quota ou limitation Google (429) | panne passagère, en respectant `Retry-After` |
-| Onglet renommé ou absent | `FICHIER_INACCESSIBLE` |
-| TYPE refusé par une liste déroulante modifiée dans le Sheet | `STRUCTURE_SHEET` |
+| Année du reçu non configurée | le reçu est conservé et ses photos sont déposées ; il ne figure dans aucun onglet généré ; l'année est signalée dans l'état (en attente : Q-22, lecture retenue : avertissement sans échec, les autres années sont écrites) |
+| Aucun fichier configuré | la régénération échoue aussitôt, `FICHIER_INACCESSIBLE`, sans appel à Google (D-63 reconduit : ce motif prime sur l'autorisation absente) |
+| Autorisation Google absente ou perdue | la régénération échoue aussitôt, `AUTORISATION_GOOGLE`, sans appel au Sheet ; perdue pendant la régénération : échec au même motif, onglets inchangés ; les dépôts de photos attendent la nouvelle autorisation |
+| Fichier inaccessible (403, 404), non partagé, supprimé | échec `FICHIER_INACCESSIBLE` ; la validation et le dépôt des photos ne sont pas touchés |
+| Onglet généré modifié à la main (valeurs, lignes, colonnes ajoutées, formules) | réécrit en entier à la régénération suivante ; il n'y a aucune lecture ni détection (R-34, R-39) |
+| Onglet généré supprimé à la main | recréé à la régénération suivante ; les formules de l'utilisateur qui le lisaient affichent une erreur de référence jusque-là et ne sont pas réparées par l'application (à confirmer, section 13) |
+| Onglet généré renommé à la main | retrouvé par son identifiant mémorisé, il reprend son nom configuré |
+| Onglet de même nom, créé par l'utilisateur, ou identifiant mémorisé perdu (base restaurée) | échec `ONGLET_NON_RECONNU`, sans écriture ; l'utilisateur renomme son onglet ou change le nom en configuration (R-41) |
+| Régénération concurrente ou double clic | une seule régénération ; la demande en trop reçoit 409 `REGENERATION_EN_COURS` sans effet (R-43) |
+| Panne de Google pendant l'écriture de l'onglet temporaire ou le remplacement | échec `GOOGLE_INDISPONIBLE` ; l'ancien onglet généré est intact ; l'onglet temporaire est retiré, ou, s'il ne peut pas l'être, le sera au début de la régénération suivante ; aucun nouvel essai automatique (R-40, R-44) |
+| Arrêt de l'application pendant une régénération | au redémarrage, état `ECHEC` motif `INTERROMPUE` ; l'ancien onglet généré est celui d'avant, ou, si le remplacement avait commencé, celui que Google a conservé : l'onglet n'est jamais lu pour le vérifier ; un clic recommence tout |
+| Quota ou limitation Google (429) pendant une régénération | échec `GOOGLE_INDISPONIBLE`, pas de nouvel essai ; l'utilisateur recommence plus tard |
+| Quota ou limitation Google (429) pendant un dépôt de photo | panne passagère, en respectant `Retry-After` (R-20) |
+| Photo non encore déposée (panne Drive, autorisation absente) | régénération réussie ; cellule PHOTO vide ou avec les liens des photos déposées ; `photosSansLien` donne le nombre (R-18) |
+| Régénération sans aucun reçu pour l'année | onglet généré avec ses seuls en-têtes |
+| Régénération très longue | au-delà du délai configuré, échec `GOOGLE_INDISPONIBLE` (en attente : Q-23) |
+| Reçu à écarter après une erreur | le reçu reste en base et dans l'onglet généré ; l'utilisateur le corrige (en attente : Q-20) |
 | Fichier à format valide mais contenu corrompu | 400 `IMAGE_ILLISIBLE` si l'en-tête est illisible ; une image tronquée après son en-tête est acceptée, le corps n'étant pas décodé (D-41) |
 | Session expirée pendant la validation | 401 ; la page garde photos et valeurs, l'utilisateur se reconnecte et renvoie avec la même clé |
 
 ## 9. Valeurs par défaut (configuration)
 
-Acceptées par l'utilisateur (Q-14). Aucune n'est figée dans le code.
+Acceptées par l'utilisateur (Q-14) ; les lignes ajoutées par D-66 sont à accepter avec la révision. Aucune n'est figée dans le code.
 
 | Valeur | Défaut | Raison |
 |---|---|---|
@@ -394,10 +454,17 @@ Acceptées par l'utilisateur (Q-14). Aucune n'est figée dans le code.
 | Blocage de connexion | 5 échecs par source, 15 minutes | ADR 0001 |
 | Expiration de session | 8 heures d'inactivité | |
 | Seuils d'alerte | 100 $, 500 $, 0,02 $ | D-03, D-23 |
+| Correspondance année → fichier | aucune ; une entrée incomplète est ignorée | D-18, D-65 |
+| Nom de l'onglet généré | « Reçus générés » (en attente : Q-15) | D-66 ; ne jamais reprendre le nom d'un onglet de l'utilisateur, tel « Comptes 2026 » : l'application le refuserait (R-41), mais l'ancien réglage d'onglet de D-65 désignait cet onglet et ne doit pas être réutilisé |
+| Suffixe de l'onglet temporaire | « (temporaire) » | D-66 |
+| Rythme des essais de dépôt | 1 minute, doublé jusqu'à 1 heure | R-20 |
+| Délai maximal d'une régénération | 5 minutes (en attente : Q-23) | borne l'état `EN_COURS` |
 
 ## 10. Critères d'acceptation
 
-Sauf mention contraire, Anthropic, Google Sheets et Google Drive sont doublés : le « modèle » désigne un double qui renvoie les valeurs indiquées. La qualité de la lecture réelle ne se vérifie pas ici (section 13).
+Sauf mention contraire, Anthropic, Google Sheets et Google Drive sont doublés : le « modèle » désigne un double qui renvoie les valeurs indiquées. La qualité de la lecture réelle ne se vérifie pas ici (section 13). Le double du Sheet garde la trace de chaque requête reçue, onglet par onglet.
+
+Un critère marqué **Retiré** n'a plus d'objet depuis D-66 ; son identifiant n'est ni renuméroté ni réutilisé. Les critères nouveaux continuent la numérotation (CA85 à CA103, CS29 à CS31).
 
 ### Lecture
 - **CA01** Given un utilisateur connecté et une photo valide When il appelle `POST /api/lectures` Then la réponse 200 contient `valeurs`, et la base ne contient aucun reçu, le dossier des photos aucun fichier, et Drive et le Sheet n'ont reçu aucun appel (D-02).
@@ -415,11 +482,11 @@ Sauf mention contraire, Anthropic, Google Sheets et Google Drive sont doublés :
 - **CA10** Given le reçu Unimage (265,00 ; 13,25 ; 26,43 ; 304,68, numéros présents) When il est validé Then les montants valent 26500, 1325, 2643, 30468 et il n'y a aucune alerte.
 - **CA11** Given le reçu Garage Iberville (618,27 ; 30,91 ; 61,67 ; 710,85, numéros vides) When il est validé Then les alertes sont exactement `NUMEROS_INSCRIPTION_MANQUANTS` et `PIECE_A_VERIFIER`, sans `ECART_CALCUL`.
 - **CA12** Given le reçu Familiprix (13,79 ; 0,69 ; 1,38 ; 15,86, numéros vides) When il est validé avec le fournisseur `Familiprix` Then le fournisseur enregistré est `Familiprix` et il n'y a aucune alerte, le total restant sous 100 $ (D-03, D-10).
-- **CA13** Given la TPS est `null` pour un reçu et 0 pour un autre When ils sont relus par l'API et copiés Then le premier a `null` et une cellule TPS vide, le second a 0 et une cellule TPS à 0 (R-08).
+- **CA13** *(reformulé, D-66)* Given la TPS est `null` pour un reçu et 0 pour un autre When ils sont relus par l'API puis écrits dans l'onglet généré par une régénération Then le premier a `null` et une cellule TPS vide, le second a 0 et une cellule TPS à 0 (R-08).
 - **CA14** Given une validation où manque, tour à tour, la date, le fournisseur, le montant total, le type de dépense ou toute photo When elle est envoyée Then la réponse est 400 `VALIDATION` ou `PHOTO_MANQUANTE`, avec le champ en cause, et rien n'est enregistré (D-22).
 - **CA15** Given chacun des 11 types de D-20, puis `Autres` When un reçu est validé Then chacun des 11 est accepté et `Autres` est refusé avec `HORS_LISTE` ; le même test avec une liste de configuration modifiée suit cette liste.
 - **CA16** Given une date postérieure à aujourd'hui (fuseau de Montréal), un total à 0, un total à 1 000 000,01 $ When ils sont validés Then chacun reçoit 400 `VALIDATION` avec le code `BORNE` (R-10).
-- **CA17** Given un total lu de 710,85 corrigé à 300,00 pour la part du chalet When il est validé Then 30000 est enregistré et écrit dans le Sheet, sans recalcul des autres montants (D-04, R-07).
+- **CA17** *(reformulé, D-66)* Given un total lu de 710,85 corrigé à 300,00 pour la part du chalet When il est validé puis qu'une régénération s'exécute Then 30000 est enregistré et l'onglet généré porte 300.00 dans MONTANT TOTAL, sans recalcul des autres montants (D-04, R-07).
 - **CA18** Given une validation envoyée deux fois avec la même `cleIdempotence` When la seconde arrive Then elle répond 200 avec le même reçu, et il n'existe qu'un reçu et un jeu de photos ; si ses valeurs ou ses photos diffèrent, elle répond 409 `CLE_DEJA_UTILISEE`, le reçu reste inchangé et l'écran avertit que la modification n'a pas été appliquée (R-11).
 - **CA19** Given l'échec de l'écriture d'une photo locale, puis celui de l'enregistrement en base When la validation est envoyée Then la réponse est 500 `ERREUR_INTERNE`, il ne reste ni reçu ni fichier, et une nouvelle validation avec la même clé réussit (R-12).
 - **CA20** Given la lecture a échoué When l'utilisateur valide des valeurs saisies à la main avec une photo Then le reçu est créé avec `montantTotalLuCents` à `null` (Q-02).
@@ -435,50 +502,67 @@ Sauf mention contraire, Anthropic, Google Sheets et Google Drive sont doublés :
 - **CA28** Given un reçu seul de son espèce When il est corrigé sans changer ces trois valeurs Then il n'a pas `DOUBLON_POSSIBLE`, n'étant pas comparé à lui-même.
 - **CA29** Given un total lu de 120,00 $, corrigé à 40,00 $, numéros vides When il est validé Then `NUMEROS_INSCRIPTION_MANQUANTS` est présente (Q-09).
 
-### Écriture dans le Sheet
-- **CA30** Given un onglet dont les colonnes sont dans un autre ordre que celui observé When un reçu est copié Then chaque valeur arrive sous son en-tête selon la correspondance de la section 7.4 (R-24).
-- **CA31** Given une correspondance 2026 -> fichier A, onglet « Comptes 2026 », et un second onglet dans A When un reçu de 2026 est copié Then seul « Comptes 2026 » du fichier A est modifié (D-18).
-- **CA32** Given une année absente de la correspondance When un reçu de cette année est validé Then il est enregistré (201), les photos sont déposées, le Sheet n'est pas appelé, l'état est `BLOQUEE` et le motif `ANNEE_NON_CONFIGUREE` ; when l'année est ajoutée et le reçu réessayé, then la ligne est écrite et l'état est `COPIEE` (D-18).
-- **CA33** Given une section dont les dates sont, dans l'ordre, 6, 7, (sans date), 10, 8 When un reçu daté du 7, puis un autre daté du 9, puis un autre daté du 5 sont copiés séparément sur cet état Then le premier se place juste après la ligne du 7, le deuxième juste après la ligne du 8, le troisième juste après le titre (R-22).
-- **CA34** Given une section contenant des dates sous forme de vraie date et de texte « 6 janvier 2026 » When un reçu est copié Then les deux formes comptent pour le placement ; une cellule illisible est ignorée (R-22).
-- **CA35** Given les sections « janvier » et « avril » When le reçu daté de mars, puis celui daté de mai, puis le premier d'un onglet sans section, sont copiés Then « mars » est créée entre les deux avec une ligne vide de chaque côté, « mai » après « avril », et, dans l'onglet vide, la section suit la ligne d'en-têtes (D-24, R-23).
-- **CA36** Given une section « Février » et un reçu de février When il est copié Then aucune seconde section n'est créée (casse et accents ignorés).
-- **CA37** Given un état du Sheet avant copie When une nouvelle ligne est insérée Then toutes les lignes préexistantes gardent leur contenu et leur ordre relatif (D-24).
-- **CA38** Given le reçu Garage Iberville When il est copié Then la ligne écrite vaut DATE 2026-06-16 (vraie date), BOUTIQUE `Garage Iberville`, MONTANT HT 618.27, TPS 30.91, TVQ 61.67, MONTANT TOTAL 710.85 (nombres), et NOTES contient, dans cet ordre, les textes des deux alertes séparés par ` ; `.
-- **CA39** Given un reçu avec numéros d'inscription When il est copié Then ces numéros n'apparaissent dans aucune cellule ni métadonnée envoyée au Sheet (D-03).
-- **CA40** Given un reçu sans alerte When il est copié Then NOTES est vide (D-07, R-26).
-- **CA41** Given une section avec une ligne de données au-dessus de la position d'insertion When une ligne est insérée Then elle reprend la mise en forme et la liste déroulante de TYPE (section 7.4).
-- **CA42** Given un onglet sans colonne PHOTO When un reçu est copié Then PHOTO est ajoutée après la dernière colonne et reçoit le lien (D-07).
-- **CA43** Given un onglet sans en-tête BOUTIQUE, puis un onglet avec deux sections « mars » When un reçu est copié Then aucune écriture n'a lieu et l'état est `BLOQUEE`, motif `STRUCTURE_SHEET` (R-24).
-- **CA44** Given un reçu à deux photos When il est copié Then la cellule PHOTO porte deux liens, « Photo 1 » et « Photo 2 », vers les deux fichiers Drive (Q-06).
+### Onglet généré dans le Sheet (D-66)
+- **CA30** *(retiré, D-66)* Colonnes d'un onglet de l'utilisateur dans un autre ordre, repérées par leur en-tête : l'application ne lit plus cet onglet ; l'ordre est fixe (CA86). Couvert par 001-11, code à retirer.
+- **CA31** *(reformulé, D-66)* Given une correspondance 2026 -> fichier A, onglet généré « Reçus générés », et dans A les onglets « Comptes 2026 » et « Budget » When une régénération s'exécute Then seul l'onglet généré du fichier A reçoit des écritures ; « Comptes 2026 » et « Budget » n'en reçoivent aucune, et aucun autre fichier n'est ouvert (D-18, R-41).
+- **CA32** *(reformulé, D-66, en attente : Q-22)* Given une année absente de la correspondance, avec un reçu de cette année validé When le reçu est validé Then il est enregistré (201) et ses photos sont déposées ; when une régénération s'exécute Then ce reçu ne figure dans aucun onglet généré, l'année figure dans `anneesNonConfigurees`, et les reçus des années configurées sont écrits ; when l'année est ajoutée et la régénération recommencée, then le reçu figure dans l'onglet de cette année (D-18).
+- **CA33** *(retiré, D-66)* Placement selon la date dans une section existante : plus d'insertion ; le tri de R-39 est vérifié par CA85.
+- **CA34** *(retiré, D-66)* Lecture des deux formes de date d'un onglet de l'utilisateur : l'application ne lit plus ses cellules.
+- **CA35** *(retiré, D-66)* Création de sections de mois dans l'onglet de l'utilisateur (sous réserve de Q-16 : si l'utilisateur choisit des sections de mois dans l'onglet généré, de nouveaux critères les remplaceront).
+- **CA36** *(retiré, D-66)* Titre de mois reconnu sans casse ni accents : plus de lecture de titres.
+- **CA37** *(retiré, D-66)* Lignes préexistantes de l'onglet de l'utilisateur intactes à l'insertion : remplacé par CA87, plus fort (aucune écriture dans l'onglet de l'utilisateur).
+- **CA38** *(reformulé, D-66)* Given le reçu Garage Iberville validé When une régénération s'exécute Then la ligne de l'onglet généré vaut DATE 2026-06-16 (vraie date), BOUTIQUE `Garage Iberville`, MONTANT HT 618.27, TPS 30.91, TVQ 61.67, MONTANT TOTAL 710.85 (nombres), et NOTES contient, dans cet ordre, les textes des deux alertes séparés par ` ; `.
+- **CA39** *(reformulé, D-66)* Given un reçu avec numéros d'inscription When une régénération s'exécute Then ces numéros n'apparaissent dans aucune cellule ni métadonnée envoyée au Sheet (D-03).
+- **CA40** *(reformulé, D-66)* Given un reçu sans alerte When une régénération s'exécute Then NOTES est vide (D-07, R-26).
+- **CA41** *(retiré, D-66)* Reprise de la mise en forme et de la liste déroulante de TYPE de la ligne voisine : l'onglet généré n'a pas de liste déroulante (section 7.4). Couvert par 001-11, code à retirer.
+- **CA42** *(retiré, D-66)* Ajout de la colonne PHOTO à un onglet qui n'en a pas : PHOTO fait partie des colonnes fixes (CA86). Couvert par 001-11, code à retirer.
+- **CA43** *(retiré, D-66)* Blocage `STRUCTURE_SHEET` d'un onglet sans en-tête BOUTIQUE ou avec deux sections du même mois : l'onglet de l'utilisateur n'est plus lu. Couvert par 001-11, code à retirer.
+- **CA44** *(reformulé, D-66)* Given un reçu à deux photos déposées When une régénération s'exécute Then la cellule PHOTO porte deux liens, « Photo 1 » et « Photo 2 », vers les deux fichiers Drive, séparés par « , » (Q-06, R-27).
+- **CA85** Given trois reçus de 2026 validés dans l'ordre 12 mars, 5 mars, 5 mars (second du 5 mars validé après le premier) et un reçu de 2025, une correspondance pour 2026 seulement, et un onglet généré absent When la régénération s'exécute Then l'onglet généré de 2026 est créé, avec une ligne d'en-têtes puis trois lignes triées par date croissante puis par ordre de validation, sans ligne vide, sans titre de mois, sans total ; le reçu de 2025 n'y figure pas (R-39, en attente : Q-16 et Q-22).
+- **CA86** Given une régénération When l'onglet généré est examiné dans le double Then ses en-têtes sont, dans cet ordre, DATE, BOUTIQUE, OBJET, TYPE, MONTANT HT, TPS, TVQ, MONTANT TOTAL, NOTES, PHOTO, quel que soit l'état antérieur de l'onglet ; aucune cellule n'est une formule ; DATE est une vraie date et les montants des nombres (section 7.4).
+- **CA87** Given un fichier dont l'onglet « Comptes 2026 » contient des lignes manuelles, des formules et un total, et dont une formule d'un autre onglet lit l'onglet généré When une régénération s'exécute Then le contenu de « Comptes 2026 » et de l'autre onglet est identique avant et après, et le double n'a reçu aucune requête d'écriture visant ces onglets (R-41).
+- **CA88** Given une régénération When les requêtes reçues par le double sont examinées Then un onglet temporaire est créé et rempli en entier avant toute modification de l'onglet généré, et il n'existe plus à la fin (R-40).
+- **CA89** Given un onglet généré déjà rempli et une panne de Sheets au milieu de l'écriture de l'onglet temporaire, puis une panne au moment du remplacement When la régénération s'exécute Then, dans les deux cas, le contenu de l'onglet généré est identique à celui d'avant, l'onglet temporaire est retiré (ou le sera au début de la régénération suivante), l'état est `ECHEC` avec le motif `GOOGLE_INDISPONIBLE`, et `derniereReussiteLe` est inchangée (R-40).
+- **CA90** Given l'onglet généré porte l'identifiant X dans le double et une formule d'un autre onglet le référence When une régénération réussit Then l'onglet généré porte encore l'identifiant X (il n'est ni supprimé ni recréé) (R-40, à confirmer à l'essai réel, section 13).
+- **CA91** Given aucune régénération, puis une réussie à 10 h avec 3 reçus, puis un reçu validé à 11 h, puis un échec à 12 h (autorisation perdue) When `GET /api/sheet/etat` est appelé à chaque moment Then l'état vaut successivement `JAMAIS` (`derniereReussiteLe` `null`, `recusNonReportes` égal au nombre de reçus) ; `REUSSIE` (10 h, `recusEcrits` 3, `recusNonReportes` 0) ; `REUSSIE` (`recusNonReportes` 1) ; `ECHEC` (`motif` `AUTORISATION_GOOGLE`, `derniereReussiteLe` 10 h, `dernierEchecLe` 12 h) (R-42).
+- **CA92** Given une régénération en cours (double de Sheets en attente) When une seconde demande arrive, puis une troisième Then chacune reçoit 409 `REGENERATION_EN_COURS`, le double ne reçoit qu'une seule série d'écritures, et à la fin l'état est `REUSSIE` (R-43).
+- **CA93** Given aucune autorisation Google (`ABSENTE`) When la régénération est demandée Then la réponse est 202, l'état devient `ECHEC` avec le motif `AUTORISATION_GOOGLE`, et ni Sheets ni Drive n'ont reçu d'appel (D-17, R-38).
+- **CA94** Given aucun fichier configuré et aucune autorisation Google When la régénération est demandée Then l'état est `ECHEC` avec le motif `FICHIER_INACCESSIBLE` (qui l'emporte, D-63), et Google n'a reçu aucun appel.
+- **CA95** Given un état `EN_COURS` laissé par un arrêt de l'application When elle redémarre Then l'état est `ECHEC` avec le motif `INTERROMPUE`, et aucune régénération ne démarre d'elle-même (R-44).
+- **CA96** Given un onglet généré dont des cellules, des lignes et une colonne ont été modifiées à la main, puis un onglet généré supprimé, puis un onglet généré renommé When la régénération s'exécute dans chaque cas Then son contenu est réécrit en entier d'après la base, l'onglet supprimé est recréé, l'onglet renommé reprend son nom configuré, et la base est inchangée (R-34, R-39).
+- **CA97** Given Sheets répondant 429 avec `Retry-After`, puis 503, puis une erreur réseau, pendant une régénération When elle s'exécute Then l'état est `ECHEC`, motif `GOOGLE_INDISPONIBLE`, chaque fois, et aucun nouvel appel n'a lieu sans nouvelle demande, même après une heure d'horloge doublée (R-44).
+- **CA98** Given un reçu dont l'objet est corrigé après une régénération, ses photos déjà déposées When il est corrigé puis qu'une nouvelle régénération s'exécute Then l'onglet généré porte la valeur corrigée, `recusNonReportes` valait 1 avant la régénération et 0 après, la correction n'a causé aucun appel à Google, et aucune photo n'a été redéposée ni renommée (R-29).
+- **CA99** Given une validation, une correction, une autorisation Google accordée ou perdue, un redémarrage, puis une heure d'horloge doublée When le double de Sheets est examiné Then il n'a reçu aucun appel d'écriture : seule une demande du bouton lance une régénération (R-44).
+- **CA100** Given deux reçus, l'un dont la photo est déposée et l'autre dont Drive est en panne When une régénération s'exécute Then Drive n'a reçu aucun appel pendant elle ; PHOTO du premier porte le lien construit de l'identifiant Drive connu, PHOTO du second est vide, la régénération est `REUSSIE` et `photosSansLien` vaut 1 (R-18, R-45, en attente : Q-21).
+- **CA101** Given une autorisation valide et une régénération en cours When Google répond `invalid_grant` au renouvellement Then l'état de l'autorisation devient `A_RENOUVELER`, la régénération échoue avec le motif `AUTORISATION_GOOGLE`, l'onglet généré est celui d'avant, et aucun reçu n'est perdu (D-17, section 7.6).
 
-### Copie et reprise
-- **CA45** Given un reçu validé When la copie s'exécute Then tous les dépôts Drive précèdent l'écriture dans le Sheet, et la réponse de validation n'a pas attendu la copie (R-18, R-20).
-- **CA46** Given un dépôt Drive en panne When la copie échoue Then le Sheet n'est pas appelé et l'état reste `A_COPIER`, avec `prochaineTentative` renseignée (R-18).
-- **CA47** Given un Sheet répondant 503 trois fois puis 200 When les essais s'enchaînent, avec une horloge doublée Then les intervalles valent 1, 2 et 4 minutes, plafonnés à 1 heure pour une panne plus longue, et l'état final est `COPIEE`, avec une seule ligne (R-20).
-- **CA48** Given une réponse d'insertion du Sheet perdue alors que la ligne a bien été créée When la copie est reprise Then la ligne est retrouvée par son identifiant et il n'y en a toujours qu'une (R-21).
-- **CA49** Given une réponse de dépôt Drive perdue alors que le fichier a bien été créé When la copie est reprise Then le fichier est retrouvé par l'identifiant de la photo et il n'y en a toujours qu'un (R-21).
-- **CA50** Given l'application arrêtée avec un reçu `A_COPIER` et un reçu `BLOQUEE` When elle redémarre Then les deux sont réessayés sans action de l'utilisateur (R-20).
-- **CA51** Given un reçu `BLOQUEE` et un reçu `COPIEE` When `POST /api/recus/{id}/copie` est appelé Then le premier est réessayé (202) et le second n'entraîne aucun appel à Google (202).
-- **CA52** Given deux reçus à copier When la copie s'exécute Then le second ne commence qu'à la fin du premier, dans l'ordre de validation (R-19).
-- **CA53** Given un quota Google dépassé (429 avec `Retry-After` de 120 secondes) When la copie échoue Then le prochain essai n'a pas lieu avant 120 secondes.
-- **CA54** Given un fichier ou un onglet refusé par Google (403 ou 404) When la copie s'exécute Then l'état est `BLOQUEE`, motif `FICHIER_INACCESSIBLE`, et le reçu reste consultable.
+### Dépôt et reprise des photos
+- **CA45** *(reformulé, D-66)* Given un reçu validé When la réponse de validation est envoyée Then elle n'a pas attendu le dépôt des photos dans Drive, et le dépôt se fait ensuite sans aucun appel au Sheet (R-18, R-20, en attente : Q-21).
+- **CA46** *(reformulé, D-66)* Given un dépôt Drive en panne When le dépôt échoue Then le reçu reste enregistré et consultable, sa photo n'a pas de `lienDrive`, un nouvel essai est programmé (horloge doublée), et le Sheet n'est pas appelé (R-18).
+- **CA47** *(reformulé, D-66)* Given Drive répondant 503 trois fois puis 200 When les essais s'enchaînent, avec une horloge doublée Then les intervalles valent 1, 2 et 4 minutes, plafonnés à 1 heure pour une panne plus longue, et la photo est déposée, avec un seul fichier dans Drive (R-20).
+- **CA48** *(retiré, D-66)* Réponse d'insertion du Sheet perdue, ligne retrouvée par son identifiant : il n'y a plus de ligne persistante (R-21). Une régénération répétée donne le même contenu : voir CA96 et CA85.
+- **CA49** Given une réponse de dépôt Drive perdue alors que le fichier a bien été créé When le dépôt est repris Then le fichier est retrouvé par l'identifiant de la photo et il n'y en a toujours qu'un (R-21).
+- **CA50** *(reformulé, D-66)* Given l'application arrêtée avec une photo à déposer en attente de retour d'essai et une autre en attente d'autorisation When elle redémarre Then les deux dépôts sont réessayés sans action de l'utilisateur (R-20).
+- **CA51** *(retiré, D-66)* Relance manuelle d'une copie par `POST /api/recus/{id}/copie` : la route est retirée ; le dépôt est repris tout seul (R-20) et la régénération est relancée par le bouton (CA92). Couvert par 001-06 pour la partie route, code à retirer.
+- **CA52** *(retiré, D-66)* Copies traitées l'une après l'autre : la raison (positions d'insertion) a disparu (R-19). Le comportement peut rester dans le code sans critère.
+- **CA53** *(reformulé, D-66)* Given un quota Google dépassé (429 avec `Retry-After` de 120 secondes) When le dépôt d'une photo échoue Then le prochain essai n'a pas lieu avant 120 secondes (R-20). Pour une régénération : CA97.
+- **CA54** *(reformulé, D-66)* Given un fichier ou un onglet refusé par Google (403 ou 404) When une régénération s'exécute Then l'état est `ECHEC`, motif `FICHIER_INACCESSIBLE`, l'onglet généré antérieur est intact, et les reçus restent consultables ; le même refus de Drive laisse la photo à déposer, réessayée à l'intervalle maximal (R-20).
 
 ### Correction (Q-04)
-- **CA55** Given un reçu `COPIEE`, sa ligne décalée de 3 rangs par d'autres insertions When son objet est corrigé Then la bonne ligne est réécrite à son emplacement actuel, l'état repasse par `A_COPIER` pour finir `COPIEE`, et les photos ne sont pas redéposées (R-29, R-30).
-- **CA56** Given un reçu du 5 mars When sa date devient le 20 mars Then DATE change et la ligne ne se déplace pas (R-30).
-- **CA57** Given un reçu de mars When sa date devient le 3 mai Then il existe une ligne dans « mai » et aucune dans « mars », dont le titre demeure ; une panne entre l'insertion et la suppression, suivie d'une reprise, ne laisse qu'une ligne (R-31).
-- **CA58** Given un reçu de 2026 et une correspondance pour 2025 When sa date passe en 2025 Then la ligne quitte le fichier de 2026 et arrive dans celui de 2025 (R-31).
-- **CA59** Given une ligne de reçu supprimée à la main dans le Sheet, ou dont OBJET et NOTES ont été modifiés à la main When le reçu est corrigé Then la ligne est réinsérée, ou ses cellules sont réécrites avec les valeurs de la base (R-32, D-05).
-- **CA60** Given une ligne de reçu dont TPS contient une formule When le reçu est corrigé Then aucune cellule de la ligne n'est écrite, l'état est `BLOQUEE`, motif `FORMULE_PRESENTE` (D-19, R-33).
+- **CA55** *(retiré, D-66)* Réécriture de la ligne décalée à son emplacement actuel, état repassant par `A_COPIER` : il n'y a plus de ligne ni d'état de copie ; la correction visible à la régénération est vérifiée par CA98.
+- **CA56** *(retiré, D-66)* La date change sans que la ligne bouge : le tri de R-39 place le reçu selon sa date (CA85).
+- **CA57** *(retiré, D-66)* Déplacement d'un mois à l'autre et reprise sans deux lignes : il n'y a plus de déplacement ; chaque régénération réécrit tout (CA96).
+- **CA58** *(retiré, D-66)* Changement d'année entre deux fichiers : voir CA85, où seuls les reçus de l'année du fichier figurent dans son onglet ; un reçu qui change d'année passe d'un onglet à l'autre à la régénération suivante.
+- **CA59** *(retiré, D-66)* Ligne supprimée ou modifiée à la main, puis corrigée : remplacé par CA96 (onglet généré modifié ou supprimé à la main).
+- **CA60** *(retiré, D-66)* Cellule contenant une formule, `FORMULE_PRESENTE` : l'application n'écrit plus dans les lignes de l'utilisateur (CA87). Les valeurs littérales restent vérifiées par CS16.
 - **CA61** Given un reçu en version 3 When `PUT /api/recus/{id}` envoie `version` 2 Then la réponse est 409 `VERSION_PERIMEE` et rien ne change.
-- **CA62** Given une valeur modifiée à la main dans le Sheet When la copie d'un reçu lit l'onglet Then la base reste inchangée (D-05, R-34).
-- **CA63** Given une correction portant le total de 40,00 $ à 600,00 $ When elle est enregistrée Then les alertes et NOTES sont recalculées avec `PIECE_A_VERIFIER`.
+- **CA62** *(reformulé, D-66)* Given une valeur modifiée à la main dans l'onglet généré et une autre dans « Comptes 2026 » When une régénération s'exécute Then la base reste inchangée, la valeur de l'onglet généré est remplacée par celle de la base, et celle de « Comptes 2026 » est intacte (D-05, R-34).
+- **CA63** *(reformulé, D-66)* Given une correction portant le total de 40,00 $ à 600,00 $ When elle est enregistrée puis qu'une régénération s'exécute Then les alertes sont recalculées avec `PIECE_A_VERIFIER` et NOTES de l'onglet généré le dit.
 
 ### Autorisation Google
-- **CA64** Given aucune autorisation donnée When un reçu est validé Then il est enregistré (201), `BLOQUEE`, motif `AUTORISATION_GOOGLE`, et `GET /api/google/etat` répond `ABSENTE` (D-17). Ce motif suppose le fichier et l'onglet du Sheet configurés ; sinon `FICHIER_INACCESSIBLE` l'emporte (D-63).
-- **CA65** Given l'utilisateur connecté When il suit `GET /api/google/autorisation` et que le rappel revient avec un `state` valide et tous les droits Then l'état est `VALIDE`, les reçus bloqués pour ce motif sont repris aussitôt, et aucune nouvelle autorisation n'est demandée pour les copies suivantes ni après un redémarrage.
-- **CA66** Given une autorisation valide When Google répond `invalid_grant` au renouvellement (expiration ou révocation) Then l'état est `A_RENOUVELER`, les reçus en attente sont `BLOQUEE`, motif `AUTORISATION_GOOGLE`, une validation reste possible, et aucun reçu n'est perdu ; après une nouvelle autorisation, ils sont copiés sans doublon.
+- **CA64** *(reformulé, D-66)* Given aucune autorisation donnée When un reçu est validé Then il est enregistré (201), son objet ne porte aucun état de copie, ses photos attendent l'autorisation, et `GET /api/google/etat` répond `ABSENTE` (D-17). La régénération échouerait avec `AUTORISATION_GOOGLE` (CA93).
+- **CA65** *(reformulé, D-66)* Given l'utilisateur connecté When il suit `GET /api/google/autorisation` et que le rappel revient avec un `state` valide et tous les droits Then l'état est `VALIDE`, les dépôts de photos en attente sont repris aussitôt, aucune régénération n'est lancée (R-44), et aucune nouvelle autorisation n'est demandée pour les dépôts suivants ni après un redémarrage.
+- **CA66** *(reformulé, D-66)* Given une autorisation valide When Google répond `invalid_grant` au renouvellement (expiration ou révocation) pendant un dépôt Then l'état est `A_RENOUVELER`, les dépôts en attente restent à faire, une validation reste possible, et aucun reçu n'est perdu ; après une nouvelle autorisation, les photos sont déposées sans doublon. Pendant une régénération : CA101.
 - **CA67** Given un consentement où le droit Drive a été décoché When le rappel arrive Then l'état est `A_RENOUVELER`.
 - **CA68** Given la demande d'autorisation When ses paramètres sont examinés Then elle ne demande que les droits de la section 7.6.
 
@@ -489,8 +573,8 @@ Sauf mention contraire, Anthropic, Google Sheets et Google Drive sont doublés :
 
 ### Conservation et consultation
 - **CA72** Given un reçu When `DELETE /api/recus/{id}` et `DELETE /api/recus/{id}/photos/1` sont appelés Then la réponse est 405 ou 404 et rien n'est supprimé ; aucune tâche de l'application ne supprime un reçu ni une photo, même datés de plus de six ans (R-35, Q-05).
-- **CA73** Given un reçu copié ou corrigé When son contenu local et son identifiant Drive sont examinés Then la copie locale demeure, et les identifiants de fichiers Drive sont inchangés (D-07, R-29).
-- **CA74** Given plusieurs reçus When `GET /api/recus?annee=2026&etatCopie=BLOQUEE&page=0&taille=10` est appelé Then la réponse suit le contrat, filtrée, par date décroissante ; `taille=101` ou `etatCopie=FOO` reçoit 400.
+- **CA73** Given un reçu déposé ou corrigé When son contenu local et son identifiant Drive sont examinés Then la copie locale demeure, et les identifiants de fichiers Drive sont inchangés (D-07, R-29).
+- **CA74** *(reformulé, D-66)* Given plusieurs reçus When `GET /api/recus?annee=2026&page=0&taille=10` est appelé Then la réponse suit le contrat, filtrée, par date décroissante ; `taille=101` reçoit 400 ; un paramètre `etatCopie` est ignoré (section 7.1).
 - **CA75** Given un objet reçu renvoyé par l'API When son JSON est examiné Then il contient exactement les champs de la section 7.1, montants en cents entiers, et aucun chemin local ni jeton.
 
 ### PWA (navigateur sans tête, Q-10)
@@ -500,32 +584,85 @@ Sauf mention contraire, Anthropic, Google Sheets et Google Drive sont doublés :
 - **CA79** Given l'écran de validation When l'utilisateur abandonne Then aucun appel à `POST /api/recus` n'est émis, et l'écran de départ ne montre plus aucune photo (Q-01).
 - **CA80** Given des valeurs déclenchant des alertes When l'utilisateur les saisit Then les alertes s'affichent et l'action de valider reste active (D-04, D-11).
 - **CA81** Given une panne réseau pendant la validation When l'utilisateur relance Then les valeurs et les photos sont encore là et le renvoi utilise la même `cleIdempotence`.
-- **CA82** Given une autorisation `A_RENOUVELER` ou des reçus bloqués When une page est affichée Then le bandeau donne ce fait et le lien de renouvellement ou le nombre de reçus concernés.
+- **CA82** *(reformulé, D-66)* Given une autorisation `A_RENOUVELER` ou `ABSENTE` When une page est affichée Then le bandeau donne ce fait et le lien de renouvellement ; il ne compte plus de reçus bloqués.
 - **CA83** Given l'application When son manifeste est demandé Then il est servi avec un nom, des icônes et un mode d'affichage autonome (D-13). L'installation réelle sera vérifiée avec NF-03 (ADR 0001).
+- **CA102** Given l'écran de la liste des reçus et un état `REUSSIE` When l'utilisateur clique deux fois de suite sur « Mettre à jour le Google Sheet » Then une seule demande `POST /api/sheet/regeneration` est émise, le bouton est désactivé jusqu'à la fin, et l'écran affiche « Mise à jour en cours » puis « Mis à jour le <date> » (D-66, R-43).
+- **CA103** Given les états `JAMAIS`, `REUSSIE` (avec `recusNonReportes` 2 et `photosSansLien` 1) et `ECHEC` (motif `AUTORISATION_GOOGLE`, `derniereReussiteLe` renseignée) When l'écran de la liste est affiché Then il montre dans chaque cas le texte de la section 7.2 : « Jamais mis à jour » ; la date, « 2 reçus à reporter » et « 1 photo sans lien » ; « Échec de la mise à jour », le motif en français et la date de la dernière réussite ; et aucun texte n'est le code technique du motif.
+
+### Tableau de correspondance de la révision D-66
+
+| Ancien critère | Devient | Raison |
+|---|---|---|
+| CA13 | reformulé | « copiés » devient « écrits dans l'onglet généré à la régénération » |
+| CA17 | reformulé | idem |
+| CA30 | **retiré** | l'onglet de l'utilisateur n'est plus lu ; ordre fixe (CA86). Couvert par 001-11 |
+| CA31 | reformulé | l'onglet de l'utilisateur n'est plus l'onglet visé ; seul l'onglet généré est écrit |
+| CA32 | reformulé (en attente : Q-22) | plus de blocage du reçu ; l'année absente est signalée dans l'état. Couvert par 001-11 |
+| CA33 | **retiré** | plus de placement par insertion |
+| CA34 | **retiré** | plus de lecture des cellules |
+| CA35 | **retiré** | plus de création de sections (sous réserve de Q-16) |
+| CA36 | **retiré** | plus de titres de mois lus |
+| CA37 | **retiré** | remplacé par CA87 |
+| CA38 | reformulé | ligne de l'onglet généré à la régénération. Couvert par 001-06 |
+| CA39 | reformulé | idem. Couvert par 001-06 |
+| CA40 | reformulé | idem. Couvert par 001-06 |
+| CA41 | **retiré** | pas de liste déroulante dans l'onglet généré. Couvert par 001-11 |
+| CA42 | **retiré** | PHOTO est une colonne fixe. Couvert par 001-11 |
+| CA43 | **retiré** | plus de `STRUCTURE_SHEET`. Couvert par 001-11 |
+| CA44 | reformulé | liens des photos déposées. Couvert par 001-06 |
+| CA45 | reformulé (en attente : Q-21) | la validation n'attend pas le dépôt ; plus d'ordre dépôt puis ligne. Couvert par 001-06 |
+| CA46 | reformulé | plus d'état `A_COPIER` ; photo sans lien et nouvel essai |
+| CA47 | reformulé | intervalles de dépôt Drive, plus d'écriture de ligne |
+| CA48 | **retiré** | plus d'identifiant de ligne |
+| CA49 | gardé | dépôt Drive inchangé |
+| CA50 | reformulé | reprise des dépôts ; l'état de copie n'existe plus |
+| CA51 | **retiré** | route `POST /api/recus/{id}/copie` retirée. Couvert par 001-06 |
+| CA52 | **retiré** | plus d'insertion à ordonner |
+| CA53 | reformulé | quota côté dépôt ; côté régénération : CA97 |
+| CA54 | reformulé | motif `FICHIER_INACCESSIBLE` de l'état global |
+| CA55 à CA58 | **retirés** | plus de ligne persistante à réécrire ou à déplacer |
+| CA59, CA60 | **retirés** | remplacés par CA96 et CA87 |
+| CA61 | gardé | version périmée inchangée |
+| CA62 | reformulé | la base reste inchangée ; l'onglet généré est réécrit, les autres intacts |
+| CA63 | reformulé | alertes et NOTES vus à la régénération |
+| CA64 | reformulé | plus de motif de reçu ; état `ABSENTE` inchangé |
+| CA65 | reformulé | reprise des dépôts, pas de régénération |
+| CA66 | reformulé | idem ; pendant une régénération : CA101 |
+| CA74 | reformulé | filtre `etatCopie` retiré |
+| CA82 | reformulé | plus de nombre de reçus bloqués |
+| CS16 | reformulé | écriture littérale dans l'onglet généré |
+| CS18 | **retiré** | remplacé par CS29 |
+| CS20, CS21, CS25, CS26 | reformulés | « copie » devient « dépôt et régénération » |
+| CS15 | reformulé | paramètre `etatCopie` retiré |
+| Nouveaux | CA85 à CA103, CS29 à CS31 | régénération, onglet généré, état global, bouton |
+
+Critères inchangés : CA01 à CA12, CA14 à CA16, CA18 à CA29, CA49, CA61, CA67 à CA73, CA75 à CA81, CA83, CA84 ; CS01 à CS14, CS17, CS19, CS22 à CS24, CS27, CS28. CS01 et CS02 couvrent aussi `POST /api/sheet/regeneration` et `GET /api/sheet/etat`, qui sont des routes de `/api`.
+
+Critères déjà couverts par des issues faites et devenus retirés (la session décide du retrait du code) : par 001-11, CA30, CA41, CA42, CA43, et le motif `STRUCTURE_SHEET` ; par 001-06, la route de CA51. CA52 (001-08, non faite) est retiré. Les issues en pause : 001-07 (CA33 à CA37, tous retirés : sans objet), 001-08 (CA46 à CA54 reformulés ou retirés, CS18 retiré), 001-09 (CA55 à CA60 retirés ; CA28, CA61 à CA63 restent), 001-10 (CA74, CA82 reformulés).
 
 ## 11. Sécurité
 
 ### 11.1 Modèle de menaces
 
 - **Acteurs** : internaute anonyme ; porteur d'une session volée ; auteur malveillant d'un texte sur un reçu (injection dans le modèle) ; site tiers (CSRF) ; service externe répondant de façon imprévue.
-- **Actifs** : photos et valeurs des reçus (pièces fiscales) ; mot de passe ; jeton Google, qui ouvre les feuilles de calcul de l'utilisateur ; clé d'API Anthropic ; contenu du Sheet.
-- **Points d'entrée** : API JSON ; téléversement d'images ; rappel Google ; réponses d'Anthropic et de Google ; configuration.
-- **Risques principaux** : image piégée au téléversement ; instruction cachée sur un reçu ; formule injectée dans le Sheet ; vol du jeton Google ; fuite du contenu des reçus par les journaux ; perte de pièce fiscale.
+- **Actifs** : photos et valeurs des reçus (pièces fiscales) ; mot de passe ; jeton Google, qui ouvre les feuilles de calcul de l'utilisateur ; clé d'API Anthropic ; contenu du Sheet, dont l'onglet de l'utilisateur et ses formules.
+- **Points d'entrée** : API JSON, dont le bouton de régénération ; téléversement d'images ; rappel Google ; réponses d'Anthropic et de Google ; configuration (dont les noms de fichier et d'onglet).
+- **Risques principaux** : image piégée au téléversement ; instruction cachée sur un reçu ; formule injectée dans l'onglet généré ; **écrasement ou suppression d'un onglet de l'utilisateur** (nom de l'onglet généré en collision, ancien réglage d'onglet réutilisé) ; onglet généré à moitié écrit ; régénérations concurrentes ; vol du jeton Google ; fuite du contenu des reçus par les journaux ; perte de pièce fiscale.
 
 ### 11.2 Mesures par catégorie
 
 | Catégorie | Mesure |
 |---|---|
-| A01 Contrôle d'accès | Refus par défaut. Un seul compte, tout appartient à ce compte : pas de règle de propriété entre utilisateurs, mais toute ressource exige une session valide, et une ressource absente ou non rattachée donne 404. Identifiants UUID. Pas de chemin de fichier fourni par le client. Fichiers Drive privés. |
+| A01 Contrôle d'accès | Refus par défaut. Un seul compte, tout appartient à ce compte : pas de règle de propriété entre utilisateurs, mais toute ressource exige une session valide (le bouton de régénération et l'état aussi), et une ressource absente ou non rattachée donne 404. Identifiants UUID. Pas de chemin de fichier ni de nom d'onglet ou de fichier fourni par le client : fichiers et onglet viennent de la configuration. L'application ne modifie que les onglets qu'elle a créés et mémorisés (R-41, CS30) ; un onglet de l'utilisateur est inaccessible à l'écriture, même de même nom. Fichiers Drive privés. L'onglet généré hérite du partage du fichier de l'utilisateur : tout lecteur du fichier voit les reçus (sans numéros d'inscription, D-03). |
 | A02 Cryptographie | Condensé fort du mot de passe, fourni par l'environnement. Clé Anthropic, secrets Google et clé de chiffrement dans l'environnement, jamais dans le dépôt. Jeton de renouvellement chiffré au repos. TLS jusqu'au tunnel : NF-03. Aucun secret dans les journaux ni dans l'API. |
-| A03 Injection | Requêtes paramétrées. La sortie du modèle est une donnée non fiable, validée (section 7.3) ; elle ne déclenche aucune action et passe toujours sous les yeux de l'utilisateur. Écriture littérale dans le Sheet (anti-formule). Affichage en texte, jamais en HTML interprété. Retours à la ligne neutralisés dans les journaux. |
-| A04 Conception | Modèle de menaces ci-dessus ; règles et transitions validées côté serveur ; alertes et états jamais lus du client ni du modèle ; montants en cents ; limite de lectures contre la surconsommation. |
+| A03 Injection | Requêtes paramétrées. La sortie du modèle est une donnée non fiable, validée (section 7.3) ; elle ne déclenche aucune action et passe toujours sous les yeux de l'utilisateur. Écriture littérale de toute cellule de l'onglet généré, en-têtes, NOTES et PHOTO compris (anti-formule, CS16) : les valeurs de la base, issues du modèle ou saisies, ne sont jamais écrites sous une forme interprétée. Nom de l'onglet généré et de l'onglet temporaire fixés par la configuration, jamais composés de données de reçu. Affichage en texte, jamais en HTML interprété. Retours à la ligne neutralisés dans les journaux. |
+| A04 Conception | Modèle de menaces ci-dessus ; règles et transitions validées côté serveur (état de la régénération, jamais lu du client, CS29, CS31) ; une seule régénération à la fois (CA92) ; remplacement de l'onglet généré tout ou rien (R-40) ; alertes et états jamais lus du client ni du modèle ; montants en cents ; limite de lectures contre la surconsommation. La régénération n'a pas de limite de fréquence propre : son coût est borné (50 reçus par mois, quelques appels groupés) et le quota de Google mène à un échec sans nouvel essai (R-44) ; risque accepté. |
 | A05 Configuration | Corps d'erreur générique, sans trace de pile, y compris sur les requêtes rejetées avant l'application. En-têtes de sécurité. Actuator limité à `GET /actuator/health`, sans détail. Images : liste blanche vérifiée sur le contenu, tailles et dimensions maximales, noms générés par le serveur, stockage hors racine web. |
 | A06 Composants | Dépendances minimales et versions épinglées ; analyse des vulnérabilités connues dans la vérification complète (profil de l'annexe de la stack) ; licence vérifiée à l'ajout. Point à instruire : l'ADR 0001 ne cite que l'analyse statique. |
 | A07 Authentification | Mot de passe fort, condensé obligatoire au démarrage. Blocage temporaire par source. Session par cookie `HttpOnly`, `SameSite`, `Secure` hors poste local, régénérée à la connexion, avec expiration. CSRF actif. Cloudflare Access en plus (D-16), avec NF-03. |
 | A08 Intégrité | Aucune désérialisation polymorphe. Dépendances épinglées, sources de confiance. PWA sans ressource tierce. `state` et PKCE dans le flux Google. |
-| A09 Journalisation | Échecs de connexion, CSRF refusé, `state` invalide, blocage de copie et échec de lecture journalisés, avec code et identifiant uniquement. Jamais de contenu de reçu (D-12), de jeton ni de mot de passe. |
-| A10 SSRF | Les appels sortants ne visent que les services configurés (Anthropic, Google). Aucune URL fournie par le client ni par le modèle n'est appelée. Redirections de fin d'autorisation vers une adresse fixe. |
+| A09 Journalisation | Échecs de connexion, CSRF refusé, `state` invalide, échec de régénération (motif et année) et dépôt bloqué, échec de lecture journalisés, avec code et identifiant uniquement. Jamais de contenu de reçu (D-12), de jeton, de mot de passe, ni de nom de fichier ou d'onglet de l'utilisateur. |
+| A10 SSRF | Les appels sortants ne visent que les services configurés (Anthropic, Google). L'identifiant du fichier Sheet vient de la configuration, jamais d'une URL fournie par le client ni par le modèle ; les liens PHOTO écrits dans l'onglet généré sont construits à partir de l'identifiant renvoyé par Drive, jamais d'un texte du reçu. Aucune URL fournie par le client ni par le modèle n'est appelée. Redirections de fin d'autorisation vers une adresse fixe. |
 
 ### 11.3 Autorisation par ressource
 
@@ -535,6 +672,8 @@ Sauf mention contraire, Anthropic, Google Sheets et Google Drive sont doublés :
 | `POST /api/connexion` | public, CSRF exigé, blocage après échecs |
 | Tout le reste de `/api`, reste de la PWA | session valide |
 | Reçu, photo | session valide ; une photo n'est atteinte que par le reçu auquel elle est rattachée |
+| `POST /api/sheet/regeneration`, `GET /api/sheet/etat` | session valide ; CSRF exigé pour le `POST` ; aucune donnée du client n'influe sur l'état |
+| Onglets du Sheet | écriture réservée aux onglets que l'application a créés et mémorisés (onglet généré, onglet temporaire) |
 | Jeton Google, clés | aucune exposition par l'API |
 
 Point transmis à NF-03 : derrière Cloudflare Tunnel, toutes les requêtes semblent venir de la même source. Le blocage « par source » devra alors s'appuyer sur l'en-tête de confiance du tunnel, sans quoi il deviendrait global.
@@ -552,10 +691,12 @@ Point transmis à NF-03 : derrière Cloudflare Tunnel, toutes les requêtes semb
 | `cleIdempotence`, `id`, `recuId` | UUID |
 | `version` | entier positif |
 | `rang` | entier de 1 au nombre maximal de photos |
-| `annee`, `page`, `taille`, `etatCopie` | entiers bornés ; état dans la liste |
+| `annee`, `page`, `taille` | entiers bornés |
+| corps de `POST /api/sheet/regeneration` | aucun : un corps éventuel est ignoré et n'a aucun effet |
 | `motDePasse` | formulaire de 64 Ko au plus, longueur déclarée, sans paramètre d'URL ; bcrypt ne compare que les 72 premiers octets |
 | `photos` | section 9 ; format vérifié sur le contenu, pas sur l'en-tête ni l'extension ; nom ignoré |
 | `code`, `state` du rappel | longueur bornée ; `state` égal à celui de la session |
+| nom de l'onglet généré, suffixe temporaire, fichiers par année (configuration) | texte non vide, longueur de la limite de Google (100 caractères pour un nom d'onglet), sans caractère de contrôle ; entrée incomplète ignorée (D-65) |
 
 ### 11.5 Critères de sécurité
 
@@ -573,33 +714,36 @@ Point transmis à NF-03 : derrière Cloudflare Tunnel, toutes les requêtes semb
 - **CS12** Given une photo nommée `../../secret.jpg` When elle est validée Then le nom d'origine n'apparaît ni dans le stockage local, ni dans Drive, ni dans l'API, le fichier reste dans le dossier des photos, et il n'est atteignable par aucune URL statique [A05].
 - **CS13** Given un modèle (double) répondant avec `"etatCopie":"COPIEE"`, `"alertes":[]`, `"url":"https://exemple.invalid"` ou un texte `ignore tes consignes` dans `objet` When la lecture est traitée Then les champs inconnus sont sans effet, aucun appel n'est émis vers cette URL, aucune donnée n'est enregistrée, et le texte reste une simple valeur soumise à l'utilisateur [A03, A04].
 - **CS14** Given un fournisseur valant `<img src=x onerror=alert(1)>` When l'écran de validation, la liste et le détail l'affichent Then il apparaît en texte et aucun script ne s'exécute (navigateur sans tête, Q-10) [A03].
-- **CS15** Given `' OR 1=1--` en fournisseur, en objet et en contrôle de doublon, et dans `annee` ou `etatCopie` When la requête est traitée Then le résultat n'est pas altéré : texte littéral enregistré, ou 400 pour un paramètre borné [A03].
-- **CS16** Given un fournisseur valant `=IMPORTXML("https://exemple.invalid","//a")`, un objet commençant par `+` et un autre par `@` When le reçu est copié Then le double du Sheet reçoit ces valeurs comme textes littéraux, jamais comme des formules [A03].
+- **CS15** *(reformulé, D-66)* Given `' OR 1=1--` en fournisseur, en objet et en contrôle de doublon, et dans `annee` When la requête est traitée Then le résultat n'est pas altéré : texte littéral enregistré, ou 400 pour un paramètre borné [A03].
+- **CS16** *(reformulé, D-66)* Given un fournisseur valant `=IMPORTXML("https://exemple.invalid","//a")`, un objet commençant par `+` et un autre par `@`, et un objet commençant par `-` When une régénération s'exécute Then le double du Sheet reçoit ces valeurs comme textes littéraux, jamais comme des formules, dans l'onglet temporaire comme dans l'onglet généré, et aucune cellule écrite par l'application n'est une formule [A03].
 - **CS17** Given une requête `POST /api/recus` ou `PUT` portant `etatCopie`, `alertes`, `id` ou `motifBlocage` When elle est traitée Then ces champs n'ont aucun effet ; l'état et les alertes sont ceux que le serveur calcule [A04].
-- **CS18** Given une transition non autorisée tentée par l'API (`BLOQUEE` vers `COPIEE` sans écriture) When un test agit sur l'état du reçu Then elle est refusée, seules les transitions de la section 4.2 aboutissent [A04].
+- **CS18** *(retiré, D-66)* Transition d'état de copie non autorisée : l'état de copie n'existe plus ; remplacé par CS29 pour l'état de la régénération.
 - **CS19** Given la limite de lectures par heure atteinte When une nouvelle lecture est demandée Then la réponse est 429 `TROP_DE_TENTATIVES`, sans appel au modèle [A04].
-- **CS20** Given un parcours complet (connexion, lecture, validation, copie, erreur de service) avec des valeurs témoins dans chaque champ When tous les journaux sont capturés Then aucune valeur témoin de reçu, aucun mot de passe ni jeton n'y figure, et un fournisseur contenant un retour à la ligne ne crée pas de nouvelle ligne de journal [A02, A03, A09].
-- **CS21** Given un échec de connexion, un CSRF refusé, un `state` invalide et un blocage de copie When ils surviennent Then chacun laisse un événement journalisé, avec son code [A09].
+- **CS20** *(reformulé, D-66)* Given un parcours complet (connexion, lecture, validation, dépôt, régénération, erreur de service) avec des valeurs témoins dans chaque champ When tous les journaux sont capturés Then aucune valeur témoin de reçu, aucun mot de passe ni jeton, aucun nom de fichier ni d'onglet n'y figure, et un fournisseur contenant un retour à la ligne ne crée pas de nouvelle ligne de journal [A02, A03, A09].
+- **CS21** *(reformulé, D-66)* Given un échec de connexion, un CSRF refusé, un `state` invalide, un échec de régénération et un dépôt de photo bloqué When ils surviennent Then chacun laisse un événement journalisé, avec son code [A09].
 - **CS22** Given un rappel Google avec un `state` absent, faux, d'une autre session ou déjà utilisé When il est traité Then aucun jeton n'est demandé ni enregistré, et l'autorisation existante reste intacte [A07, A08].
 - **CS23** Given une autorisation enregistrée When le stockage est lu et que `GET /api/google/etat` est appelé Then le jeton n'apparaît pas en clair dans le stockage, ni dans l'API. Given une clé de chiffrement absente Then l'application refuse de démarrer [A02].
 - **CS24** Given le rappel Google portant un paramètre `redirect=https://exemple.invalid` When il est traité Then la redirection vise l'adresse fixe de la PWA, et aucun appel n'est émis vers ce domaine [A10].
-- **CS25** Given un fournisseur, un objet ou une réponse du modèle contenant une URL When la lecture, la validation et la copie s'exécutent Then les seuls hôtes contactés sont ceux de la configuration (vérifié par un double réseau) [A10].
-- **CS26** Given un dépôt de photo dans Drive When le double examine la requête Then elle n'ajoute aucune permission de partage ni lien public ; le lien écrit dans PHOTO provient de l'identifiant renvoyé par Drive [A01].
+- **CS25** *(reformulé, D-66)* Given un fournisseur, un objet ou une réponse du modèle contenant une URL When la lecture, la validation, le dépôt et la régénération s'exécutent Then les seuls hôtes contactés sont ceux de la configuration (vérifié par un double réseau) [A10].
+- **CS26** *(reformulé, D-66)* Given un dépôt de photo dans Drive, puis une régénération When le double examine les requêtes Then le dépôt n'ajoute aucune permission de partage ni lien public ; le lien écrit dans PHOTO par la régénération est construit à partir de l'identifiant renvoyé par Drive, jamais d'un texte du reçu [A01, A10].
 - **CS27** Given un corps JSON contenant des métadonnées de type (`@class`) ou des champs imbriqués inattendus When il est traité Then aucun type n'est instancié à partir de ces données et la réponse est 400 ou sans effet [A08].
 - **CS28** Given la PWA servie When ses pages sont examinées Then elles ne chargent aucune ressource d'un domaine tiers, et sa logique de cache ne retient aucune réponse de `/api` ni photo [A05, A08].
+- **CS29** Given l'état de la régénération When un test provoque chaque transition de la section 4.2, puis les transitions interdites (`EN_COURS` vers `EN_COURS`, `JAMAIS` vers `REUSSIE`) Then seules les transitions du tableau aboutissent et les autres sont refusées sans changer l'état [A04].
+- **CS30** Given un fichier contenant un onglet de l'utilisateur dont le nom est celui de l'onglet généré en configuration, et que l'application n'a pas créé, puis la même configuration avec « Comptes 2026 » comme nom d'onglet généré (ancien réglage d'onglet de D-65) When une régénération s'exécute Then l'état est `ECHEC` avec le motif `ONGLET_NON_RECONNU`, et le double n'a reçu aucune requête de modification, de vidage, de renommage ni de suppression visant un onglet que l'application n'a pas créé [A01, A04].
+- **CS31** Given une requête `POST /api/sheet/regeneration` portant un corps `{"etat":"REUSSIE","motif":null,"derniereReussiteLe":"2030-01-01T00:00:00Z"}` When elle est traitée Then le corps n'a aucun effet : l'état et les dates sont ceux que le serveur calcule [A04].
 
 ## 12. Seams de test proposés
 
 | Niveau | Ce qui s'y teste | Critères |
 |---|---|---|
-| Règles métier, sans application | validation, alertes, conversions de montants, transitions, placement dans une section | CA09 à CA17, CA21 à CA29, CA33 à CA37, CS18 |
-| Cas d'usage, frontières doublées | copie, reprise, idempotence, correction, autorisation | CA18, CA19, CA30 à CA32, CA38 à CA68, CA71 à CA73 |
-| Contrat HTTP | routes, codes, JSON, multipart, sécurité | CA01 à CA08, CA84 (avec le double du modèle), CA20, CA69, CA70, CA74, CA75, CS01 à CS04, CS09 à CS17, CS19, CS22 à CS24, CS26, CS27 |
+| Règles métier, sans application | validation, alertes, conversions de montants, transitions de l'état de la régénération, tri et contenu de l'onglet généré | CA09 à CA17, CA21 à CA29, CA85, CA86, CS29 |
+| Cas d'usage, frontières doublées | dépôt des photos, reprise, idempotence, régénération (remplacement tout ou rien, panne, concurrence, redémarrage, motifs), correction, autorisation | CA13, CA17, CA18, CA19, CA31, CA32, CA38 à CA40, CA44 à CA47, CA49, CA50, CA53, CA54, CA62 à CA66, CA71, CA73, CA85 à CA101, CS30, CS31 |
+| Contrat HTTP | routes, codes, JSON, multipart, sécurité | CA01 à CA08, CA84 (avec le double du modèle), CA20, CA69, CA70, CA74, CA75, CA91 à CA93, CS01 à CS04, CS09 à CS17, CS19, CS22 à CS24, CS26, CS27, CS31 |
 | Serveur réel, port aléatoire | requêtes malformées, limites de taille, session, blocage | CA70, CS05 à CS08, CS20, CS21, CS25 |
-| Clients externes, serveur HTTP local doublant Google et Anthropic | format exact des requêtes et réponses, littéral d'écriture, droits demandés | CA06 à CA08, CA48, CA49, CA53, CA68, CS16, CS26 |
-| Navigateur sans tête (Q-10), API réelle, clients doublés | écrans | CA76 à CA83, CS14, CS28 |
+| Clients externes, serveur HTTP local doublant Google et Anthropic | format exact des requêtes et réponses, littéral d'écriture, droits demandés, séquence temporaire puis remplacement | CA06 à CA08, CA49, CA53, CA68, CA88 à CA90, CA97, CS16, CS26, CS30 |
+| Navigateur sans tête (Q-10), API réelle, clients doublés | écrans | CA76 à CA83, CA102, CA103, CS14, CS28 |
 
-Un Sheet doublé en mémoire, doté de lignes, de sections, d'identifiants et de formules, rend la plupart des critères d'écriture testables au niveau cas d'usage.
+Un Sheet doublé en mémoire, doté d'onglets, de lignes, de formules, d'identifiants d'onglet et d'une trace de ses requêtes, rend la plupart des critères d'écriture testables au niveau cas d'usage.
 
 ## 13. Contrôle manuel, hors critères
 
@@ -614,17 +758,22 @@ Ce contrôle exige les services réels et les photos réelles (hors dépôt) : i
 
 Le résultat (valeurs justes par champ, sans recopier de donnée personnelle) figure dans la preuve de l'issue. Un écart n'est pas corrigé seul : il remonte à l'utilisateur, D-01 prévoyant de réévaluer la qualité. Si la réduction d'image rend le reçu Unimage illisible, le traitement des reçus longs sera à décider.
 
-Le même contrôle vérifie, sur un fichier et un dossier d'essai : le droit limité aux fichiers créés par l'application, l'identifiant invisible de ligne (R-21), les liens multiples dans une cellule (R-27) et la conservation de la liste déroulante lors d'une insertion.
+Le même contrôle vérifie, sur un fichier et un dossier d'essai : le droit limité aux fichiers créés par l'application et les liens multiples dans une cellule (R-27). Depuis D-66, ne sont plus à vérifier l'identifiant invisible de ligne (R-21, Q-07) ni la conservation de la liste déroulante lors d'une insertion.
 
 ### Confirmations demandées sur le réel
 
-Ces décisions sont prises ; il reste à vérifier sur le réel ce qu'elles supposent. Un résultat contraire n'est pas contourné seul : il remonte à l'utilisateur.
+Ces décisions sont prises ; il reste à vérifier sur le réel ce qu'elles supposent. Un résultat contraire n'est pas contourné seul : il remonte à l'utilisateur. Toute écriture de l'essai se fait sur une copie jetable du Sheet de l'utilisateur, avant tout usage sur ses vrais comptes (D-65).
 
 | Décision | À confirmer | Attendu |
 |---|---|---|
-| Q-07 | Sur un fichier d'essai, la métadonnée invisible de ligne | elle reste attachée à la ligne après l'insertion d'autres lignes et après un déplacement, retrouve la ligne, et n'ajoute aucune colonne |
+| Q-07 | Métadonnée invisible de ligne | **Sans objet depuis D-66** : il n'y a plus de ligne à retrouver |
 | Q-11 | Sur le vrai téléphone, dont le modèle n'a pas été communiqué : une photo prise et une image importée de la galerie | le fichier reçu par le serveur est un JPEG ou un PNG ; un HEIC non converti est refusé, ce qui remonte à l'utilisateur |
 | Q-12 | Dans la documentation de Google | la publication en production sans vérification est possible pour les droits demandés ; l'expiration à 7 jours en mode test et à 6 mois sans usage est exacte ; l'écran d'avertissement n'apparaît qu'au consentement |
+| D-66 (références) | Sur une copie jetable où un autre onglet contient une formule lisant l'onglet généré : régénérer, puis supprimer l'onglet généré et régénérer | après une régénération, la formule garde sa valeur (l'onglet n'est pas recréé) ; après suppression puis régénération, la formule affiche une erreur de référence, ce qui est connu (section 8) |
+| D-66 (tout ou rien) | Provoquer un échec au milieu d'une écriture (par exemple une donnée refusée par Google) | l'onglet généré garde son contenu d'avant, l'onglet temporaire est retiré, l'état est `ECHEC` |
+| D-66 (remplacement) | Le mécanisme de remplacement retenu par le développeur, sur le réel | une seule opération de Google ne laisse jamais l'onglet généré à moitié écrit ; les liens multiples d'une cellule PHOTO restent cliquables |
+| D-66 (périmètre) | Sur la copie jetable de « Comptes 2026 », avant et après plusieurs régénérations | lignes, formules, totaux et mise en forme sont identiques |
+| D-66 (droit Sheets) | Le droit « édition des feuilles de calcul » permet de créer, remplir et retirer un onglet dans un fichier que l'application n'a pas créé | oui, sans autre droit |
 
 ## 14. Décisions de clarification (2026-11-01)
 
@@ -635,10 +784,10 @@ L'utilisateur a validé le PRD et accepté toutes les recommandations.
 | Q-01 Attente des photos avant la validation | Mémoire de la page, renvoi à la validation, rien sur le serveur | section 4.1, CA79 |
 | Q-02 Échec ou illisibilité de la lecture | Saisie manuelle ou relance, photo obligatoire | section 4.1, section 8, CA20 |
 | Q-03 Objet et type de dépense | Le modèle propose les deux, l'utilisateur confirme ; déjà tranché au cadrage | R-04, CA84 |
-| Q-04 Correction après validation | Correction dans l'application ; ligne réécrite sur place, déplacée si le mois ou l'année change ; photos inchangées, sans ajout de photo en première version | R-29 à R-34, CA55 à CA63 |
-| Q-05 Suppression ou annulation d'un reçu validé | Aucune en première version ; l'utilisateur supprime la ligne à la main, le reçu reste en base | section 5, CA72 |
+| Q-04 Correction après validation | Correction dans l'application ; ligne réécrite sur place, déplacée si le mois ou l'année change ; photos inchangées, sans ajout de photo en première version | R-29 à R-34, CA55 à CA63. **D-66 : la partie « ligne réécrite sur place, déplacée » est retirée ; la correction apparaît à la régénération** |
+| Q-05 Suppression ou annulation d'un reçu validé | Aucune en première version ; l'utilisateur supprime la ligne à la main, le reçu reste en base | section 5, CA72. **D-66 : supprimer la ligne à la main ne suffit plus, voir Q-20** |
 | Q-06 Plusieurs photos dans PHOTO | Plusieurs liens dans une cellule (« Photo 1 », « Photo 2 ») | R-27, CA44 |
-| Q-07 Repérage d'une ligne sans doublon | Métadonnée invisible attachée à la ligne, sans colonne ajoutée ; à confirmer à l'essai réel | R-21, CA48, section 13 |
+| Q-07 Repérage d'une ligne sans doublon | Métadonnée invisible attachée à la ligne, sans colonne ajoutée ; à confirmer à l'essai réel | R-21, CA48, section 13. **D-66 : sans objet** |
 | Q-08 Dossier Drive | L'application crée son propre dossier, avec le droit limité à ses fichiers | R-28, section 7.6, CA68 |
 | Q-09 Montant déclenchant les seuils de 100 $ et 500 $ | Le plus élevé du total validé et du total lu | R-13, CA29 |
 | Q-10 Test des écrans de la PWA | Navigateur sans tête en dépendance de test, licence et version vérifiées à l'ajout | section 10 (PWA), section 12, CS14 |
@@ -648,3 +797,48 @@ L'utilisateur a validé le PRD et accepté toutes les recommandations.
 | Q-14 Valeurs par défaut | Acceptées | section 9 |
 | Connexion façon JHipster | `formLogin` et `logout` de Spring Security (option A, 2026-11-01) : connexion par formulaire, déconnexion 204 même sans session | section 7, CS01 |
 | Limite du mot de passe et cas limites de la connexion | Pas de limite de 1 000 caractères : le corps est borné à 64 Ko et bcrypt ignore la suite ; comportements acceptés (2026-11-02) | section 7, section 11.4 |
+
+## 15. Changement D-66 (2026-11-10)
+
+### 15.1 Ce qui change, ce qui reste, ce qui disparaît
+
+**Change.** Le Google Sheet devient une projection de la base, régénérée en entier à la demande par un bouton. L'application écrit dans son propre onglet généré, sans toucher à aucun autre. L'écriture passe par un onglet temporaire et ne remplace l'ancien qu'en cas de réussite complète. Un état global de la régénération remplace l'état de copie par reçu. Le dépôt des photos dans Drive reste par reçu. Le Sheet n'est plus copié « reçu par reçu » après la validation.
+
+**Reste.** Lecture, validation, alertes, correction des valeurs, conservation, images, autorisation Google (avec son nouvel effet sur les dépôts et la régénération), dépôt Drive par reçu et ses garanties (R-21, R-28, R-36, CS26), numéros d'inscription jamais écrits (R-25), NOTES (R-26), liens PHOTO (R-27), valeurs littérales (CS16), correspondance année → fichier, validation sans attendre Google.
+
+**Disparaît.** L'état de copie par reçu et ses motifs ; la métadonnée de ligne et Q-07 ; le placement dans une section, la création de sections de mois et la lecture de l'onglet de l'utilisateur ; la lecture des colonnes par en-tête et `STRUCTURE_SHEET` ; la mise en forme et la liste déroulante reprises d'une ligne voisine ; la protection des formules des lignes de l'utilisateur (`FORMULE_PRESENTE`) ; la reprise reçu par reçu de l'écriture ; le déplacement d'une ligne à la correction ; `POST /api/recus/{id}/copie` ; le filtre `etatCopie` ; le bandeau de reçus bloqués et le message de la validation sans Sheet configuré.
+
+### 15.2 Décisions du backlog rendues fausses ou partiellement fausses
+
+| Décision | Ce qui devient faux | Ce qui reste vrai |
+|---|---|---|
+| D-05 | « le Google Sheet en est une copie » reçu par reçu | la base fait référence ; le Sheet est une projection, régénérée à la demande |
+| D-07 | colonne PHOTO « en fin de tableau » d'un onglet de l'utilisateur ; copie des valeurs au fil de l'eau | photos dans un dossier Drive, lien dans PHOTO (dernière colonne de l'onglet généré), copie locale conservée, NOTES = alertes |
+| D-18 | l'onglet de l'année (« Comptes 2026 ») comme cible d'écriture ; « envoi repris ensuite » | un fichier par année selon la date du reçu, par la correspondance en configuration ; année non configurée : reçu conservé |
+| D-19 | « sans jamais écraser une formule » dans les lignes de l'utilisateur : l'application n'y écrit plus ; l'onglet généré est réécrit en entier | valeurs écrites littéralement, jamais une formule écrite par l'application |
+| D-24 | tout : section de mois créée à l'arrivée d'un reçu, insertion selon la date, lignes existantes jamais déplacées (sous réserve de Q-16) | |
+| D-42 | rien (une phrase touchée : sans Google configuré, la régénération échoue `AUTORISATION_GOOGLE` au lieu de reçus `BLOQUEE`) | `ABSENTE`, `A_RENOUVELER`, clé de chiffrement |
+| D-46 | « reçus bloqués jusqu'à la reprise de 001-08 » : plus d'état de reçu | |
+| D-57, D-59 | « passe à `A_RENOUVELER` », mais les « reçus en attente deviennent `BLOQUEE` » devient « les dépôts attendent, la régénération échoue » | classement des refus, jeton gardé ou effacé |
+| D-60 | « cycle de la copie réuni » en un module où « `Recu` seul change son état de copie » et où les événements d'autorisation « bloquent » des reçus ; « la base sert de file, un seul fil » ne vaut plus que pour le dépôt des photos | pas de transaction pendant un appel à Google ; événements synchrones d'autorisation pour reprendre les dépôts |
+| D-62 | blocage `FICHIER_INACCESSIBLE` d'un reçu sans Sheet configuré, message de la validation, « aucune photo déposée sans fichier » (en attente : Q-21), passage périodique des copies, 403 et 404 qui « bloquent » le reçu | liens PHOTO séparés par « , », date affichée « 16 juin 2026 », 401 passagère |
+| D-63 | précédence de motifs par reçu | la même précédence vaut pour l'état de la régénération : fichier absent avant autorisation absente |
+| D-65 | « jusqu'à 001-07 : mois sans section bloqué `STRUCTURE_SHEET`, ligne en fin de section », titre de mois, deux sections ou en-tête en double ; l'essai réel sur « Q-07, titres de mois, liste de TYPE, total sous décembre » | correspondance par année, `ANNEE_NON_CONFIGUREE` (reformulé, en attente : Q-22), entrée incomplète ignorée, essai réel sur copie jetable avant les vrais comptes (nouvelle liste en section 13) |
+
+D-03, D-06, D-17, D-20, D-21, D-25 restent vrais. Le glossaire (`GLOSSARY.md`) définit « Copie » comme le report vers Drive et le Sheet : à mettre à jour avec la session.
+
+### 15.3 Questions posées à l'utilisateur
+
+Q-15 à Q-23 sont dans le rapport de rédaction (bloc `QUESTIONS`) ; le texte retenu provisoirement dans ce PRD est signalé par « (en attente : Q-xx) ». Une fois les réponses reçues, elles seront consignées ici avec leur effet.
+
+| Question | Sujet | Lecture retenue provisoirement |
+|---|---|---|
+| Q-15 | Nom de l'onglet généré | « Reçus générés » |
+| Q-16 | Forme de l'onglet généré | tableau plat, trié par date, sans section de mois |
+| Q-17 | Portée du bouton | tous les fichiers d'année configurés |
+| Q-18 | Onglet existant « Comptes 2026 » et ses lignes manuelles | intact, jamais lu ni écrit, aucun import |
+| Q-19 | Sort des reçus déjà copiés ou bloqués | leur état disparaît ; tous les reçus figurent à la prochaine régénération |
+| Q-20 | Reçu à écarter après une erreur | pas d'exclusion dans cette version |
+| Q-21 | Moment du dépôt des photos et lien avec la configuration du Sheet | dépôt après la validation, indépendant du Sheet, aucun dépôt pendant la régénération |
+| Q-22 | Reçus d'une année non configurée | avertissement dans l'état, sans échec |
+| Q-23 | Délai maximal d'une régénération | 5 minutes |
