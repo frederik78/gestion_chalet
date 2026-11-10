@@ -15,6 +15,10 @@ Aucun détail d'implémentation ici (voir la skill `domain-modeling`).
 - **Lecture** : extraction, par le modèle, des valeurs visibles sur les photos d'un reçu. Son résultat n'est qu'une proposition.
 - **Validation** : acte par lequel l'utilisateur accepte les valeurs d'un reçu, éventuellement corrigées, et l'enregistre.
 - **Alerte** : avertissement sur un reçu, jamais bloquant.
-- **Copie** : report d'un reçu validé vers Google Drive pour ses photos et vers le Sheet pour sa ligne.
-- **Section de mois** : dans un onglet du Sheet, la ligne de titre d'un mois et les lignes qui la suivent jusqu'au titre suivant.
+- **Copie** : report des photos d'un reçu validé vers Google Drive (aussi nommé dépôt). Depuis D-66, le Sheet n'est plus une copie reçu par reçu : c'est une projection de la base (voir Régénération).
+- **Régénération** : écriture complète, à la demande, de l'onglet généré de chaque fichier d'année à partir de la base. Elle remplace l'ancien contenu de cet onglet et ne touche aucun autre onglet.
+- **Onglet généré** : onglet du Sheet que l'application seule crée et réécrit à chaque régénération ; il reproduit les reçus de la base d'une année, une ligne par reçu, avec une colonne ID. Ne pas le confondre avec l'onglet de suivi de l'utilisateur (« Comptes 2026 »), que l'application ne lit ni n'écrit.
+- **Import du Sheet** : première moitié de la mise à jour du Sheet (« importer, puis régénérer ») : l'application lit l'onglet généré, montre à l'utilisateur les différences avec ce qu'elle y avait écrit, et n'applique à la base, comme corrections de reçus, que celles qu'il accepte ; la régénération suit.
+- **Différence** : écart constaté à l'import entre une cellule de l'onglet généré et ce que l'application y avait écrit à la dernière régénération. Simple si seul le Sheet a changé ; conflit si la base a changé aussi depuis. À éviter : écart (réservé à l'écart de calcul des alertes), modification.
+- **Section de mois** : dans un onglet du Sheet de l'utilisateur, la ligne de titre d'un mois et les lignes qui la suivent jusqu'au titre suivant. L'onglet généré n'en comporte pas.
 - **Relevé de carte** : document de paiement par carte, sans détail des taxes.
