@@ -3,7 +3,7 @@ id: 001-12
 titre: Contre-vérification des taxes
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: En revue
+statut: Fait
 depend_de: [001-04]
 criteres: [CA104, CA105, CA106, CA107, CA108, CA109, CA110, CA111, CA112, CA113]
 branche: feat/001-12-controle-taxes
