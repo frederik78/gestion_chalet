@@ -5,7 +5,7 @@ prd: docs/prd/001-recus.md
 besoin: F-01
 statut: Fait
 depend_de: [001-03, 001-05]
-criteres: [CA13, CA17, CA38, CA39, CA40, CA44, CA45, CS12, CS16, CS26]
+criteres: [CS12]
 branche: feat/001-06-copie-drive-sheet
 commits: [ede82fb..8786642]
 revue: docs/reviews/001-06.md
@@ -35,3 +35,4 @@ Tests rouges puis verts avec un Sheet doublé en mémoire, `scripts/verify-clean
 - 2026-11-05 : Relecture n° 1 : décisions de l'utilisateur consignées en D-62. Mineurs gardés : 403 de quota classé blocage et erreurs permanentes retentées chaque minute sans fin, sans `Retry-After` (à traiter dans 001-08) ; `Recu.corriger()` sans appelant de production avant 001-09 ; fil unique du `TaskScheduler` partagé avec tout futur `@Scheduled` ; ADR 0001 à aligner sur `DriveClient` et `SheetClient` ; Q-07 et `stringValue` à confirmer à l'essai réel.
 - 2026-11-05 : I-1 de la relecture n° 1 tranché par l'utilisateur : le `multipart/related` de Drive reste écrit à la main, car le convertisseur de Spring ajoute à chaque partie `Content-Disposition: form-data` et `Content-Length`, absents du format documenté par Google ; raison écrite dans le Javadoc de `GoogleDriveClient`. Le convertisseur sera réessayé à l'essai réel après 001-11, sur un fichier jetable.
 - 2026-11-05 : Fait. `FIN-ISSUE OK 001-06 8786642 : 961 tests, 0 échec, 0 ignoré` (tests Chrome compris), lancé par la session. 3 relectures, la dernière `APPROUVÉ` ; ses mutations ont été déduites des tests, pas rejouées (copie jetable refusée par l'outil). Ne pas configurer un vrai Sheet avant 001-11.
+- 2026-11-10 : CA13, CA17, CA38, CA39, CA40, CA44 et CS26, reformulés par D-66 (écriture dans l'onglet généré à la régénération), déplacés vers 001-14 (D-66) ; CA45 déplacé vers 001-16 (D-66, D-68) ; CS16 déplacé vers 001-13 (D-66). Le statut de cette issue ne change pas. Son code d'insertion de ligne est retiré par 001-17.
