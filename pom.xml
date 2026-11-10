@@ -126,6 +126,69 @@
           </annotationProcessorPaths>
         </configuration>
       </plugin>
+      <!-- Les tests ne dépendent pas du terminal de celui qui les lance : une variable d'environnement (ex. un .env chargé) passe avant
+           les fichiers de configuration. Surefire n'accepte que des noms exacts, pas de motif ; TestEnvironmentIsolationTest échoue si une
+           variable RECUS_* oubliée ici atteint la JVM des tests. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <excludedEnvironmentVariables>
+            <excludedEnvironmentVariable>RECUS_MODELE</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_DOSSIER_DONNEES</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_DOSSIER_PHOTOS</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_FUSEAU_HORAIRE</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_PHOTOS_PAR_RECU_MAX</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_DIMENSIONS_MAX_MEGAPIXELS</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_LECTURE_DELAI</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_LECTURE_LECTURES_PAR_HEURE</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_LECTURE_COTE_MAX_PIXELS</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_LECTURE_COTE_SOURCE_MAX_PIXELS</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_LECTURE_DECODAGES_SIMULTANES</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_LECTURE_PASSES_DECODAGE_MAX</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_LECTURE_DELAI_DECODAGE</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_LECTURE_ATTENTE_DECODAGE</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_ALERTES_SEUIL_NUMEROS_INSCRIPTION_CENTS</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_ALERTES_SEUIL_PIECE_A_VERIFIER_CENTS</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_ALERTES_ECART_TOLERE_CENTS</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_GOOGLE_CLE_CHIFFREMENT</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_GOOGLE_CLIENT_ID</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_GOOGLE_CLIENT_SECRET</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_GOOGLE_DELAI_APPEL</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_GOOGLE_ADRESSE_CONSENTEMENT</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_GOOGLE_ADRESSE_JETON</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_GOOGLE_ADRESSE_RAPPEL</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_AUTOMATIQUE</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_INTERVALLE</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_DELAI_APPEL</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_DOSSIER_DRIVE</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ADRESSE_DRIVE</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ADRESSE_SHEETS</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ADRESSE_LIEN_FICHIER</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ANNEES_2024_FICHIER</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ANNEES_2024_ONGLET</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ANNEES_2025_FICHIER</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ANNEES_2025_ONGLET</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ANNEES_2026_FICHIER</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ANNEES_2026_ONGLET</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ANNEES_2027_FICHIER</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ANNEES_2027_ONGLET</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ANNEES_2028_FICHIER</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ANNEES_2028_ONGLET</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ANNEES_2029_FICHIER</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ANNEES_2029_ONGLET</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ANNEES_2030_FICHIER</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_COPIE_ANNEES_2030_ONGLET</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_SECURITE_CONDENSE_MOT_DE_PASSE</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_SECURITE_ECHECS_AVANT_BLOCAGE</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_SECURITE_DUREE_BLOCAGE</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_SECURITE_SOURCES_SUIVIES_MAX</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_SECURITE_CORPS_REQUETE_MAX</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>RECUS_SECURITE_COOKIE_SECURISE</excludedEnvironmentVariable>
+            <excludedEnvironmentVariable>ANTHROPIC_API_KEY</excludedEnvironmentVariable>
+          </excludedEnvironmentVariables>
+        </configuration>
+      </plugin>
       <!-- Couverture des tests, sans seuil : rapport dans target/site/jacoco/. -->
       <plugin>
         <groupId>org.jacoco</groupId>
