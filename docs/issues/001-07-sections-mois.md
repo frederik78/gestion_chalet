@@ -28,3 +28,4 @@ Tests rouges puis verts sur les suites de dates du PRD, `scripts/verify-clean.sh
 
 ## Notes
 - 2026-11-01 : Parallélisable avec 001-08.
+- 2026-11-10 : En pause (D-66) : le Sheet devient une projection régénérée à la demande ; issue à revoir après le nouveau PRD.

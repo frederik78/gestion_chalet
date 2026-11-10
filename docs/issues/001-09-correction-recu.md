@@ -28,3 +28,4 @@ Tests rouges puis verts, `scripts/verify-clean.sh` à `VERIFY OK`.
 
 ## Notes
 - 2026-11-04 : Architecture (D-60) : la correction repasse à `A_COPIER` par `RecuCopyService`, seul autorisé à appeler les transitions d'état de copie de `Recu`.
+- 2026-11-10 : En pause (D-66) : le Sheet devient une projection régénérée à la demande ; issue à revoir après le nouveau PRD.
