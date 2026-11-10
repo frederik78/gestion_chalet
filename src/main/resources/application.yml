@@ -135,6 +135,10 @@ recus:
     seuil-numeros-inscription-cents: 10000
     seuil-piece-a-verifier-cents: 50000
     ecart-tolere-cents: 2
+    # Contrôle des taxes (D-67) : taux en millièmes de pour cent (5 % = 5000, 9,975 % = 9975), tolérance en cents.
+    taux-tps-millipourcent: 5000
+    taux-tvq-millipourcent: 9975
+    ecart-taxes-tolere-cents: 2
   google:
     # Aucune clé par défaut : RECUS_GOOGLE_CLE_CHIFFREMENT, 32 octets en base 64 (openssl rand -base64 32), sinon l'application refuse de démarrer.
     # Identifiants facultatifs, RECUS_GOOGLE_CLIENT_ID et RECUS_GOOGLE_CLIENT_SECRET : sans eux, l'autorisation reste ABSENTE (D-42).

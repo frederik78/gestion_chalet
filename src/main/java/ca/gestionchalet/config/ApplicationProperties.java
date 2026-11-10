@@ -50,8 +50,12 @@ public record ApplicationProperties(@Valid @NotNull Security securite, @Valid @N
      * @param seuilNumerosInscriptionCents montant de référence à partir duquel les numéros d'inscription sont exigés
      * @param seuilPieceAVerifierCents montant de référence à partir duquel la pièce est à vérifier
      * @param ecartTolereCents écart de calcul au-delà duquel l'alerte est levée
+     * @param tauxTpsMillipourcent taux de TPS du contrôle des taxes, en millièmes de pour cent
+     * @param tauxTvqMillipourcent taux de TVQ du contrôle des taxes, en millièmes de pour cent
+     * @param ecartTaxesTolereCents écart toléré par le contrôle des taxes
      */
-    public record Alerts(@Min(1) long seuilNumerosInscriptionCents, @Min(1) long seuilPieceAVerifierCents, @Min(0) long ecartTolereCents) {
+    public record Alerts(@Min(1) long seuilNumerosInscriptionCents, @Min(1) long seuilPieceAVerifierCents, @Min(0) long ecartTolereCents,
+            @Min(1) long tauxTpsMillipourcent, @Min(1) long tauxTvqMillipourcent, @Min(0) long ecartTaxesTolereCents) {
     }
 
     /**
