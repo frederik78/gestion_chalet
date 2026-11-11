@@ -1,5 +1,87 @@
 # Historique des versions
 
+## 1.19.0
+- `dashboard.sh` : les cartes du Kanban expliquent leur raison d'être. Une carte d'issue montre le premier paragraphe de la section `## Objectif` de son fichier ; une carte de besoin montre sa colonne « Décisions » du `backlog.md`. Texte échappé HTML, limité à 3 lignes (déplié au survol), absent si la source est vide : les cartes sans descriptif restent identiques.
+- Nouveauté, aucun changement de comportement incompatible.
+- Migration : remplacer `factory/`.
+
+## 1.18.0
+- `dashboard.sh` : thème `clair` (défaut, rendu inchangé), `sombre` ou `auto` (suit `prefers-color-scheme`), par la clé `DASHBOARD_THEME` (`.factory.conf`, `.factory.local.conf`, `FACTORY_DASHBOARD_THEME`) ou l'option `--theme` ; valeur invalide = code 64. Couleurs en variables CSS (deux palettes), `data-theme` de Pico et `color-scheme` suivent le thème ; impression toujours claire ; toujours aucune ressource externe ni JavaScript.
+- Nouveauté, aucun changement de comportement incompatible. Seul écart visible : la page par défaut porte désormais `data-theme="light"`, pour que Pico ne passe pas en sombre tout seul sous un OS sombre.
+- Migration : remplacer `factory/` ; facultatif : ajouter `DASHBOARD_THEME=clair|sombre|auto` à `.factory.conf`.
+
+## 1.17.0
+- `dashboard.sh` : mise en forme par Pico CSS (classless 2.0.6, licence MIT), embarqué dans la page depuis `factory/assets/pico.classless.min.css` (déclarations `url()` retirées) ; fond gris clair, titres de section soulignés, ombres légères sur cartes, colonnes et encarts, thème clair forcé. Toujours aucune ressource externe ni JavaScript, page lisible hors ligne ; si le fichier manque, la page garde son style d'origine.
+- Nouveauté, aucun changement de comportement incompatible. La page grossit d'environ 70 Ko.
+- Migration : remplacer `factory/` (le dossier `factory/assets/` est nouveau).
+
+## 1.16.0
+- `dashboard.sh` : encart « Autres travaux » après les issues. Une ligne par worktree dont la branche n'est le champ `branche:` d'aucune issue (`refactor/…`, `fix/…`, `docs/…`), avec `n fichiers non commités · activité il y a …` ; rien pour `develop`, `main` ni un HEAD détaché ; « Aucun autre travail. » s'il n'y en a pas. Ordre de `git worktree list`. Réutilise les signaux déjà calculés (aucun appel git de plus, jamais de verrou), git en échec = « état Git illisible », nom de branche échappé HTML. Sans modèle, sans JavaScript.
+- Nouveauté, aucun changement de comportement incompatible.
+- Migration : remplacer `factory/`.
+
+## 1.15.1
+- Correctif : `/deliver` ne prévoyait aucune étape pour le statut `En revue`, qui existait pourtant (cycle des issues, colonne du dashboard). L'orchestrateur passe maintenant l'issue à `En revue` (commit `docs: issue <id> en revue`) avant la première relecture, la remet `En cours` quand les corrections repartent au développeur (revue interne ou retour de revue externe), puis `En revue` avant la relecture suivante ; après la règle d'arrêt, l'issue reste `En revue`. Aucun script ne change.
+- Migration : remplacer `factory/` ; une issue en cours de livraison reprend le cycle à sa prochaine relecture.
+
+## 1.15.0
+- `dashboard.sh` montre ce qui se passe en ce moment, sans modèle ni dépendance. Bandeau « Agents actifs » en haut de page : chaque sous-agent commencé et non terminé, avec son rôle, sa description et `depuis 12 min`, ou `sans nouvelles depuis 45 min` au-delà de `AGENTS_SILENCE_MINUTES` (5) sans preuve d'activité ; retiré au-delà de `AGENTS_RETRAIT_MINUTES` (60). Sur chaque issue qui a un worktree : `3 fichiers non commités · activité il y a 2 min` (`git status` sans verrou optionnel : jamais l'`index.lock` d'un agent).
+- **Changement de comportement** : `sync-claude.sh` installe les hooks `SubagentStart` et `SubagentStop` (`factory/hook-agents-claude.sh`) dans `.claude/settings.local.json`, jamais dans `settings.json` versionné. Fusion prudente : une clé `hooks` déjà présente ou un fichier inexploitable n'est pas modifié, un avertissement donne le bloc à ajouter à la main. Sa dernière ligne annonce `agents actifs : oui|non`.
+- Journal : `<git-common-dir>/factory-agents.log`, non versionné et commun à tous les worktrees ; format documenté en tête du hook et de `dashboard.sh`. La description vient de `subagents/agent-<id>.meta.json`, fichier non documenté par Anthropic : s'il manque ou change de forme, le bandeau affiche le rôle seul.
+- Limites : une ligne `fin` écrite pendant la rotation du journal (plus de 2000 lignes réduites à 1000) peut être perdue, l'agent reste alors « sans nouvelles » jusqu'au retrait (60 min par défaut) ; l'âge d'activité d'un worktree ne voit pas la modification d'un fichier existant dans un dossier entièrement non suivi (`dir/` pour git status, `-uall` serait trop coûteux) ; git en échec s'affiche « état Git illisible ». `AGENTS_SILENCE_MINUTES` supérieur ou égal à `AGENTS_RETRAIT_MINUTES` est permis : l'état « sans nouvelles » n'existe alors pas.
+- `sync-claude.sh` conserve le mode du `settings.local.json` existant et ne remplace jamais un lien symbolique (avertissement avec le bloc à ajouter).
+- Une valeur invalide de `AGENTS_SILENCE_MINUTES` ou `AGENTS_RETRAIT_MINUTES` (entier entre 1 et 999999) arrête `dashboard.sh` en code 64.
+- Migration : remplacer `factory/`, relancer `./factory/init-projet.sh` si besoin, lancer `./factory/sync.sh`, ajouter `AGENTS_SILENCE_MINUTES=5` et `AGENTS_RETRAIT_MINUTES=60` à `.factory.conf` (facultatif : ce sont les défauts), vérifier que `.claude/settings.local.json` est ignoré par git, puis relancer la session Claude Code pour qu'elle lise les hooks.
+- `LESSONS.md` : leçon n° 33.
+
+## 1.14.0
+- Correctif : `criteres-sans-test.sh` répondait `OK` pour n'importe quelle mention dans le dossier de tests. Une Javadoc citant un critère masquait le retrait de son seul test. Seuls comptent maintenant le nom ou le titre d'une déclaration de test en Java, Kotlin, Python ou Node ; les limites restantes sont dans l'en-tête du script.
+- **Changement de comportement** : un critère cité seulement dans un commentaire, une chaîne ou un fichier de données passe à `MANQUE`, et le script répond 1 ; une fonction Python sans préfixe `test` ou une méthode Java privée aussi. Un projet dans un autre langage voit tous ses critères à `MANQUE`.
+- `LESSONS.md` : leçon n° 29.
+- `scripts/fin-issue.sh <issue> [-- <arguments>]` : contrôle exécuté en fin d'issue, exigé par `/deliver` avant `Fait`, sur un arbre propre et le commit affiché. Un test ignoré sans décision, un nombre illisible ou un fichier non suivi non ignoré est un échec. Clés `FIN_ISSUE_ARGUMENTS` et `FIN_ISSUE_IGNORES_AUTORISES`.
+- `verify-clean.sh` : additionne les résumés Maven (plusieurs modules ou greffons, seul le dernier était lu) et ajoute le verdict de unittest au résumé.
+- `MAX_ITERATIONS_REVUE` passe de 5 à 3 par défaut, car 5 relectures prennent trop de temps. Un projet existant garde la valeur de son `.factory.conf` ; pour adopter 3, il la change lui-même.
+- Vitesse : le relecteur ne mute que les garde-fous nouveaux ou modifiés de la passe, 8 au plus, et liste les autres ; le développeur lance des tests ciblés avant chaque commit intermédiaire, et `fin-issue.sh` complet avant son rapport.
+- Un worktree par issue, même seule, de préférence sur un clone bare : `worktree-issue.sh initialiser <source> <conteneur>` (clone bare, `origin`, refspec, fetch ; conteneur existant refusé) ; `creer` place le dossier dans `<conteneur>/<branche avec / remplacé par ->` et lance `factory/sync.sh`. Dépôt classique : emplacement inchangé, avec un avertissement.
+- `fin-issue.sh` et `verify-clean.sh`, après revue : échecs contrôlés même avec un build au code 0 ; arguments signalés dans la ligne `OK` ; non suivis vus quelle que soit la configuration de git, fichiers `skip-worktree` et `assume-unchanged` refusés ; critères lus dans le commit ; suites unittest additionnées ; jest et node:test lus. Vitest et mocha : `inconnu`.
+- `worktree-issue.sh`, après revue : `nettoyer` protège un HEAD détaché et les fichiers ignorés hors artefacts ; `initialiser` règle le suivi amont, masque les identifiants de l'URL, refuse un conteneur dans la source ; un identifiant d'issue doit être exact.
+- Sécurité : une entrée externe naît avec ses contrôles (`to-tickets`) ; tableau des entrées externes au rapport ; pièges Java dans `owasp-check` ; risque reporté décidé par l'utilisateur, au backlog ; revue finale sans la liste des mineurs.
+- Correctif : `verify-clean.sh` ne lisait que le premier type de résumé. Maven puis jest, ou jest en échec puis pytest enchaînés par `;`, donnaient `FIN-ISSUE OK`. Plusieurs types de résumé rendent maintenant le résumé illisible, donc `fin-issue.sh` en échec ; le code de `verify-clean.sh` reste celui du build. Un même lanceur répété s'additionne toujours.
+- **Changement de comportement** : un projet qui enchaîne deux lanceurs dans `.factory-verify` passe à `FIN-ISSUE ECHEC`, sauf `FIN_ISSUE_IGNORES_AUTORISES=inconnu`. Les motifs de résumé sont aussi plus stricts : une ligne de journal comme `=== build failed ===` n'est plus lue comme un résumé.
+- `dashboard.sh` lit aussi le statut de chaque issue sur sa branche locale (champ `branche:`), garde le plus avancé du cycle et affiche le dernier commit de la branche : depuis `develop`, une issue en livraison ne reste plus à `À faire`. `etat-issues.sh --prochaine` ne propose plus une issue commencée sur sa branche. Une dépendance ne compte `Fait` qu'une fois fusionnée. Limite : le statut ne dit pas si un agent tourne encore, et le travail non commité n'est pas vu.
+- `MAX_CRITERES_ISSUE` (10 par défaut, `scripts/config-factory.sh --max-criteres`) : `couverture-prd.sh` avertit pour une issue plus grosse sans changer son code de sortie, sauf champ `criteres_justification:` non vide. Une valeur invalide donne le code 64. Règle dans `to-tickets`, `spec-writer.md` et `UPGRADE.md` : environ 10 critères, ordre de grandeur et non mesure.
+- **Changement de comportement** : les agents passent par défaut à `sonnet` avec l'effort `medium` (`AGENT_MODELE`, `AGENT_EFFORT`), au lieu de `opus` et `low`. Un projet dont `.factory.conf` ou `.factory.local.conf` fixe ces clés (le modèle les y écrit) garde sa valeur ; un projet qui ne les définit pas passe à `sonnet` et `medium` après la mise à jour de `factory/` et `sync-claude.sh`.
+- Correctif : `verify-clean.sh` ne vérifiait pas `mktemp` ; avec un dossier temporaire inutilisable, la copie valait `/src` et, sous root dans un conteneur où `/src` est un dépôt, le build relançait la suite de la factory en boucle. Il s'arrête maintenant (code 1, « Copie temporaire impossible »). `tests/run.sh` refuse en outre de se relancer lui-même (`FACTORY_TESTS_EN_COURS`).
+- `LESSONS.md` : leçons n° 30 à 32.
+- Migration : remplacer `factory/`, lancer `scripts/criteres-sans-test.sh --tous`, renommer les tests signalés, relancer `./factory/init-projet.sh` (lien `scripts/fin-issue.sh`), ajouter les clés `FIN_ISSUE_*` à `.factory.conf`, ignorer ou commiter les fichiers non suivis (`.vscode/` par exemple), reprendre les lignes `criteres-sans-test`, `fin-issue` et `worktree-issue` dans `AGENTS.md`, puis, si vous adoptez la structure bare, lancer `initialiser` et recréer les fichiers non suivis dans chaque worktree.
+
+## 1.13.0
+- Règle « Langue du code » : les classes techniques sont impérativement en anglais. Dans `AGENTS.md`, `developer.md` et le guide java ; en revue, une classe technique dans une autre langue est un constat IMPORTANT.
+- `LESSONS.md` : leçon n° 28.
+- Migration : remplacer `factory/`, relancer `./factory/init-projet.sh`, puis reprendre la ligne « Langue du code » dans `AGENTS.md`.
+
+## 1.12.0
+- Applications Spring Boot : dépendances Spring d'abord, JHipster comme modèle pour l'emplacement, les noms et la forme du code. `stacks/java-maven/README.md` dit quel exemple et quels fichiers lire selon l'authentification et le frontend (aucun, Angular, React, Vue), un fichier à la fois, sans générateur ni clone.
+- Règle générale « La référence de code » : l'ADR fixe un projet et sa version ; chaque écart a une raison. Section « Alignement sur la référence » du rapport, contrôlée par `/deliver` ; écart sans raison = constat IMPORTANT en revue ; champ dans les briefs et le modèle d'ADR.
+- `LESSONS.md` : leçon n° 27.
+- Migration : remplacer `factory/`, relancer `./factory/init-projet.sh`, reprendre la ligne « La référence de code » dans `AGENTS.md` et fixer la référence dans l'ADR d'architecture.
+
+## 1.11.0
+- Règle « Le framework d'abord » : avant d'écrire un mécanisme transversal, chercher ce que fournit le framework dans la version utilisée et lire le code de la référence nommée par l'ADR. Un équivalent à la main se justifie par un critère du PRD ou une mesure.
+- Contrôle à chaque étape : section « Code écrit à la place du framework » du rapport du développeur, vérifiée par `/deliver` ; section « Framework » de la revue, où un équivalent injustifié est un constat IMPORTANT ; champ dans les briefs ; rubrique dans le modèle d'ADR.
+- `stacks/java-maven/README.md` : table des mécanismes Spring et de la référence JHipster à consulter.
+- `LESSONS.md` : leçon n° 26.
+- Tests : 273 vérifications.
+- Migration : remplacer `factory/`, relancer `./factory/init-projet.sh`, puis reprendre la ligne « Le framework d'abord » dans `AGENTS.md` (`diff factory/templates/AGENTS.md AGENTS.md`), qui n'est pas écrasé.
+
+## 1.10.0
+- Modèle et effort des agents configurables : `AGENT_MODELE` (`opus` par défaut) et `AGENT_EFFORT` (`low` par défaut), aux trois niveaux habituels (`.factory.conf`, `.factory.local.conf`, `FACTORY_*`). `sync-claude.sh` les écrit dans les enveloppes `.claude/agents/`. Valeur vide : l'agent hérite de la session. L'en-tête d'un prompt l'emporte pour son rôle.
+- Sécurité : une valeur hors format est refusée (code 64), sans modifier les enveloppes, pour qu'elle n'ajoute aucun champ à l'en-tête YAML.
+- **Changement de comportement** : sans configuration, les agents ne suivent plus le modèle de la session, ils passent en Opus avec un effort faible. Pour garder l'ancien comportement : `AGENT_MODELE=` et `AGENT_EFFORT=`.
+- `LESSONS.md` : leçon n° 25.
+- Tests : 263 vérifications.
+- Migration : remplacer `factory/`, relancer `./factory/init-projet.sh`, puis ajouter si besoin les deux clés à `.factory.conf` ; il n'est pas écrasé.
+
 ## 1.9.2
 - Correctif : `factory/scripts/tests/run.sh` passe dans un projet. Les 5 vérifications de la racine (CI, `.factory-verify`, Dependabot) ne s'exécutent que dans le dépôt de la factory, repéré par le fichier `.factory-depot`, qui n'est jamais copié dans un projet.
 - `LESSONS.md` : leçon n° 24.

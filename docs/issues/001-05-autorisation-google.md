@@ -3,12 +3,12 @@ id: 001-05
 titre: Autorisation Google
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: À faire
+statut: Fait
 depend_de: [001-02]
-criteres: [CA64, CA65, CA66, CA67, CA68, CS22, CS23, CS24]
+criteres: [CA67, CA68, CS22, CS23, CS24]
 branche: feat/001-05-autorisation-google
-commits: []
-revue:
+commits: [b7b5ebe..e60e9c0]
+revue: docs/reviews/001-05.md
 ---
 
 ## Objectif
@@ -28,3 +28,6 @@ Tests rouges puis verts avec un serveur local doublant Google, `scripts/verify-c
 
 ## Notes
 - 2026-11-01 : Q-12 reste à confirmer dans la documentation de Google (section 13 du PRD).
+- 2026-11-04 : Mineurs de la relecture n° 1, non corrigés d'office (`docs/reviews/001-05.md`) : m1 `withPkce()` redondant ; m3 `HEAD` répond 503 alors que Google est configuré ; m5 `"google"` répété dans 4 classes.
+- 2026-11-04 : Limite de 3 relectures atteinte : la dernière n'est pas `APPROUVÉ` au sens strict (mineur m11, question sur le 401). D-59 et m11 corrigés ensuite en e60e9c0, sans 4e relecture, à la demande de l'utilisateur ; preuve par mutation du développeur, vérification par l'orchestrateur. Reste à 001-06 : rythme de l'essai de reprise (R-20), copie sans doublon (CA66). Reste à 001-08 : reçus bloqués pendant un retrait d'identifiants. m12 cosmétique, non corrigé.
+- 2026-11-10 : CA64, CA65 et CA66, reformulés par D-66 (plus d'état de copie ; dépôts de photos repris, aucune régénération lancée), déplacés vers 001-16 (D-66). Le statut de cette issue ne change pas.

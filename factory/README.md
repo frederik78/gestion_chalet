@@ -30,7 +30,7 @@ Les quatre **phases** d'une issue, comme une chaîne de fabrication. Ce sont des
 
 | Phase | Ce qui se passe | Réalisée par | Nature | Où dans la factory |
 |---|---|---|---|---|
-| **Isoler** | L'issue a sa branche et, si d'autres agents travaillent en même temps, son propre dossier de travail ; rien n'est construit sur `main` ni sur `develop` | La session principale | Script et consigne de `/deliver` | `scripts/worktree-issue.sh`, `/deliver` étape 0 |
+| **Isoler** | L'issue a sa branche et son propre dossier de travail, même seule ; rien n'est construit sur `main` ni sur `develop` | La session principale | Script et consigne de `/deliver` | `scripts/worktree-issue.sh`, `/deliver` étape 0 |
 | **Construire** | Le développeur code en TDD, dans une structure lisible par quelqu'un sans contexte | Agent `developer` | Agent | `prompts/developer.md`, `AGENTS.md`, ADR |
 | **Prouver** | Preuve avant / après, tests de garde-fous prouvés par mutation, rapports recoupés avec le dépôt, relecture | `developer` (fournit la preuve), `code-reviewer` (la vérifie), la session (recoupe) | Agents, session et scripts | `report-format.md`, `scripts/*.sh` |
 | **Livrer** | Définition de fini, PR avec sa preuve, retour de revue externe facultatif, fusion | La session principale, puis vous (fusion) | Skill `/deliver` et décision humaine | `/deliver` étapes 4 bis et 5, `.github/pull_request_template.md` |
@@ -96,11 +96,11 @@ doit répondre `OK` : chaque critère du PRD est couvert par exactement une issu
 /deliver 001-01          # ou : /deliver (la prochaine issue prête : scripts/etat-issues.sh --prochaine)
 ```
 La session principale :
-1. vérifie les dépendances, crée la branche `feat/<prd>-<nn>-<slug>`, passe l'issue `En cours` ;
+1. vérifie les dépendances, crée la branche `feat/<prd>-<nn>-<slug>`, passe l'issue `En cours` (puis `En revue` à la première relecture, `En cours` si les corrections repartent au développeur) ;
 2. lance le **developer** avec un brief complet (TDD, un test RED avant chaque code, tests nommés d'après les critères) ;
 3. **recoupe** son rapport : `git log`, arbre propre, `scripts/verify-clean.sh`, `scripts/criteres-sans-test.sh` ;
 4. lance le **code-reviewer** (build en copie propre, mutations des tests, OWASP), et archive son rapport dans `docs/reviews/<issue>.md` ;
-5. renvoie les points BLOQUANT et IMPORTANT au développeur (`MAX_ITERATIONS_REVUE` itérations au plus, 5 par défaut, voir `.factory.conf`) ; vous consulte pour les décisions de fond ; au-delà, s'arrête et vous remonte le blocage, avec un courriel par `scripts/notifier.sh` (si configuré) seulement s'il reste au moins un BLOQUANT ;
+5. renvoie les points BLOQUANT et IMPORTANT au développeur (`MAX_ITERATIONS_REVUE` itérations au plus, 3 par défaut, voir `.factory.conf`) ; vous consulte pour les décisions de fond ; au-delà, s'arrête et vous remonte le blocage, avec un courriel par `scripts/notifier.sh` (si configuré) seulement s'il reste au moins un BLOQUANT ;
 6. passe l'issue à `Fait` si la définition de fini est remplie, puis vous fait un compte rendu court (commits, résultats chiffrés, décisions en attente).
 
 Détail : `skills/deliver/SKILL.md`. Les décisions que le PRD ne fixait pas sont listées dans les Notes de l'issue : vous les tranchez, puis elles entrent dans le PRD.
@@ -120,20 +120,21 @@ Détail : `skills/deliver/SKILL.md`. Les décisions que le PRD ne fixait pas son
 | `/code-review` | Revue de la branche (standards et conformité à l'issue) |
 | `/tdd`, `/diagnosing-bugs`, `/research`, `/prototype` | À la demande |
 | `scripts/verify-clean.sh [--keep]` | Build complet dans une copie propre, hors IDE, limitée aux fichiers vus par Git |
-| `scripts/criteres-sans-test.sh <issue>` | Critères d'une issue qu'aucun test ne mentionne (`--tous` : toutes les issues commencées) |
+| `scripts/fin-issue.sh <issue> [-- <arguments>]` | Contrôle de fin d'issue, exigé avant `Fait` : une ligne `FIN-ISSUE OK` ou `FIN-ISSUE ECHEC` |
+| `scripts/criteres-sans-test.sh <issue>` | Critères d'une issue qu'aucune déclaration de test ne nomme (`--tous` : toutes les issues commencées) |
 | `scripts/couverture-prd.sh <prd>` | Chaque critère du PRD couvert par une seule issue |
 | `scripts/etat-issues.sh [--statut S] [--prochaine]` | État des issues lu dans leurs en-têtes ; prochaine issue prête |
-| `scripts/dashboard.sh [--sortie F] [--attente S] [--boucle S]` | Page HTML en Kanban des besoins du `backlog.md` et des issues (une colonne par statut, une carte par élément, encart « En cours », marqueurs « prochaine » et « bloquée ») ; `--boucle` la régénère en continu |
-| `scripts/worktree-issue.sh creer\|nettoyer\|lister <issue>` | Une issue dans son propre dossier de travail (`git worktree`), sur sa branche ; `nettoyer` après la fusion |
+| `scripts/dashboard.sh [--sortie F] [--attente S] [--boucle S] [--theme clair\|sombre\|auto]` | Page HTML en Kanban des besoins du `backlog.md` et des issues (une colonne par statut, une carte par élément, encart « En cours », marqueurs « prochaine » et « bloquée »), statut le plus avancé entre le dossier courant et la branche de l'issue, bandeau « Agents actifs », signaux Git des worktrees et encart « Autres travaux » ; `--boucle` la régénère en continu |
+| `scripts/worktree-issue.sh creer\|nettoyer\|lister\|initialiser` | Une issue dans son propre dossier de travail (`git worktree`), sur sa branche ; `nettoyer` après la fusion |
 | `scripts/config-factory.sh [--max-iterations]` | Configuration effective de la factory (`.factory.conf`, `.factory.local.conf`, variables `FACTORY_*`) ; `--max-iterations` : limite des revues |
 | `scripts/notifier.sh --sujet S [--corps-fichier F] \| --test` | Courriel par la commande configurée (issue bloquée après `MAX_ITERATIONS_REVUE` revues) ; `--test` : message d'essai |
-| `factory/scripts/tests/run.sh` | Tests des scripts de la factory (252 vérifications) |
+| `factory/scripts/tests/run.sh` | Tests des scripts de la factory (lancer pour le nombre courant) |
 | `./factory/sync.sh [--claude\|--sans-claude]` | Recrée le lien `.agents/skills` (neutre) puis, si le projet a un `CLAUDE.md` (le seul dossier `.claude/` ne suffit pas), appelle `sync-claude.sh` |
-| `./factory/sync-claude.sh` | Propre à Claude Code : lien `.claude/skills` et agents générés depuis les en-têtes de `factory/prompts/` |
+| `./factory/sync-claude.sh` | Propre à Claude Code : lien `.claude/skills`, agents générés depuis les en-têtes de `factory/prompts/`, hooks des agents actifs (`factory/hook-agents-claude.sh`) dans `.claude/settings.local.json` |
 | `./factory/init-projet.sh [--sans-claude]` | Initialise un projet (sans rien écraser) ; `--sans-claude` : ni `CLAUDE.md` ni `.claude/` |
 
 ### Détail des scripts
-Quatorze scripts, en trois groupes : mise en place (3), contrôle et suivi d'une livraison (8), outils internes (3). Les `scripts/*.sh` à la racine d'un projet sont des liens vers `factory/scripts/` : la source est unique.
+Seize scripts, en trois groupes : mise en place (3), contrôle et suivi d'une livraison (9), outils internes (4). Les `scripts/*.sh` à la racine d'un projet sont des liens vers `factory/scripts/` : la source est unique.
 
 **Mise en place (vous les lancez)**
 
@@ -141,18 +142,19 @@ Quatorze scripts, en trois groupes : mise en place (3), contrôle et suivi d'une
 |---|---|---|
 | `factory/init-projet.sh` | Prépare un projet : `README.md`, `AGENTS.md`, `backlog.md`, `docs/`, modèle de PR, `.factory.conf` (rappelle de renseigner `.factory.local.conf` pour les notifications ; signale la ligne `.factory.local.conf` à ajouter à un `.gitignore` existant), et les fichiers de la stack choisie (CI, Dependabot, `.factory-verify`, lignes du `.gitignore`). Ne remplace jamais un fichier existant ; lie les scripts dans `scripts/` (un lien mort vers un script retiré ou renommé est signalé « à supprimer » avec la commande `rm`, jamais supprimé), écrit `.factory-version`, appelle `sync.sh`. Les scripts `factory/*.sh` ne sont pas liés dans `scripts/` : ils se lancent depuis `factory/`. Option `--stack java-maven\|python\|node\|aucune` ; `--sans-claude` ne crée ni `CLAUDE.md` ni rien sous `.claude/` et lance `sync.sh --sans-claude` (option inconnue = code 64). | Au départ, puis après une mise à jour de la factory |
 | `factory/sync.sh` | Neutre : crée le lien `.agents/skills`, puis appelle `sync-claude.sh` si le projet a un `CLAUDE.md`, pas sur le seul dossier `.claude/` (`--claude` force l'appel, `--sans-claude` l'interdit ; autre option = code 64). | Après un clone, ou après modification d'un prompt |
-| `factory/sync-claude.sh` | Propre à Claude Code, utilisable seul : lien `.claude/skills` et **génération des agents** (`spec-writer`, `developer`, `code-reviewer`) depuis l'en-tête YAML de `factory/prompts/`. N'ajoute le suivi de progression que si le plugin est installé : l'agent fixe lui-même le nombre d'étapes selon la mission (une étape = un résultat vérifiable, sans plancher ni plafond) et peut ajuster `total` en cours de route. Les valeurs de `tools:` sont des noms d'outils de Claude Code. | Après un clone, ou après modification d'un prompt |
+| `factory/sync-claude.sh` | Propre à Claude Code, utilisable seul : lien `.claude/skills` et **génération des agents** (`spec-writer`, `developer`, `code-reviewer`) depuis l'en-tête YAML de `factory/prompts/`. N'ajoute le suivi de progression que si le plugin est installé : l'agent fixe lui-même le nombre d'étapes selon la mission (une étape = un résultat vérifiable, sans plancher ni plafond) et peut ajuster `total` en cours de route. Les valeurs de `tools:` sont des noms d'outils de Claude Code. Installe aussi les hooks `SubagentStart` / `SubagentStop` de `factory/hook-agents-claude.sh` dans `.claude/settings.local.json` (jamais `settings.json` : un worktree resterait sali) ; une clé `hooks` existante n'est pas modifiée, un avertissement donne le bloc à ajouter. | Après un clone, ou après modification d'un prompt |
 
 **Contrôle et suivi d'une livraison (la session et les agents les lancent pendant `/deliver` ; `dashboard.sh` aussi, par vous, à tout moment)**
 
 | Script | Question à laquelle il répond | Résultat |
 |---|---|---|
 | `scripts/verify-clean.sh` | « Le build est-il vert hors IDE ? » Copie le dépôt (fichiers vus par Git seulement), y lance la commande de vérification (`COMMANDE_VERIFY`, sinon `.factory-verify`, sinon `./mvnw` ou `./gradlew`), supprime la copie. `--keep` conserve la copie. | Tests lancés, analyse statique, `VERIFY OK` ou `VERIFY ECHEC` ; code de sortie = celui du build |
-| `scripts/criteres-sans-test.sh <issue>` | « Chaque critère de l'issue a-t-il un test qui le nomme ? » (`--tous` : toutes les issues commencées) | `OK` ou la liste des critères sans test ; une issue sans aucun critère est une erreur |
+| `scripts/fin-issue.sh <issue> [-- <arguments>]` | « Ce commit est-il vraiment fini ? » Arbre propre (un fichier non suivi non ignoré est un échec : `verify-clean.sh` le testerait sans qu'il soit dans le commit), build en copie propre, critères, tests ignorés (nombre lu pour Maven, pytest, unittest, suite de la factory ; illisible = échec) | `FIN-ISSUE OK <id> <commit> : n tests, 0 échec, 0 ignoré` (0), `FIN-ISSUE ECHEC : <raisons>` (1), erreur d'usage (64) |
+| `scripts/criteres-sans-test.sh <issue>` | « Chaque critère de l'issue a-t-il un test qui le nomme ? » (`--tous` : toutes les issues commencées). Seuls comptent le nom ou le titre d'une déclaration : classe, méthode, `@DisplayName` (Java, Kotlin), `def test_…`, `class Test…` (Python), `it(`, `test(`, `describe(` (Node) ; un commentaire, une chaîne ou un autre type de fichier ne compte pas | `OK` ou la liste des critères sans test ; une issue sans aucun critère est une erreur |
 | `scripts/couverture-prd.sh <prd>` | « Chaque critère du PRD est-il couvert par exactement une issue ? » | `OK`, ou critères sans issue, en double, ou inconnus du PRD |
-| `scripts/etat-issues.sh` | « Où en sont les issues ? » Lit leurs en-têtes ; `--statut S` filtre ; `--prochaine` donne la première issue prête (toutes ses dépendances sont `Fait`) | Tableau Markdown, ou un identifiant |
-| `scripts/dashboard.sh` | « Où en est le projet, d'un coup d'œil ? » Écrit `dashboard.html` (à ouvrir dans un navigateur, rafraîchi toutes les 30 s ; `--attente S` change le délai) en Kanban : un encart « En cours » en haut (issues `En cours` et `En revue`, référence et titre), puis les besoins et les issues en colonnes, une par statut du cycle dans l'ordre (en-tête coloré « Statut (n) », « — » si la colonne est vide, colonne « (autre) » seulement pour un statut hors cycle) ; une carte d'issue montre la référence, le titre, le besoin `F-xx`, les dépendances et les marqueurs « prochaine » (issue de `etat-issues.sh --prochaine`) et « bloquée » (`À faire` avec une dépendance pas `Fait`) ; une carte de besoin, l'ID, le libellé, la priorité et le PRD. Mise en page CSS seule (colonnes de largeur égale, défilement horizontal sur écran étroit, impression lisible) ; `--sortie F` change le fichier (son dossier doit exister, sinon code 64) ; `--boucle S` régénère toutes les S secondes jusqu'à Ctrl-C. Aucun modèle, aucun JavaScript, tout texte lu est échappé HTML | Fichier HTML (non versionné) |
-| `scripts/worktree-issue.sh creer\|nettoyer\|lister` | « Comment isoler une issue ? » `creer` fait un `git worktree` sur la branche de l'issue (option `--base` pour des branches empilées) ; `nettoyer` le supprime une fois la branche fusionnée (option `--branche`) | Dossier, branche et base |
+| `scripts/etat-issues.sh` | « Où en sont les issues ? » Lit leurs en-têtes ; `--statut S` filtre ; `--prochaine` donne la première issue prête (toutes ses dépendances sont `Fait`, et pas déjà commencée sur sa branche locale) | Tableau Markdown, ou un identifiant |
+| `scripts/dashboard.sh` | « Où en est le projet, d'un coup d'œil ? » Écrit `dashboard.html` (à ouvrir dans un navigateur, rafraîchi toutes les 30 s ; `--attente S` change le délai) en Kanban : un encart « En cours » en haut (issues `En cours` et `En revue`, référence et titre), puis les besoins et les issues en colonnes, une par statut du cycle dans l'ordre (en-tête coloré « Statut (n) », « — » si la colonne est vide, colonne « (autre) » seulement pour un statut hors cycle) ; une carte d'issue montre la référence, le titre, le besoin `F-xx`, les dépendances et le dernier commit de sa branche et les marqueurs « prochaine » (issue de `etat-issues.sh --prochaine`) et « bloquée » (`À faire` avec une dépendance pas `Fait` dans le dossier courant) ; le statut d'une issue est le plus avancé entre le dossier courant et sa branche locale (champ `branche:`), car `En cours` est commité sur la branche de l'issue ; en haut, le bandeau « Agents actifs » (journal `<git-common-dir>/factory-agents.log` écrit par les hooks : rôle, description, `depuis 12 min`, ou `sans nouvelles depuis 45 min` au-delà de `AGENTS_SILENCE_MINUTES`, retiré au-delà de `AGENTS_RETRAIT_MINUTES`) ; sur une issue qui a un worktree, `3 fichiers non commités · activité il y a 2 min` ; limites : une preuve d'activité, pas un état ; l'âge d'activité ne voit pas la modification d'un fichier existant dans un dossier entièrement non suivi (git status le montre comme `dir/`, `-uall` serait trop coûteux) ; après les issues, l'encart « Autres travaux » : une ligne par worktree dont la branche n'est celle d'aucune issue (ni `develop`, ni `main`), avec la branche et le même signal, « Aucun autre travail. » sinon ; une carte de besoin, l'ID, le libellé, la priorité, le PRD et ses décisions (colonne « Décisions ») ; une carte d'issue ajoute le premier paragraphe de son `## Objectif`, sur 3 lignes au plus. Mise en page CSS seule, Pico CSS embarqué (colonnes de largeur égale, défilement horizontal sur écran étroit, impression lisible) ; `--sortie F` change le fichier (son dossier doit exister, sinon code 64) ; `--boucle S` régénère toutes les S secondes jusqu'à Ctrl-C ; thème `DASHBOARD_THEME` (ou `--theme`) : `clair` (défaut), `sombre` ou `auto` (suit `prefers-color-scheme` du navigateur), l'impression restant claire. Aucun modèle, aucun JavaScript, tout texte lu est échappé HTML | Fichier HTML (non versionné) |
+| `scripts/worktree-issue.sh creer\|nettoyer\|lister\|initialiser` | « Comment isoler une issue ? » `initialiser <source> <conteneur>` crée la structure bare ; `creer` fait un `git worktree` sur la branche de l'issue (option `--base` pour des branches empilées), après un fetch si possible, et avertit d'une base en retard ; `nettoyer` le supprime une fois la branche fusionnée, y compris sur `origin` (option `--branche`), et refuse sauf `--force` un dossier sorti de sa branche ou contenant des fichiers ignorés hors artefacts connus. Mise à jour : `git pull` dans le worktree `develop` | Dossier, branche et base |
 | `scripts/config-factory.sh` | « Quelle configuration s'applique ? » Sans option : `CLÉ=valeur` pour chaque clé connue (rien d'autre) ; `--max-iterations` : la limite des revues (`/deliver` la lit au départ) | Valeurs ; code 64 si `MAX_ITERATIONS_REVUE` n'est pas un entier >= 1 |
 | `scripts/notifier.sh` | « Comment prévenir l'utilisateur d'une issue bloquée ? » Construit le message (From si renseigné, To, Subject encodé RFC 2047 s'il n'est pas ASCII, corps) et le passe sur l'entrée standard de `NOTIFICATION_COMMANDE`, destinataire en dernier argument ; `--test` envoie un essai | Code 0 envoyé, 3 non configuré, 4 échec de la commande, 64 usage |
 
@@ -162,10 +164,11 @@ Quatorze scripts, en trois groupes : mise en place (3), contrôle et suivi d'une
 |---|---|
 | `scripts/lib-issues.sh` | Bibliothèque partagée (à sourcer, pas à lancer) : lit l'en-tête YAML des issues (listes sur une ou plusieurs lignes) et reconnaît les identifiants de critères sous toutes leurs formes (`CA-10`, `ca10`, `ca_10`) |
 | `scripts/lib-config.sh` | Bibliothèque partagée (à sourcer) : `config_valeur <clé> <défaut>` lit la configuration de la factory ligne à ligne, sans jamais sourcer ni évaluer les fichiers |
+| `factory/hook-agents-claude.sh` | Propre à Claude Code, appelé par les hooks `SubagentStart` / `SubagentStop` (installés par `sync-claude.sh`), jamais à la main : inscrit début, description (lue dans `meta.json`, fichier non documenté par Anthropic : absent ou changé, le bandeau affiche le rôle seul) et fin de chaque sous-agent dans `<git-common-dir>/factory-agents.log`. Muet, toujours code 0. Une ligne `fin` écrite pendant la rotation du journal peut être perdue : l'agent reste « sans nouvelles » jusqu'au retrait |
 | `factory/scripts/tests/run.sh` | Les vérifications des scripts ci-dessus, dans des dépôts jetables ; à relancer après toute modification d'un script |
 
-**Qui lance quoi** : vous, `init-projet.sh`, `sync.sh` et `nettoyer` après une fusion ; la session principale pendant `/deliver`, `etat-issues.sh`, `dashboard.sh`, `couverture-prd.sh`, `verify-clean.sh`, `criteres-sans-test.sh` et `worktree-issue.sh creer` ;
-les agents, `verify-clean.sh` (le développeur en fin de travail, le relecteur pour confirmer) et `criteres-sans-test.sh`.
+**Qui lance quoi** : vous, `init-projet.sh`, `sync.sh` et `nettoyer` après une fusion ; la session principale pendant `/deliver`, `etat-issues.sh`, `dashboard.sh`, `couverture-prd.sh`, `verify-clean.sh`, `criteres-sans-test.sh`, `fin-issue.sh` et `worktree-issue.sh creer` ;
+les agents, `fin-issue.sh` (le développeur avant son rapport), `verify-clean.sh` (le relecteur pour confirmer) et `criteres-sans-test.sh`.
 **Pourquoi des scripts** : ce qui se vérifie mécaniquement est confié à des scripts testés, pas au jugement d'un modèle ; la session ne croit jamais un rapport d'agent sans le recouper avec eux.
 
 ### Configuration du projet : limite des revues et notification
@@ -174,10 +177,15 @@ Une clé présente avec une valeur **vide** l'emporte aussi sur les niveaux inf�
 
 | Clé | Défaut | Rôle |
 |---|---|---|
-| `MAX_ITERATIONS_REVUE` | 5 | Allers-retours développeur <-> relecteur pour une issue (`/deliver`, et corrections après `/code-review`) ; au-delà, arrêt, notification, blocage remonté |
+| `AGENT_MODELE` | `sonnet` | Modèle des agents `spec-writer`, `developer` et `code-reviewer` : alias ou identifiant complet. Vide : hérite de la session. L'en-tête d'un prompt l'emporte pour ce rôle. Relancer `./factory/sync.sh` après un changement |
+| `AGENT_EFFORT` | `medium` | Effort de raisonnement de ces agents : `low`, `medium`, `high`, `xhigh` ou `max`. Vide : hérite de la session. Mêmes règles que `AGENT_MODELE` |
+| `MAX_CRITERES_ISSUE` | 10 | Critères par issue au-delà desquels `couverture-prd.sh` avertit, sans échouer, sauf champ `criteres_justification:` non vide ; ordre de grandeur, pas une mesure |
+| `MAX_ITERATIONS_REVUE` | 3 | Allers-retours développeur <-> relecteur pour une issue (`/deliver`, et corrections après `/code-review`) ; au-delà, arrêt, notification, blocage remonté |
 | `NOTIFICATION_COMMANDE` | vide | Commande d'envoi (`msmtp -a <compte>`, `sendmail -oi`, ou le chemin d'un script qui appelle une API avec curl ; jamais l'option `-t` de sendmail ou de mail, qui selon l'implémentation ignore ou double le destinataire passé en argument) ; reçoit le message sur son entrée standard et le destinataire en dernier argument |
 | `NOTIFICATION_DESTINATAIRE` | vide | Votre adresse (dans `.factory.local.conf`) |
 | `NOTIFICATION_EXPEDITEUR` | vide | Facultatif : en-tête From |
+| `FIN_ISSUE_ARGUMENTS` | vide | Arguments de build de `fin-issue.sh` propres au poste (dans `.factory.local.conf`), séparés par `\|`, espaces gardés : `-Dessai.chrome=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` |
+| `FIN_ISSUE_IGNORES_AUTORISES` | vide | Nombre de tests ignorés admis, avec sa raison en commentaire ; `inconnu` admet un résumé sans nombre lisible (stack non reconnue). Vide : aucun |
 
 Les fichiers sont lus comme des lignes `CLÉ=valeur` (clés connues seulement, espaces tolérés autour de `=`), jamais exécutés. Les secrets (mot de passe SMTP, clé d'API) restent dans la configuration de l'outil d'envoi (`~/.msmtprc`, trousseau), jamais dans le dépôt.
 Vérifier : `scripts/config-factory.sh`, puis `scripts/notifier.sh --test`.
@@ -191,7 +199,7 @@ Vérifier : `scripts/config-factory.sh`, puis `scripts/notifier.sh --test`.
 - **Pas d'abstraction « au cas où »** : une interface n'existe que pour une frontière externe à doubler ou avec deux implémentations réelles.
 - **Questions** : seule la session principale peut interroger l'utilisateur ; les agents posent leurs questions dans un bloc `## QUESTIONS`, d'où l'importance du cadrage (§ 4, étape 1).
 - **Documents** : `backlog.md` et le PRD sont à vous ; la session ne modifie que les statuts du backlog et liste les passages devenus faux.
-- **Parallélisme et isolation** : jamais de travail sur `main` ni sur `develop` ; un `git worktree` par agent (`scripts/worktree-issue.sh`) ; jamais deux agents dans le même dossier.
+- **Parallélisme et isolation** : jamais de travail sur `main` ni sur `develop` ; un `git worktree` par issue, même seule (`scripts/worktree-issue.sh`), de préférence en structure bare (`initialiser <source> <conteneur>` : `<conteneur>/.git` et les worktrees à côté) ; le dossier de l'utilisateur et de son IDE n'est jamais celui d'un agent.
 - **Preuve** : un agent prouve (avant / après : test qui échoue puis réussit, chiffres mesurés, captures), il n'affirme pas ; la PR reprend cette preuve (`.github/pull_request_template.md`).
 - **Lisibilité** : le code doit être compréhensible par un développeur ou un agent sans contexte (pas de duplication, pas de code mort) ; le relecteur le contrôle.
 
@@ -213,7 +221,7 @@ Les skills `to-spec`, `implement` et `setup-matt-pocock-skills` de l'amont ont �
 ## 8. Choisir ou adapter la stack
 - `--stack` copie les fichiers de `factory/stacks/<stack>/` : CI épinglée, Dependabot, `.factory-verify` (la commande de vérification), lignes du `.gitignore`.
 - Autre stack : `--stack aucune`, puis créez `.factory-verify` (une ligne, syntaxe shell permise, ex. `python3 -m unittest discover -s tests -t .` ou `npm ci && npm test`) et ajoutez l'installation de l'outil de build au job `verify` de `.github/workflows/ci.yml`. Vous pouvez créer votre propre dossier `factory/stacks/<stack>/` sur le modèle des autres.
-- `verify-clean.sh` cherche la commande dans `COMMANDE_VERIFY`, puis `.factory-verify`, puis un wrapper `./mvnw` ou `./gradlew`, sinon il s'arrête en demandant de la créer. Il reconnaît la sortie de Maven, d'unittest et de pytest pour le résumé chiffré.
+- `verify-clean.sh` cherche la commande dans `COMMANDE_VERIFY`, puis `.factory-verify`, puis un wrapper `./mvnw` ou `./gradlew`, sinon il s'arrête en demandant de la créer. Il reconnaît la sortie de Maven, d'unittest, de pytest, de jest et de node:test pour le résumé (`fin-issue.sh` y compte comme ignorés `skipped`, `deselected`, `xfailed` et `todo`) chiffré. Plusieurs résumés du même lanceur s'additionnent ; de lanceurs différents (Maven puis jest), le résumé est illisible et `fin-issue.sh` échoue.
 - `owasp-check` est indépendant de la stack ; l'annexe `JAVA.md` complète pour Java/Spring Boot. Ajoutez une annexe `<STACK>.md` pour une autre technologie.
 - Dossier de tests : `scripts/criteres-sans-test.sh` détecte `src/test`, `tests` ou `test` (sinon variable `DOSSIER_TESTS`).
 
@@ -238,7 +246,7 @@ Seule la session principale peut interroger l'utilisateur : les sous-agents n'on
 | `verify-clean.sh` : « Aucune commande de vérification » | Ni `.factory-verify`, ni `COMMANDE_VERIFY`, ni wrapper `./mvnw` / `./gradlew` : créer `.factory-verify` (§ 8). |
 | `verify` échoue dans le dépôt avec des erreurs de classes générées, IDE ouvert | Le serveur Java de l'IDE recompile des classes générées sans leur processeur d'annotations. Utiliser `scripts/verify-clean.sh`. |
 | Les agents n'existent pas après un clone | `.claude/agents/` est généré et non versionné : lancer `./factory/sync.sh` (ou `sync-claude.sh`). |
-| `criteres-sans-test.sh` signale un critère qui a pourtant un test | Le nom du test ne contient pas l'identifiant du critère : le renommer (`test_ca10_…`). |
+| `criteres-sans-test.sh` signale un critère qui a pourtant un test | Le nom du test ne contient pas l'identifiant du critère, ou seul un commentaire, une chaîne ou un fichier de données le cite, ou la déclaration et son titre sont sur deux lignes, ou le langage n'est pas reconnu (Java, Kotlin, Python, Node) : renommer le test (`test_ca10_…`), ramener son titre sur la ligne de la déclaration. |
 | `criteres-sans-test.sh` : « aucun critère déclaré » | Le champ `criteres` de l'issue est vide ou illisible ; il accepte `[CA-01, CS-02]` ou une liste à tirets. |
 | `couverture-prd.sh` : « aucun critère défini » | Les critères du PRD doivent commencer par `- **CA-10**` (puce, identifiant en gras). |
 | `verify-clean.sh` : « Tests : inconnu » | La sortie du build n'est pas reconnue (ni Maven, ni unittest, ni pytest, ni la suite de la factory) ; le code de sortie reste fiable. |
@@ -265,7 +273,7 @@ mon-projet/
 │   ├── reviews/   un rapport de revue par issue : NNN-NN.md
 │   ├── agents/    configuration lue par les skills (tracker d'issues, docs du domaine)
 │   └── lessons.md leçons du projet
-├── scripts/       liens vers factory/scripts/ (verify-clean, criteres-sans-test, couverture-prd, etat-issues, dashboard, config-factory, notifier)
+├── scripts/       liens vers factory/scripts/ (fin-issue, verify-clean, criteres-sans-test, couverture-prd, etat-issues, dashboard, config-factory, notifier)
 └── factory/       la factory (skills, prompts, scripts, modèles, stacks)
 ```
 
@@ -329,7 +337,7 @@ Messages indicatifs à écrire dans Claude Code, dans l'ordre (adaptez les noms)
 | **Un besoin change ou s'ajoute** | Vous modifiez `backlog.md` et le PRD (ou demandez à `spec-writer`) ; les nouveaux critères prennent de **nouveaux numéros** ; créez ou modifiez des issues ; `scripts/couverture-prd.sh` doit répondre OK. |
 | **Il faut changer l'architecture ou la stack** | Nouvel ADR (l'ancien passe à `remplacé par NNNN`), issue de refactor, tests d'architecture mis à jour avant le code. Jamais en cours d'issue. |
 | **`/deliver` interrompu** | Relancez `/deliver <issue>` : l'issue est `En cours`, la branche existe, elle est reprise. |
-| **`MAX_ITERATIONS_REVUE` itérations de revue (5 par défaut) sans « APPROUVÉ »** | La session s'arrête et vous remonte le blocage ; s'il reste au moins un BLOQUANT, elle vous envoie aussi un courriel par `scripts/notifier.sh` (si `.factory.local.conf` le configure ; sinon elle vous le dit). S'il ne reste que des IMPORTANT, pas de courriel. Options : trancher le point, simplifier ou découper l'issue, ou assouplir le critère dans le PRD. |
+| **`MAX_ITERATIONS_REVUE` itérations de revue (3 par défaut) sans « APPROUVÉ »** | La session s'arrête et vous remonte le blocage ; s'il reste au moins un BLOQUANT, elle vous envoie aussi un courriel par `scripts/notifier.sh` (si `.factory.local.conf` le configure ; sinon elle vous le dit). S'il ne reste que des IMPORTANT, pas de courriel. Options : trancher le point, simplifier ou découper l'issue, ou assouplir le critère dans le PRD. |
 | **Décisions en attente** | Elles sont dans les Notes de l'issue (« Décisions en attente de l'utilisateur »). Vous tranchez ; vous modifiez le PRD (il est à vous) ; si le comportement change, ouvrez une issue de suivi. |
 | **Issue trop grosse** | La découper en plusieurs fichiers d'issue, répartir ses critères (un critère dans une seule issue), vérifier `couverture-prd.sh`. |
 | **Branches empilées** (issue qui dépend d'une branche non fusionnée) | La base est la pointe de la branche dont elle dépend ; fusionnez dans l'ordre des dépendances. |
@@ -364,7 +372,7 @@ Messages indicatifs à écrire dans Claude Code, dans l'ordre (adaptez les noms)
 
 ## 19. Ce qui est éprouvé, ce qui ne l'est pas
 
-- **Éprouvé** : la boucle `/deliver` (développeur, vérification, reviewer, corrections, clôture) sur un petit projet Python de trois issues, dont une avec une itération de correction ; les scripts (252 vérifications) ;
+- **Éprouvé** : la boucle `/deliver` (développeur, vérification, reviewer, corrections, clôture) sur un petit projet Python de trois issues, dont une avec une itération de correction ; les scripts (273 vérifications) ;
   l'initialisation d'un projet par stack.
 - **Pas encore éprouvé en situation réelle** : le cadrage (`/grill-with-docs`), la rédaction du PRD par `spec-writer`, `/code-review` sur une branche entière, la reprise d'une issue interrompue, le mode « sans sous-agents », les règles de permissions sur les sous-agents,
   les stacks `node` et `java-maven` de bout en bout avec cette version de la factory, les issues en parallèle (worktrees), le retour d'une revue externe et les preuves avant / après sur une interface.

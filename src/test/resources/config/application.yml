@@ -1,0 +1,31 @@
+# Chargé après l'application.yml principal, qu'il complète : base et photos de chaque contexte de test sous target/, jamais sous data/.
+spring:
+  datasource:
+    url: jdbc:sqlite:target/test-data/${random.uuid}.db?foreign_keys=true
+recus:
+  dossier-donnees: target/test-data
+  dossier-photos: target/test-data/photos-${random.uuid}
+  google:
+    # Faux identifiants : un test qui parle à « Google » pointe sur un serveur local (GoogleStub), aucun appel ne quitte la machine.
+    client-id: client-essai
+    client-secret: secret-essai
+    adresse-consentement: http://localhost:9/consentement
+    adresse-jeton: http://localhost:9/jeton
+    # 32 octets d'essai, en base 64, sans valeur hors des tests.
+    cle-chiffrement: Y2xlLWQtZXNzYWktc2Fucy12YWxldXItaG9ycy10ZXM=
+  # Le contexte est partagé par de nombreuses lectures ; cs19 fixe sa propre limite, DefaultValuesTest garde la vraie.
+  lecture:
+    lectures-par-heure: 100000
+  # Aucune copie en tâche de fond : un test appelle « traiter le suivant » lui-même ; et aucune adresse de Drive ni de Sheets ne mène hors de la machine.
+  copie:
+    automatique: false
+    # Deux années configurées : sans entrée, aucune copie ne part (D-62) ; RecuCopyUnconfiguredRealServerTest les vide.
+    annees:
+      2026:
+        fichier: fichier-essai
+        onglet: Comptes 2026
+      2025:
+        fichier: fichier-essai-2025
+        onglet: Comptes 2025
+    adresse-drive: http://localhost:9
+    adresse-sheets: http://localhost:9

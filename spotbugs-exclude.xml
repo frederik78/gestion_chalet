@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Toute exclusion est ciblée (classe et motif) et justifiée par un commentaire. -->
+<FindBugsFilter>
+  <!-- Motif informatif : signale l'existence d'un point d'entrée. Le contrôle d'accès de chaque route est prouvé par cs01 et cs02, qui parcourent les routes enregistrées. -->
+  <Match>
+    <Class name="~ca\.gestionchalet\.web\.rest\.(errors\.)?[A-Za-z]+Resource"/>
+    <Bug pattern="SPRING_ENDPOINT"/>
+  </Match>
+  <!-- /error reçoit le renvoi d'erreur du serveur quelle que soit la méthode d'origine : il ne change aucun état et le CSRF reste actif sur les vraies routes. -->
+  <Match>
+    <Class name="ca.gestionchalet.web.rest.errors.ErrorResource"/>
+    <Bug pattern="SPRING_CSRF_UNRESTRICTED_REQUEST_MAPPING"/>
+  </Match>
+  <!-- L'en-tête est le jeton CSRF lui-même : Spring Security le compare au cookie, c'est précisément son rôle. -->
+  <Match>
+    <Class name="ca.gestionchalet.config.SecurityConfiguration$SpaCsrfTokenRequestHandler"/>
+    <Bug pattern="SERVLET_HEADER"/>
+  </Match>
+  <!-- Le type de contenu choisit seulement la limite applicable : un type mensonger sans session est refusé sans lecture, et avec session mène au multipart, borné par ses propres limites (cs08). -->
+  <Match>
+    <Class name="ca.gestionchalet.config.RequestBodyLimitFilter"/>
+    <Bug pattern="SERVLET_CONTENT_TYPE"/>
+  </Match>
+  <!-- Le type et l'absence de paramètres d'URL servent seulement à refuser la requête avant formLogin ; aucune valeur n'est recopiée. -->
+  <Match>
+    <Class name="ca.gestionchalet.config.LoginGuardFilter"/>
+    <Or>
+      <Bug pattern="SERVLET_CONTENT_TYPE"/>
+      <Bug pattern="SERVLET_QUERY_STRING"/>
+    </Or>
+  </Match>
+  <!-- Seuls sont journalisés un nom de classe et une trame de pile, jamais une donnée de la requête ni le message de l'exception. -->
+  <Match>
+    <Class name="ca.gestionchalet.web.rest.errors.ExceptionTranslator"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
+  <!-- Seuls sont journalisés un UUID généré par le serveur et un nom de classe, sans retour à la ligne possible. -->
+  <Match>
+    <Class name="ca.gestionchalet.repository.PhotoStorage"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
+  <!-- Seuls sont journalisés un UUID généré par le serveur, un nom de classe, un code de réponse et un motif de blocage énuméré : aucune valeur de reçu ni de réponse de Google. -->
+  <Match>
+    <Class name="~ca\.gestionchalet\.service\.RecuCopyService.*"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
+  <!-- Un adaptateur garde le RestClient que la configuration lui donne, comme un service garde ses collaborateurs. -->
+  <Match>
+    <Class name="~ca\.gestionchalet\.client\.Google(Drive|Sheet)Client"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <!-- La photo à déposer porte ses octets jusqu'à l'envoi, sans les conserver ni les modifier : les copier doublerait en mémoire une photo pouvant atteindre 15 Mo. -->
+  <Match>
+    <Class name="ca.gestionchalet.client.DriveClient$DrivePhoto"/>
+    <Or>
+      <Bug pattern="EI_EXPOSE_REP"/>
+      <Bug pattern="EI_EXPOSE_REP2"/>
+    </Or>
+  </Match>
+  <!-- Un service garde les collaborateurs que Spring lui injecte : c'est le principe même de l'injection. -->
+  <Match>
+    <Class name="~ca\.gestionchalet\.service\.[A-Za-z]+Service"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <!-- Code généré par MapStruct : les champs de sortie ignorés y sont passés à null, comme le contrat le veut. -->
+  <Match>
+    <Class name="~ca\.gestionchalet\.service\.mapper\.[A-Za-z]+MapperImpl"/>
+    <Bug pattern="NP_LOAD_OF_KNOWN_NULL_VALUE"/>
+  </Match>
+  <!-- R-15 : la normalisation du fournisseur sert à lever une alerte non bloquante ; elle ne décide d'aucun accès. Collator écarté : au niveau primaire, il ignore aussi les espaces intérieurs. -->
+  <Match>
+    <Class name="ca.gestionchalet.domain.ReceiptText"/>
+    <Bug pattern="IMPROPER_UNICODE"/>
+  </Match>
+  <!-- Code généré par MapStruct : son test de nullité d'entrée est redondant quand la source est un enum déjà lu. -->
+  <Match>
+    <Class name="ca.gestionchalet.service.mapper.GoogleAuthorizationMapperImpl"/>
+    <Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE"/>
+  </Match>
+  <!-- Comme pour un service : la ressource garde le collaborateur injecté, que SpotBugs juge modifiable à cause de removeAuthorizedClient, méthode imposée par Spring Security. -->
+  <Match>
+    <Class name="ca.gestionchalet.web.rest.GoogleResource"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <!-- Faux positif démontré : SheetResource garde le service injecté, comme GoogleResource. SpotBugs (MutableClasses.looksLikeASetter) juge « modifiable » toute classe qui a une méthode préfixée remove, add, put, replace…, ici removeTemporaryTab, une méthode privée du service sans effet sur son état exposé. Renommer la méthode pour tromper l'heuristique serait contourner l'alerte : le nom naturel est gardé. -->
+  <Match>
+    <Class name="ca.gestionchalet.web.rest.SheetResource"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <!-- Seul est journalisé le résultat de GoogleErrorCodes.loggable : un code de sa liste blanche ou AUTRE, jamais la valeur reçue (ca65_unCodeInconnu, avec retour à la ligne). -->
+  <Match>
+    <Class name="ca.gestionchalet.web.rest.GoogleResource"/>
+    <Method name="callback"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
+  <Match>
+    <Class name="ca.gestionchalet.service.GoogleTokenService"/>
+    <Method name="accessToken"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
+  <!-- La seule valeur journalisée est un élément de l'énumération RecuExtractionException.Failure : ni contenu de reçu, ni retour à la ligne possible. -->
+  <Match>
+    <Class name="ca.gestionchalet.service.RecuReadingService"/>
+    <Method name="read"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
+</FindBugsFilter>

@@ -1,26 +1,45 @@
 #!/usr/bin/env bash
 # Dashboard : page HTML statique en Kanban : besoins du backlog.md et issues de docs/issues/, une colonne par statut, une carte par élément.
-# Aucun appel à un modèle, aucune dépendance (bash, awk, sed) ; pas de JavaScript. La page se rafraîchit seule (balise meta).
+# Aucun appel à un modèle, aucune dépendance (bash, awk, sed) ; pas de JavaScript. Style : Pico CSS classless embarqué (factory/assets/pico.classless.min.css, sans url()), aucune ressource externe. La page se rafraîchit seule (balise meta).
 # Tout texte lu dans les fichiers est échappé HTML avant d'être écrit (&, <, >, ", ').
+# Le statut d'une issue est le plus avancé de celui du dossier courant et de celui de sa branche locale (champ « branche » de l'en-tête), avec le dernier commit de la branche sur la carte.
+# Une dépendance ne compte que `Fait` dans le dossier courant : une issue finie sur sa branche, pas encore fusionnée, bloque encore les suivantes.
+# Descriptif des cartes : premier paragraphe de « ## Objectif » (issue), colonne « Décisions » du backlog (besoin) ; rien si vide.
+# Bandeau « Agents actifs » : lu dans <git-common-dir>/factory-agents.log, écrit par les hooks de l'outil d'agents (pour Claude Code :
+# factory/hook-agents-claude.sh, installé par factory/sync-claude.sh). Format, seul contrat, une ligne par événement, champs séparés par une tabulation :
+#   debut<TAB>epoch<TAB>agent_id<TAB>rôle<TAB>chemin du journal de l'agent | description<TAB>epoch<TAB>agent_id<TAB>texte | fin<TAB>epoch<TAB>agent_id
+# Un agent avec debut sans fin est affiché ; dernière preuve = le plus récent du début et de la date de modification de son journal.
+# Au-delà de AGENTS_SILENCE_MINUTES sans preuve : « sans nouvelles » ; au-delà de AGENTS_RETRAIT_MINUTES : retiré (configuration, voir lib-config.sh).
+# Signaux Git de chaque worktree, sur l'issue de même branche : fichiers non commités et dernière activité (commit ou fichier modifié).
+# Encart « Autres travaux » (après les issues) : une ligne par worktree dont la branche n'est le champ « branche » d'aucune issue, hors develop, main et HEAD détaché,
+# dans l'ordre de git worktree list : branche, puis le même signal (mêmes appels git, aucun de plus) ; « Aucun autre travail. » sinon.
+# Limites : une preuve d'activité, pas un état ; un agent arrêté sans hook de fin reste affiché « sans nouvelles » jusqu'au retrait.
+# L'âge d'activité d'un worktree ne voit pas la modification d'un fichier existant dans un dossier entièrement non suivi : git status ne le
+# montre que comme « dir/ » (-uall le détaillerait, au prix d'un parcours complet). Git en échec ou sans date de commit : « état Git illisible ».
 #
-# Usage : scripts/dashboard.sh [--sortie <fichier>] [--attente <secondes>] [--boucle <secondes>]
+# Thème (clé DASHBOARD_THEME, option --theme) : clair (défaut), sombre ou auto (suit prefers-color-scheme du navigateur). Deux palettes de variables CSS (clair, sombre) ;
+# Pico suit data-theme (« dark » ou « light » ; absent en auto, où Pico lit prefers-color-scheme). L'impression reste claire dans tous les thèmes.
+#
+# Usage : scripts/dashboard.sh [--sortie <fichier>] [--attente <secondes>] [--boucle <secondes>] [--theme clair|sombre|auto]
 #   --sortie   fichier généré (défaut : dashboard.html à la racine du projet)
 #   --attente  délai de rafraîchissement automatique de la page (défaut : 30)
 #   --boucle   régénère le fichier toutes les <secondes> jusqu'à Ctrl-C (sinon une seule génération)
-# Code de sortie : 0 ; 64 si les arguments sont invalides ou si le dossier de --sortie n'existe pas (il n'est pas créé).
+#   --theme    clair, sombre ou auto (défaut : DASHBOARD_THEME de la configuration, sinon clair)
+# Code de sortie : 0 ; 64 si les arguments ou le thème sont invalides ou si le dossier de --sortie n'existe pas (il n'est pas créé).
 set -uo pipefail
 
 racine="$(cd "$(dirname "$0")/.." && pwd)"
 dossier_scripts="$(cd "$(dirname "$0")" && pwd)"
-usage() { echo "Usage : $0 [--sortie <fichier>] [--attente <secondes>] [--boucle <secondes>]" >&2; exit 64; }
+usage() { echo "Usage : $0 [--sortie <fichier>] [--attente <secondes>] [--boucle <secondes>] [--theme clair|sombre|auto]" >&2; exit 64; }
 
-sortie="dashboard.html"; attente=30; boucle=""
+sortie="dashboard.html"; attente=30; boucle=""; theme=""
 nombre() { case "$1" in ''|*[!0-9]*) return 1 ;; esac; [ "$1" -ge 1 ]; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --sortie) [ $# -ge 2 ] || usage; sortie="$2"; shift ;;
     --attente) [ $# -ge 2 ] && nombre "$2" || usage; attente="$2"; shift ;;
     --boucle) [ $# -ge 2 ] && nombre "$2" || usage; boucle="$2"; shift ;;
+    --theme) [ $# -ge 2 ] || usage; theme="$2"; shift ;;
     *) usage ;;
   esac
   shift
@@ -33,10 +52,28 @@ fi
 cd "$racine" || exit 1
 # shellcheck source=lib-issues.sh
 . "$dossier_scripts/lib-issues.sh"
+# shellcheck source=lib-config.sh
+. "$dossier_scripts/lib-config.sh"
+minutes() { # minutes <clé> <défaut> : valeur de la clé, entier entre 1 et 999999 (borne : pas de dépassement en arithmétique), sinon code 64
+  local v; v="$(config_valeur "$1" "$2")"
+  case "$v" in ''|0*|*[!0-9]*|???????*) echo "$1 invalide : entier entre 1 et 999999 attendu (voir .factory.conf, .factory.local.conf, FACTORY_$1)." >&2; exit 64 ;; esac
+  printf '%s' "$v"
+}
+silence_minutes="$(minutes AGENTS_SILENCE_MINUTES "$AGENTS_SILENCE_MINUTES_DEFAUT")" || exit 64
+retrait_minutes="$(minutes AGENTS_RETRAIT_MINUTES "$AGENTS_RETRAIT_MINUTES_DEFAUT")" || exit 64
+[ -n "$theme" ] || theme="$(config_valeur DASHBOARD_THEME "$DASHBOARD_THEME_DEFAUT")" || exit 64
+case "$theme" in
+  clair) html_theme=' data-theme="light"'; color_scheme="light" ;;
+  sombre) html_theme=' data-theme="dark"'; color_scheme="dark" ;;
+  auto) html_theme=""; color_scheme="light dark" ;;
+  *) echo "DASHBOARD_THEME invalide : clair, sombre ou auto attendu (voir .factory.conf, .factory.local.conf, FACTORY_DASHBOARD_THEME, --theme)." >&2; exit 64 ;;
+esac
+# Dossier git commun (absolu) : journal des agents et liste des worktrees ; vide hors dépôt git.
+git_commun="$(git rev-parse --git-common-dir 2>/dev/null)" && git_commun="$(cd "$git_commun" 2>/dev/null && pwd)" || git_commun=""
 
-# Statuts du cycle, dans l'ordre des colonnes : besoins (backlog.md) et issues (docs/issues/README.md).
+# Statuts du cycle, dans l'ordre des colonnes : besoins (backlog.md).
 statuts_besoins=("À faire" "En clarification" "Spécifié" "En cours" "En revue" "Fait")
-statuts_issues=("À faire" "En cours" "En revue" "Fait")
+# statuts_issues vient de lib-issues.sh.
 classes=(afaire clarification specifie encours enrevue fait) # une par statut de besoin (liste fermée, jamais le texte brut)
 # Rang du champ « statut » dans les lignes produites par besoins_backlog et issues_dossier.
 RANG_STATUT_BESOIN=4; RANG_STATUT_ISSUE=3
@@ -56,39 +93,49 @@ parmi() { # parmi <valeur> <liste...> : vrai si la valeur figure dans la liste
   return 1
 }
 
-besoins_backlog() { # lignes « id SEP besoin SEP priorité SEP statut SEP prd » du tableau « Besoins fonctionnels »
+besoins_backlog() { # lignes « id SEP besoin SEP priorité SEP statut SEP prd SEP décisions » du tableau « Besoins fonctionnels »
   [ -f backlog.md ] || return 0
   awk -v FS='|' -v OFS="$sep" '
     /^## / { actif = ($0 ~ /^## Besoins fonctionnels/); next }
     actif && /^\|/ {
       gsub(/\\\|/, "\001")  # « \| » est un « | » littéral dans la cellule, pas un séparateur
-      for (i = 2; i <= 6; i++) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i); gsub(/\001/, "|", $i) }
+      for (i = 2; i <= 7; i++) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i); gsub(/\001/, "|", $i) }
       if ($2 == "ID" || $2 ~ /^[-: ]+$/ || $2 == "" || $3 == "") next
-      print $2, $3, $4, $5, $6
+      print $2, $3, $4, $5, $6, $7
     }
   ' backlog.md
 }
 
-issues_dossier() { # lignes « id SEP titre SEP statut SEP dépendances SEP besoin (F-xx) » lues dans les en-têtes, dans l'ordre des fichiers
+issue_objectif() { # issue_objectif <fichier> : premier paragraphe de la section « ## Objectif », sur une ligne ; vide si absent
+  awk '
+    NR == 1 && $0 == "---" { entete = 1; next }
+    entete { if ($0 == "---") entete = 0; next }
+    /^## / { if (actif) exit; actif = ($0 ~ /^## Objectif[[:space:]]*$/); next }
+    actif { if ($0 ~ /^[[:space:]]*$/) { if (texte != "") exit; next } gsub(/^[[:space:]]+|[[:space:]]+$/, ""); texte = (texte == "" ? $0 : texte " " $0) }
+    END { print texte }
+  ' "$1"
+}
+issues_dossier() { # lignes « id SEP titre SEP statut effectif SEP dépendances SEP besoin (F-xx) SEP dernier commit de la branche SEP statut local SEP branche SEP objectif », dans l'ordre des fichiers
   local f deps
   while IFS= read -r f; do
     deps="$(issue_liste "$f" depend_de | paste -sd, - | sed 's/,/, /g')"
-    printf '%s%s%s%s%s%s%s%s%s\n' "$(issue_champ "$f" id)" "$sep" "$(issue_champ "$f" titre)" "$sep" "$(issue_champ "$f" statut)" "$sep" "$deps" "$sep" "$(issue_champ "$f" besoin)"
+    printf '%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n' "$(issue_champ "$f" id)" "$sep" "$(issue_champ "$f" titre)" "$sep" "$(issue_statut_effectif "$f")" "$sep" "$deps" "$sep" "$(issue_champ "$f" besoin)" "$sep" "$(issue_dernier_commit "$f")" "$sep" "$(issue_champ "$f" statut)" "$sep" "$(issue_champ "$f" branche)" "$sep" "$(issue_objectif "$f")"
   done < <(issue_fichiers)
 }
 
 carte_besoin() { # carte_besoin <ligne de besoins_backlog>
-  local id libelle priorite statut prd
-  IFS="$sep" read -r id libelle priorite statut prd <<< "$1"
+  local id libelle priorite statut prd decisions
+  IFS="$sep" read -r id libelle priorite statut prd decisions <<< "$1"
   printf '<div class="carte"><strong>%s</strong> <span class="titre">%s</span>' "$(echappe "$id")" "$(echappe "$libelle")"
   [ -z "$priorite" ] || printf '<span class="detail">%s</span>' "$(echappe "$priorite")"
   [ -z "$prd" ] || printf '<span class="detail">PRD : %s</span>' "$(echappe "$prd")"
+  [ -z "$decisions" ] || printf '<span class="detail desc">%s</span>' "$(echappe "$decisions")"
   printf '</div>\n'
 }
 
-# Contexte des cartes d'issues, rempli par generer : issue prête (etat-issues.sh --prochaine) et statut de chaque id.
+# Contexte des cartes d'issues, rempli par generer : issue prête (etat-issues.sh --prochaine) et statut local de chaque id.
 prochaine=""; ids_issues=(); statuts_lus=()
-statut_issue() { # statut_issue <id> : statut lu, vide si l'issue n'existe pas
+statut_issue() { # statut_issue <id> : statut local, vide si l'issue n'existe pas
   local i=0
   while [ "$i" -lt "${#ids_issues[@]}" ]; do
     [ "${ids_issues[$i]}" = "$1" ] && { printf '%s' "${statuts_lus[$i]}"; return; }
@@ -104,8 +151,8 @@ bloquee() { # bloquee <statut> <dépendances « a, b »> : vrai si l'issue est �
   return 1
 }
 carte_issue() { # carte_issue <ligne de issues_dossier>
-  local id titre statut deps besoin marques="" etats=""
-  IFS="$sep" read -r id titre statut deps besoin <<< "$1"
+  local id titre statut deps besoin commit branche objectif signal marques="" etats=""
+  IFS="$sep" read -r id titre statut deps besoin commit _ branche objectif <<< "$1"
   if [ -n "$prochaine" ] && [ "$id" = "$prochaine" ]; then
     etats=" prochaine"; marques='<span class="marqueur marqueur-prochaine">prochaine</span>'
   fi
@@ -113,9 +160,103 @@ carte_issue() { # carte_issue <ligne de issues_dossier>
     etats="$etats bloquee"; marques="$marques"'<span class="marqueur marqueur-bloquee">bloquée</span>'
   fi
   printf '<div class="carte%s"><strong>%s</strong> <span class="titre">%s</span>%s' "$etats" "$(echappe "$id")" "$(echappe "$titre")" "$marques"
+  [ -z "$objectif" ] || printf '<span class="detail desc">%s</span>' "$(echappe "$objectif")"
   [ -z "$besoin" ] || printf '<span class="detail">%s</span>' "$(echappe "$besoin")"
   [ -z "$deps" ] || printf '<span class="detail">dépend de : %s</span>' "$(echappe "$deps")"
+  [ -z "$commit" ] || printf '<span class="detail">dernier commit : %s</span>' "$(echappe "$commit")"
+  signal="$(signal_branche "$branche")"
+  [ -z "$signal" ] || printf '<span class="detail signal">%s</span>' "$signal"
   printf '</div>\n'
+}
+
+duree() { # duree <secondes> : « moins d'1 min », « 12 min » ou « 2 h 05 » (négatif = 0 : horloge en avance)
+  local s="$1"; [ "$s" -ge 0 ] || s=0
+  if [ "$s" -lt 60 ]; then printf "moins d'1 min"
+  elif [ "$s" -lt 3600 ]; then printf '%d min' $((s / 60))
+  else printf '%d h %02d' $((s / 3600)) $((s % 3600 / 60)); fi
+}
+mtime() { # mtime <fichier> : date de modification (epoch), GNU puis BSD ; rien si absent
+  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null
+}
+
+# Signaux Git, calculés une fois par génération (signaux_worktrees) puis cherchés par branche ; tableaux indexés (bash 3.2, pas d'associatif).
+wt_branches=(); wt_signaux=()
+signaux_worktrees() { # signaux_worktrees <maintenant> : pour chaque worktree accessible sur une branche, « n fichiers non commités · activité il y a … »
+  local ligne dossier="" branche="" entree n chemins activite c m rc
+  wt_branches=(); wt_signaux=()
+  [ -n "$git_commun" ] || return 0
+  while IFS= read -r ligne; do
+    case "$ligne" in
+      "worktree "*) dossier="${ligne#worktree }"; branche="" ;;
+      "branch refs/heads/"*) branche="${ligne#branch refs/heads/}" ;;
+      "")
+        if [ -n "$branche" ] && [ -d "$dossier" ]; then
+          # --no-optional-locks : jamais de réécriture de l'index, donc jamais l'index.lock d'un agent au travail. Aucun contenu lu.
+          # Le code de sortie de git suit la liste (entrée « rc:<code> », jamais confondue avec un chemin : ceux-ci commencent par « XY »).
+          n=0; chemins=(); rc=1
+          while IFS= read -r -d '' entree; do
+            case "$entree" in "rc:"*) rc="${entree#rc:}"; continue ;; esac
+            n=$((n + 1))
+            [ "${#chemins[@]}" -ge 200 ] || chemins+=("${entree:3}")
+            case "$entree" in R*|C*) IFS= read -r -d '' _ ;; esac # renommage ou copie : le chemin d'origine suit dans une entrée de plus
+          done < <(git --no-optional-locks -C "$dossier" status --porcelain -z 2>/dev/null; printf 'rc:%d\0' "$?")
+          activite="$(git --no-optional-locks -C "$dossier" log -1 --format=%ct 2>/dev/null)" || activite=0
+          case "$activite" in ''|*[!0-9]*) activite=0 ;; esac
+          if [ "$rc" != 0 ] || [ "$activite" -eq 0 ]; then # git en échec ou activité inconnue : ne rien affirmer, ni compte ni durée
+            wt_branches+=("$branche"); wt_signaux+=("état Git illisible")
+            dossier=""; branche=""; continue
+          fi
+          if [ "${#chemins[@]}" -gt 0 ]; then # au plus 200 fichiers, en un seul appel de stat (GNU puis BSD)
+            for m in $(cd "$dossier" && { stat -c %Y -- "${chemins[@]}" 2>/dev/null || stat -f %m -- "${chemins[@]}" 2>/dev/null; }); do
+              case "$m" in ''|*[!0-9]*) continue ;; esac
+              [ "$m" -le "$activite" ] || activite="$m"
+            done
+          fi
+          case "$n" in 0) c="aucun fichier non commité" ;; 1) c="1 fichier non commité" ;; *) c="$n fichiers non commités" ;; esac
+          wt_branches+=("$branche"); wt_signaux+=("$c · activité il y a $(duree $(( $1 - activite )))")
+        fi
+        dossier=""; branche="" ;;
+    esac
+  done < <(git --no-optional-locks worktree list --porcelain 2>/dev/null; echo)
+}
+signal_branche() { # signal_branche <branche> : signal du worktree de cette branche, vide sans worktree
+  local i=0
+  [ -n "$1" ] || return 0
+  while [ "$i" -lt "${#wt_branches[@]}" ]; do
+    [ "${wt_branches[$i]}" = "$1" ] && { printf '%s' "${wt_signaux[$i]}"; return; }
+    i=$((i + 1))
+  done
+}
+
+agents_actifs() { # agents_actifs <maintenant> : section du bandeau, lue dans le journal des hooks
+  local journal="$git_commun/factory-agents.log" id debut role chemin desc preuve m age n=0
+  printf '<section id="agents-actifs">\n<h2>Agents actifs</h2>\n'
+  if [ -z "$git_commun" ] || [ ! -f "$journal" ]; then
+    printf '<p>Aucun agent signalé (journal absent : hooks non installés, ou aucun sous-agent lancé depuis l'"'"'installation ; voir factory/sync-claude.sh).</p>\n</section>\n'; return
+  fi
+  # Une passe : candidats = debut sans fin ultérieure, dans l'ordre des débuts, avec leur dernière description. Ligne malformée ignorée.
+  while IFS="$sep" read -r id debut role chemin desc; do
+    [ -n "$id" ] || continue
+    preuve="$debut"
+    if [ -n "$chemin" ] && [ -e "$chemin" ]; then m="$(mtime "$chemin")"; [ -n "$m" ] && [ "$m" -gt "$preuve" ] && preuve="$m"; fi
+    age=$(( $1 - preuve )); [ "$age" -ge 0 ] || age=0
+    [ "$age" -lt $((retrait_minutes * 60)) ] || continue
+    [ "$n" -gt 0 ] || printf '<ul>\n'
+    n=$((n + 1))
+    if [ "$age" -lt $((silence_minutes * 60)) ]; then
+      printf '<li class="agent-actif"><strong>%s</strong> %sdepuis %s</li>\n' "$(echappe "$role")" "${desc:+$(echappe "$desc") }" "$(duree $(( $1 - debut )))"
+    else
+      printf '<li class="agent-sans-nouvelles"><strong>%s</strong> %ssans nouvelles depuis %s</li>\n' "$(echappe "$role")" "${desc:+$(echappe "$desc") }" "$(duree "$age")"
+    fi
+  done < <(awk -F'\t' -v OFS="$sep" '
+    $3 !~ /^[A-Za-z0-9_-]+$/ || $2 !~ /^[0-9]+$/ || length($2) > 12 { next }
+    $1 == "debut" && NF == 5 { if (!($3 in rang)) { rang[$3] = ++n; ids[n] = $3 } debut[$3] = $2; role[$3] = $4; chemin[$3] = $5; fini[$3] = 0; next }
+    $1 == "description" && NF == 4 { desc[$3] = $4; next }
+    $1 == "fin" && NF == 3 { fini[$3] = 1; next }
+    END { for (i = 1; i <= n; i++) { id = ids[i]; if (!fini[id]) print id, debut[id], role[id], chemin[id], desc[id] } }
+  ' "$journal")
+  if [ "$n" -gt 0 ]; then printf '</ul>\n'; else printf '<p>Aucun agent signalé.</p>\n'; fi
+  printf '</section>\n'
 }
 
 dans_colonne() { # dans_colonne <statut lu> <colonne> <statuts du cycle...> : la colonne « (autre) » reçoit les statuts hors du cycle
@@ -147,59 +288,134 @@ kanban() { # kanban <lignes> <rang du statut> <fonction de carte> <statuts du cy
 }
 
 encart_en_cours() { # encart_en_cours <lignes de issues_dossier> : issues En cours et En revue, ou « Aucune issue en cours. »
-  local id titre statut deps besoin n=0
+  local id titre statut branche signal n=0
   printf '<section id="en-cours">\n<h2>En cours</h2>\n'
-  while IFS="$sep" read -r id titre statut deps besoin; do
+  while IFS="$sep" read -r id titre statut _ _ _ _ branche; do
     parmi "$statut" "En cours" "En revue" || continue
     [ "$n" -gt 0 ] || printf '<ul>\n'
     n=$((n + 1))
-    printf '<li><strong>%s</strong> %s <span class="etiquette statut-%s">%s</span></li>\n' "$(echappe "$id")" "$(echappe "$titre")" "$(classe "$statut")" "$(echappe "$statut")"
+    signal="$(signal_branche "$branche")"
+    printf '<li><strong>%s</strong> %s <span class="etiquette statut-%s">%s</span>%s</li>\n' "$(echappe "$id")" "$(echappe "$titre")" "$(classe "$statut")" "$(echappe "$statut")" "${signal:+ <span class=\"signal\">$signal</span>}"
   done <<< "$1"
   if [ "$n" -gt 0 ]; then printf '</ul>\n'; else printf '<p>Aucune issue en cours.</p>\n'; fi
   printf '</section>\n'
 }
 
+encart_autres_travaux() { # encart_autres_travaux <lignes de issues_dossier> : worktrees dont la branche n'est celle d'aucune issue (ni develop ni main), ou « Aucun autre travail. »
+  local ligne branche i=0 n=0 b
+  local -a branches_issues=()
+  while IFS= read -r ligne; do
+    [ -n "$ligne" ] || continue
+    IFS="$sep" read -r _ _ _ _ _ _ _ branche <<< "$ligne"
+    [ -z "$branche" ] || branches_issues+=("$branche")
+  done <<< "$1"
+  printf '<section id="autres-travaux">\n<h2>Autres travaux</h2>\n'
+  while [ "$i" -lt "${#wt_branches[@]}" ]; do # ordre de git worktree list, signaux déjà calculés par signaux_worktrees
+    b="${wt_branches[$i]}"
+    if [ "$b" != develop ] && [ "$b" != main ] && ! parmi "$b" ${branches_issues[@]+"${branches_issues[@]}"}; then
+      [ "$n" -gt 0 ] || printf '<ul>\n'
+      n=$((n + 1))
+      printf '<li><strong>%s</strong> <span class="signal">%s</span></li>\n' "$(echappe "$b")" "${wt_signaux[$i]}"
+    fi
+    i=$((i + 1))
+  done
+  if [ "$n" -gt 0 ]; then printf '</ul>\n'; else printf '<p>Aucun autre travail.</p>\n'; fi
+  printf '</section>\n'
+}
+
+palette() { # palette <clair|sombre> : variables CSS des couleurs de la page (les règles ne citent que ces variables)
+  case "$1" in
+    clair) cat <<'CSS'
+--fond: #f3f4f6; --texte: #222; --discret: #555; --vide: #9ca3af;
+--bord: #d1d5db; --bord-doux: #e5e7eb; --carte: #fff; --colonne: #f9fafb; --bord-gauche: #9ca3af;
+--ombre-a: .05; --ombre-b: .08; --ombre-c: .04;
+--prochaine: #2563eb; --bloquee: #dc2626; --marqueur-texte: #fff;
+--st-texte: #222; --st-afaire: #e5e7eb; --st-clarification: #fde68a; --st-specifie: #bfdbfe; --st-encours: #fdba74;
+--st-enrevue: #ddd6fe; --st-fait: #bbf7d0; --st-inconnu: #fecaca;
+--agent-actif: #166534; --agent-sans-nouvelles: #92400e;
+CSS
+    ;;
+    sombre) cat <<'CSS'
+--fond: #111827; --texte: #e5e7eb; --discret: #9ca3af; --vide: #6b7280;
+--bord: #374151; --bord-doux: #2d3748; --carte: #1f2937; --colonne: #172033; --bord-gauche: #6b7280;
+--ombre-a: .3; --ombre-b: .4; --ombre-c: .3;
+--prochaine: #2563eb; --bloquee: #dc2626; --marqueur-texte: #fff;
+--st-texte: #f9fafb; --st-afaire: #374151; --st-clarification: #854d0e; --st-specifie: #1e40af; --st-encours: #9a3412;
+--st-enrevue: #5b21b6; --st-fait: #166534; --st-inconnu: #991b1b;
+--agent-actif: #4ade80; --agent-sans-nouvelles: #fbbf24;
+CSS
+    ;;
+  esac
+}
+# Palettes du thème choisi : clair = claire seule ; sombre = sombre seule ; auto = claire, puis sombre sous prefers-color-scheme. L'impression revient toujours à la claire.
+palettes() {
+  case "$theme" in
+    clair) printf ':root {\n'; palette clair; printf '}\n' ;;
+    sombre) printf ':root {\n'; palette sombre; printf '}\n' ;;
+    auto) printf ':root {\n'; palette clair; printf '}\n@media (prefers-color-scheme: dark) {\n:root {\n'; palette sombre; printf '}\n}\n' ;;
+  esac
+  printf '@media print {\n:root {\n'; palette clair; printf '}\n}\n'
+}
+
 generer() { # page complète sur la sortie standard
-  local b i id statut
+  local b i id statut_local maintenant
+  maintenant="$(date +%s)"
   b="$(besoins_backlog)"; i="$(issues_dossier)"
   prochaine="$("$dossier_scripts/etat-issues.sh" --prochaine 2>/dev/null)"
   ids_issues=(); statuts_lus=()
-  while IFS="$sep" read -r id _ statut _; do
+  signaux_worktrees "$maintenant"
+  while IFS="$sep" read -r id _ _ _ _ _ statut_local _; do
     [ -n "$id" ] || continue
-    ids_issues+=("$id"); statuts_lus+=("$statut")
+    ids_issues+=("$id"); statuts_lus+=("$statut_local")
   done <<< "$i"
   cat <<HTML
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr"$html_theme>
 <head>
 <meta charset="utf-8">
 <meta http-equiv="refresh" content="$attente">
+<meta name="color-scheme" content="$color_scheme">
 <title>Dashboard</title>
 <style>
-body { font-family: system-ui, sans-serif; margin: 2rem; color: #222; }
+$(cat "$racine/factory/assets/pico.classless.min.css" 2>/dev/null)
+</style>
+<style>
+$(palettes)
+:root { --pico-font-size: 90%; }
+body { font-family: system-ui, sans-serif; margin: 0; color: var(--texte); background-color: var(--fond); }
+main { padding-block: 1.5rem; }
+h1 { margin-bottom: .2rem; } h2 { font-size: 1.4rem; margin-top: 2rem; padding-bottom: .3rem; border-bottom: 2px solid var(--bord); }
+section ul { padding-left: 0; list-style: none; } section li { margin: 0; padding: .4rem .7rem; margin-bottom: .4rem; background: var(--carte); border: 1px solid var(--bord-doux); border-radius: .4rem; box-shadow: 0 1px 2px rgba(0,0,0,var(--ombre-a)); }
+.carte { box-shadow: 0 1px 3px rgba(0,0,0,var(--ombre-b)); }
+.colonne { box-shadow: 0 1px 2px rgba(0,0,0,var(--ombre-c)); }
 .kanban { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(12rem, 1fr); gap: .8rem; overflow-x: auto; padding-bottom: .5rem; }
-.colonne { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: .4rem; min-width: 0; }
+.colonne { background: var(--colonne); border: 1px solid var(--bord-doux); border-radius: .4rem; min-width: 0; }
 .colonne h3 { margin: 0; padding: .4rem .6rem; font-size: 1rem; border-radius: .4rem .4rem 0 0; }
-.carte { background: #fff; border: 1px solid #d1d5db; border-left: 4px solid #9ca3af; border-radius: .3rem; margin: .5rem; padding: .4rem .5rem; overflow-wrap: anywhere; break-inside: avoid; }
-.carte.prochaine { border-left-color: #2563eb; } .carte.bloquee { border-left-color: #dc2626; }
-.marqueur { display: inline-block; margin-left: .3rem; padding: 0 .4rem; border-radius: .6rem; font-size: .75rem; color: #fff; }
-.marqueur-prochaine { background: #2563eb; } .marqueur-bloquee { background: #dc2626; }
-.detail { display: block; font-size: .85rem; color: #555; }
-.vide { margin: .5rem; text-align: center; color: #9ca3af; }
+.carte { background: var(--carte); border: 1px solid var(--bord); border-left: 4px solid var(--bord-gauche); border-radius: .3rem; margin: .5rem; padding: .4rem .5rem; overflow-wrap: anywhere; break-inside: avoid; }
+.carte.prochaine { border-left-color: var(--prochaine); } .carte.bloquee { border-left-color: var(--bloquee); }
+.marqueur { display: inline-block; margin-left: .3rem; padding: 0 .4rem; border-radius: .6rem; font-size: .75rem; color: var(--marqueur-texte); }
+.marqueur-prochaine { background: var(--prochaine); } .marqueur-bloquee { background: var(--bloquee); }
+.detail.desc { color: var(--texte); margin-top: .2rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; } .detail.desc:hover { -webkit-line-clamp: unset; }
+.detail { display: block; font-size: .85rem; color: var(--discret); }
+.vide { margin: .5rem; text-align: center; color: var(--vide); }
 .etiquette { padding: 0 .4rem; border-radius: .6rem; font-size: .8rem; }
-.statut-afaire { background: #e5e7eb; } .statut-clarification { background: #fde68a; }
-.statut-specifie { background: #bfdbfe; } .statut-encours { background: #fdba74; }
-.statut-enrevue { background: #ddd6fe; } .statut-fait { background: #bbf7d0; }
-.statut-inconnu { background: #fecaca; }
+.colonne h3, .etiquette { color: var(--st-texte); }
+.statut-afaire { background: var(--st-afaire); } .statut-clarification { background: var(--st-clarification); }
+.statut-specifie { background: var(--st-specifie); } .statut-encours { background: var(--st-encours); }
+.statut-enrevue { background: var(--st-enrevue); } .statut-fait { background: var(--st-fait); }
+.statut-inconnu { background: var(--st-inconnu); }
+.agent-actif { color: var(--agent-actif); } .agent-sans-nouvelles { color: var(--agent-sans-nouvelles); font-style: italic; }
 @media print {
-  body { margin: 0; } * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; } h1, h2, h3, h4, p, li, strong, small, code, a { color: var(--texte); } * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .kanban { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); overflow: visible; }
 }
 </style>
 </head>
 <body>
+<main>
 <h1>Dashboard</h1>
 <p>Généré le $(date '+%Y-%m-%d à %H:%M:%S'), rafraîchi toutes les ${attente} s.</p>
+$(agents_actifs "$maintenant")
 $(encart_en_cours "$i")
 <section id="besoins">
 <h2>Besoins</h2>
@@ -210,6 +426,8 @@ $(kanban "$b" "$RANG_STATUT_BESOIN" carte_besoin "${statuts_besoins[@]}")
 <p>$(if [ -n "$prochaine" ]; then printf 'Prochaine issue prête : <strong>%s</strong>' "$(echappe "$prochaine")"; else printf 'Aucune issue prête.'; fi)</p>
 $(kanban "$i" "$RANG_STATUT_ISSUE" carte_issue "${statuts_issues[@]}")
 </section>
+$(encart_autres_travaux "$i")
+</main>
 </body>
 </html>
 HTML

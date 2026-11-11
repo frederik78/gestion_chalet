@@ -1,6 +1,6 @@
 # Gestion de chalet
 
-Application de gestion d'un chalet loué au Québec, pour son propriétaire, construite module par module. Premier module : reporter en base et dans le Google Sheet les valeurs et la photo des reçus, pour la déclaration de la TPS et de la TVQ.
+Application de gestion d'un chalet loué au Québec, pour son propriétaire, construite module par module. Premier module : reporter en base, puis dans le Google Sheet, les valeurs et la photo des reçus, ainsi que les dépenses sans reçu saisies dans le Sheet, pour la déclaration de la TPS et de la TVQ.
 
 Ce fichier (standard ouvert AGENTS.md) est la source de vérité pour tout agent de code (Claude Code, Codex, Cursor, Copilot, etc.).
 Il ne contient rien de propre à un outil. `CLAUDE.md` l'importe et n'ajoute que des directives propres à Claude Code.
@@ -12,13 +12,16 @@ Package racine : `ca.gestionchalet`, à plat.
 
 ## Commandes (toujours via le wrapper du build)
 - `./mvnw test` : tests
-- `./mvnw -B clean verify` : tests (dont tests d'architecture) + analyse statique de sécurité ; c'est exactement ce que lance la CI
+- Couverture : `./mvnw test` produit le rapport JaCoCo dans `target/site/jacoco/index.html` (sans seuil)
+- `./mvnw -B verify` : tests (dont tests d'architecture) + analyse statique de sécurité ; le job `verify` de la CI y ajoute `-Dessai.chrome` et le contrôle du rapport ; sans cette propriété, les tests d'écran sont ignorés
 - `scripts/verify-clean.sh` : la même vérification dans une copie propre du dépôt, hors IDE (à utiliser par les agents et chaque fois qu'un IDE est ouvert)
-- `scripts/criteres-sans-test.sh <issue>` : critères CA/CS d'une issue qu'aucun test ne mentionne
+- `scripts/verify-clean.sh -- "-Dessai.chrome=<chemin de Chrome>"` : la même vérification avec les tests d'écran dans un vrai Chrome, comme le job `verify`, sans son contrôle du rapport (sous macOS : `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`) ; sans cette propriété, ils sont ignorés ; avec un binaire absent ou inutilisable, ils échouent
+- `scripts/fin-issue.sh <issue> [-- <arguments de build>]` : contrôle de fin d'issue, après le dernier commit de code : arbre propre, build en copie propre, critères, tests ignorés ; dernière ligne `FIN-ISSUE OK …` ou `FIN-ISSUE ECHEC : …`
+- `scripts/criteres-sans-test.sh <issue>` : critères CA/CS d'une issue qu'aucune déclaration de test ne nomme (un commentaire ou une chaîne ne compte pas)
 - `scripts/couverture-prd.sh <prd>` : chaque critère du PRD est couvert par exactement une issue
 - `scripts/etat-issues.sh [--prochaine]` : état des issues (lu dans leurs en-têtes)
-- `scripts/dashboard.sh [--sortie <fichier>] [--attente <s>] [--boucle <s>]` : dashboard HTML statique (`dashboard.html`, non versionné) des besoins et des issues par statut ; sans modèle ni dépendance
-- `scripts/worktree-issue.sh creer|nettoyer|lister` : une issue dans son propre dossier de travail (`git worktree`)
+- `scripts/dashboard.sh [--sortie <fichier>] [--attente <s>] [--boucle <s>]` : dashboard HTML statique (`dashboard.html`, non versionné) des besoins et des issues par statut, agents actifs (hooks de `factory/sync-claude.sh`) et signaux Git des worktrees ; sans modèle ni dépendance
+- `scripts/worktree-issue.sh creer|nettoyer|lister|initialiser` : une issue dans son propre dossier de travail (`git worktree`) ; `initialiser <source> <conteneur>` crée la structure bare
 - `scripts/config-factory.sh [--max-iterations]` : configuration effective de la factory (`.factory.conf`, `.factory.local.conf` non versionné, variables `FACTORY_*`)
 - `scripts/notifier.sh --sujet <s> [--corps-fichier <f>] | --test` : courriel par la commande configurée (issue bloquée en revue)
 - `factory/scripts/tests/run.sh` : tests des scripts de la factory
@@ -29,10 +32,11 @@ Ne jamais appeler directement un outil propre à un fournisseur dans le code app
 ## Architecture
 La structure est décidée dans un ADR (`docs/adr/0001-architecture.md`) AVANT le premier code, et appliquée par des tests d'architecture qui
 échouent à la moindre violation. Elle ne change pas sans nouvel ADR.
-Structure en services, inspirée de JHipster, sans générateur : `config`, `domain`, `repository`, `service`, `client`, `security`, `web/rest`. Les droits d'accès entre couches sont dans l'ADR et exécutés par `TechnicalStructureTest` et `ReglesAgentsTest`.
+Structure en services, inspirée de JHipster, sans générateur : `config`, `domain`, `repository`, `service`, `client`, `security`, `web/rest`. Les droits d'accès entre couches sont dans l'ADR et exécutés par `TechnicalStructureTest` et `AgentRulesTest`.
 - Une `XxxResource` valide l'entrée et délègue à un `XxxService`, sans logique métier ni accès aux données.
 - Le domaine contient les entités JPA, sans setter public : l'état change par des fabriques et des transitions. Le statut et les alertes ne sont jamais lus d'une source non fiable (modèle, client).
 - Le JSON est un record `XxxDTO` projeté par MapStruct ; une entité n'est jamais sérialisée.
+- La copie vers Drive et le Sheet est un cycle réuni dans `RecuCopyService` (D-60) : les appelants signalent des faits (reçu validé, autorisation Google accordée ou perdue, par des événements Spring synchrones dans la même transaction), le module décide de l'ordre, des pannes et des essais. Seul `Recu` change l'état de la copie, par des transitions qui refusent les autres, et seul ce module les appelle (`AgentRulesTest`). Aucune transaction ne reste ouverte pendant un appel à Google ; la base sert de file, un seul fil copie.
 - Interfaces seulement dans `client/`, pour Claude, Google Sheets et Google Drive. Le dépôt, le stockage local et l'authentification restent concrets.
 - Liquibase est le seul gestionnaire du schéma (`ddl-auto=validate`) ; un changeset appliqué n'est jamais modifié.
 - Compte local unique, session par cookie, CSRF actif ; refus par défaut.
@@ -43,10 +47,14 @@ Structure en services, inspirée de JHipster, sans générateur : `config`, `dom
 - **Modèle de branches** : `main` ne reçoit que les releases (états livrables, tags `vX.Y.Z`) ; personne n'y commite, seul l'utilisateur y fusionne `develop` (`git merge --no-ff develop`) puis tague. `develop` est la branche d'intégration : toute branche de travail (`feat/<prd>-<nn>-<slug>`, `fix/…`, `docs/…`, `refactor/…`, `test/…`, `build/…`) en part et y revient par PR (base = `develop`). Correctif urgent sur une release : `hotfix/<slug>` partant de `main`, fusionné dans `main` PUIS dans `develop` par l'utilisateur. Branches empilées : base = pointe de la branche dont l'issue dépend. Les agents ne travaillent jamais directement sur `main` ni sur `develop`.
 - **INTERDIT** : un test qui dépend d'un service externe réel ; toujours doubler la frontière externe.
 - Pas d'interface « au cas où » : une abstraction n'existe que pour une frontière externe à doubler ou s'il y a deux implémentations réelles.
+- Le framework d'abord : un mécanisme transversal (session, authentification, CSRF, en-têtes, erreurs, validation, configuration) utilise ce que le framework fournit ; un équivalent écrit à la main se justifie par un critère du PRD ou une mesure.
+- La référence de code : la structure et la mise en œuvre se calent sur JHipster 9.4.0, lu fichier par fichier (`factory/stacks/java-maven/README.md`) ; tout écart de nom ou de forme a une raison.
+- **Langue du code** : les classes techniques sont impérativement en anglais.
 - Montants en cents entiers, en dollars canadiens, jamais en flottants.
 - Rien n'est enregistré avant la validation par l'utilisateur. Une taxe absente d'un reçu reste vide : elle n'est jamais calculée ni mise à 0.
-- La base fait référence, le Google Sheet en est une copie ; un envoi échoué est réessayé sans perdre le reçu.
+- La base fait référence. Le Google Sheet en est une projection, régénérée à la demande ; il n'alimente la base que par l'import, chaque ajout ou modification étant accepté explicitement par l'utilisateur. Un dépôt de photo échoué est réessayé sans perdre le reçu.
 - Modèle, seuils d'alerte, types de dépense, fichiers et onglets par année : en configuration (`recus.*`), jamais en constantes.
+- **Deux modes** : prod (sans profil Spring, par défaut) a des cookies `Secure` ; dev (profil `dev` demandé explicitement, HTTP sur le poste ou le réseau local) les retire et journalise un avertissement au démarrage (CS37). **INTERDIT** : activer `dev` en production.
 - **INTERDIT** : écrire le contenu d'un reçu dans les journaux, ou verser des photos réelles au dépôt.
 
 ## Tests (TDD obligatoire)
@@ -72,7 +80,7 @@ ils posent leurs questions dans un bloc `## QUESTIONS` de leur rapport, qu'elle 
 - L'architecture se décide avant le code, dans un ADR validé, et s'applique par des tests d'architecture ; elle ne change pas sans nouvel ADR.
 - Le PRD décrit le comportement, jamais la structure du code (aucun nom de package, de classe ni de couche).
 - Une branche et une PR par issue (base = `develop`) ; l'agent ne pousse ni ne fusionne, l'utilisateur fusionne avec `git merge --no-ff`.
-- Jamais de travail sur `main` ni sur `develop` (voir « Modèle de branches »). Pas de deux agents qui écrivent dans le même dossier : un `git worktree` par agent pour des issues parallèles (`scripts/worktree-issue.sh`).
+- Jamais de travail sur `main` ni sur `develop` (voir « Modèle de branches »). Chaque issue se réalise dans son propre `git worktree`, même seule (`scripts/worktree-issue.sh`) ; le dossier de l'utilisateur et de son IDE n'est jamais celui d'un agent.
 - Un agent prouve son travail, il ne l'affirme pas : état avant / après (test qui échoue puis réussit, chiffres mesurés, captures) dans son rapport et dans la PR ; l'utilisateur relit la preuve plus que le code.
 - Les écarts de contrat externe, de licence, de dépendance ou de PRD se décident avec l'utilisateur, pas seul.
 
@@ -81,7 +89,7 @@ ils posent leurs questions dans un bloc `## QUESTIONS` de leur rapport, qu'elle 
 1. **Cadrage** : interview (`grill-me` / `grill-with-docs`) pour le glossaire et les contraintes ; si le module apporte une décision structurante (architecture, stockage, fournisseur, dépendance majeure), proposer un ADR `proposé` et le faire valider AVANT tout code.
 2. **PRD** : agent `spec-writer`. S'il rend un bloc `## QUESTIONS`, poser les questions à l'utilisateur (groupées, avec options et recommandation), consigner les réponses dans le PRD, relancer le rôle jusqu'à `## QUESTIONS : aucune`. Faire valider le PRD ; besoin à `Spécifié`.
 3. **Issues** : `/to-tickets` dans `docs/issues/`, découpage approuvé par l'utilisateur, `scripts/couverture-prd.sh <prd>` à `OK` (chaque critère couvert par exactement une issue).
-4. **Livraison**, issue par issue dans l'ordre des dépendances : `/deliver` (développeur, vérifications de la session, reviewer, corrections en `MAX_ITERATIONS_REVUE` itérations au plus (5 par défaut, voir `.factory.conf` ; au-delà, le blocage est remonté à l'utilisateur, avec un courriel par `scripts/notifier.sh` s'il reste au moins un BLOQUANT), définition de fini). Besoin à `En cours` puis `En revue`.
+4. **Livraison**, issue par issue dans l'ordre des dépendances : `/deliver` (développeur, vérifications de la session, reviewer, corrections, puis `scripts/fin-issue.sh` à `FIN-ISSUE OK` avant tout passage à `Fait` ; corrections en `MAX_ITERATIONS_REVUE` itérations au plus (3 par défaut, voir `.factory.conf` ; au-delà, le blocage est remonté à l'utilisateur, avec un courriel par `scripts/notifier.sh` s'il reste au moins un BLOQUANT), définition de fini). Besoin à `En cours` puis `En revue`.
 5. **Revue indépendante** de la branche (`/code-review`) avant la fusion ; ses constats bloquants repartent au développeur, puis nouvelle revue ; la même limite de `MAX_ITERATIONS_REVUE` itérations (et la même règle d'arrêt au-delà) vaut pour ces corrections.
 6. **Clôture** : besoin à `Fait` quand toutes ses issues le sont et que l'utilisateur a fusionné ; lister les passages du PRD, du backlog et des ADR devenus faux et les proposer à l'utilisateur ; ajouter les leçons du cycle à `docs/lessons.md` ; rapport final court.
 

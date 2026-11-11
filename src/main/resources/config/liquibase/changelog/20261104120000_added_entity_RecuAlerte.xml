@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="20261104120000-1" author="gestion-chalet">
+        <createTable tableName="recu_alerte">
+            <column name="recu_id" type="char(36)">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="pk_recu_alerte" foreignKeyName="fk_recu_alerte_recu_id" references="recu(id)"/>
+            </column>
+            <column name="rang" type="int"><constraints nullable="false" primaryKey="true" primaryKeyName="pk_recu_alerte"/></column>
+            <column name="code" type="varchar(40)"><constraints nullable="false"/></column>
+            <column name="message" type="varchar(255)"><constraints nullable="false"/></column>
+            <column name="ecart_cents" type="bigint"/>
+        </createTable>
+    </changeSet>
+</databaseChangeLog>

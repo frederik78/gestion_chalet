@@ -6,8 +6,13 @@ set -uo pipefail
 # Isolement de l'environnement appelant : verify-clean.sh donne la priorité à COMMANDE_VERIFY, et les bouchons lisent STUB_CODE ;
 # hérités (par exemple quand cette suite est elle-même lancée par verify-clean.sh avec COMMANDE_VERIFY), ils fausseraient les cas.
 unset COMMANDE_VERIFY STUB_CODE
+# Garde-fou : une commande de build qui relancerait cette suite (COMMANDE_VERIFY ou .factory-verify mal résolus) bouclerait sans fin.
+if [ -n "${FACTORY_TESTS_EN_COURS:-}" ]; then
+  echo "run.sh : déjà en cours dans ce processus ou un ancêtre (relance récursive refusée, voir COMMANDE_VERIFY et .factory-verify)"; exit 1
+fi
+export FACTORY_TESTS_EN_COURS=1
 # Idem pour la configuration de la factory (lue par config-factory.sh et notifier.sh) : une valeur personnelle ne doit pas fausser les cas.
-unset FACTORY_MAX_ITERATIONS_REVUE FACTORY_NOTIFICATION_COMMANDE FACTORY_NOTIFICATION_DESTINATAIRE FACTORY_NOTIFICATION_EXPEDITEUR
+unset FACTORY_AGENT_MODELE FACTORY_AGENT_EFFORT FACTORY_AGENTS_SILENCE_MINUTES FACTORY_AGENTS_RETRAIT_MINUTES FACTORY_DASHBOARD_THEME FACTORY_MAX_ITERATIONS_REVUE FACTORY_MAX_CRITERES_ISSUE FACTORY_NOTIFICATION_COMMANDE FACTORY_NOTIFICATION_DESTINATAIRE FACTORY_NOTIFICATION_EXPEDITEUR
 
 ici="$(cd "$(dirname "$0")" && pwd)"
 factory="$(cd "$ici/../.." && pwd)"
@@ -80,7 +85,7 @@ issue_id() { # issue_id <projet> <id> <statut> <prd> <criteres> <depend_de>
 
 echo "criteres-sans-test.sh"
 p="$(nouveau_projet)"; cd "$p" || exit 1
-printf '@Test void ca10_x() {}\n// CS-07\n' > src/test/A.java
+printf '@Test void ca10_x() {}\n@Test void cs07_y() {}\n' > src/test/A.java
 issue_id "$p" 001-01 "En cours" docs/prd/001-m.md "[CA-10, CS-07]" "[]"
 verifier "liste en ligne couverte" 0 "OK .*2 critère" scripts/criteres-sans-test.sh 001-01
 issue_id "$p" 001-02 "En cours" docs/prd/001-m.md "
@@ -96,9 +101,189 @@ verifier "--tous ignore les issues « À faire »" 1 "" scripts/criteres-sans-te
 out="$(scripts/criteres-sans-test.sh --tous 2>&1)"; printf '%s' "$out" | grep -q "001-05" && ko "--tous ne liste pas 001-05" "$out" || ok "--tous ne liste pas 001-05"
 verifier "sans argument = usage (64)" 64 "Usage" scripts/criteres-sans-test.sh
 verifier "issue inconnue = 64" 64 "Aucune issue" scripts/criteres-sans-test.sh 999
-rm -rf src/test; mkdir tests; printf 'ca10 CS-07\n' > tests/t.py
+rm -rf src/test; mkdir tests; printf 'def test_ca10_x():\n    pass\ndef test_cs07_y():\n    pass\n' > tests/t.py
 verifier "dossier de tests détecté automatiquement (tests/)" 0 "OK .*2 critère" scripts/criteres-sans-test.sh 001-01
 rm -rf tests; verifier "dossier de tests absent = 64" 64 "introuvable" scripts/criteres-sans-test.sh 001-01
+
+echo "criteres-sans-test.sh : seule une déclaration de test couvre un critère"
+p="$(nouveau_projet)"; cd "$p" || exit 1
+issue_id "$p" 001-01 "En cours" docs/prd/001-m.md "[CA-10]" "[]"
+# critere_fichier <description> <code attendu> <fichier de tests> : le contenu du fichier vient de l'entrée standard.
+critere_fichier() {
+  rm -rf src/test; mkdir -p "$(dirname "src/test/$3")"; cat > "src/test/$3"
+  if [ "$2" -eq 0 ]; then verifier "$1" 0 "OK .*1 critère" scripts/criteres-sans-test.sh 001-01
+  else verifier "$1" 1 "MANQUE .*1/1 sans test : CA-10" scripts/criteres-sans-test.sh 001-01; fi
+}
+critere_fichier "mention : commentaire //" 1 A.java <<'EOF'
+// CA-10
+@Test void autre() {}
+EOF
+critere_fichier "mention : Javadoc /** */" 1 A.java <<'EOF'
+/** Couvre ca10_x, voir CA-10. */
+class A {
+  /**
+   * CA-10
+   * void ca10_x() {
+   */
+  @Test void autre() {}
+}
+EOF
+critere_fichier "mention : commentaire #" 1 t.py <<'EOF'
+# CA-10
+def test_autre():
+    pass
+EOF
+critere_fichier "mention : docstring Python sur plusieurs lignes" 1 t.py <<'EOF'
+def test_autre():
+    """Vérifie un cas.
+
+    CA-10 : ca10_x
+    """
+EOF
+critere_fichier "mention : message d'assertion Java" 1 A.java <<'EOF'
+@Test void autre() { assertEquals(1, x, "CA-10"); }
+EOF
+critere_fichier "mention : message d'assertion Python" 1 t.py <<'EOF'
+def test_autre():
+    assert x == 1, "CA-10"
+EOF
+critere_fichier "mention : message d'assertion sur la ligne d'un test Node" 1 a.test.js <<'EOF'
+it('autre', () => expect(x, 'CA-10').toBe(1));
+EOF
+critere_fichier "mention : chaîne de test ordinaire" 1 a.test.ts <<'EOF'
+const id = "CA-10";
+foo('ca10');
+EOF
+critere_fichier "mention : chaîne qui contient une déclaration" 1 A.java <<'EOF'
+String s = "void ca10_x() {";
+log("@DisplayName(\"CA-10\")");
+EOF
+critere_fichier "mention : commentaire en fin de déclaration" 1 A.java <<'EOF'
+@Test void autre() {} // CA-10
+EOF
+critere_fichier "mention : fichier .md du dossier de tests" 1 notes.md <<'EOF'
+void ca10_x() {
+def test_ca10():
+it('CA-10', x)
+EOF
+critere_fichier "mention : fichier .json du dossier de tests" 1 data.json <<'EOF'
+{ "critere": "CA-10", "test": "void ca10_x(" }
+EOF
+critere_fichier "ligne commentée : // void ca10_x() {" 1 A.java <<'EOF'
+// void ca10_x() {
+EOF
+critere_fichier "ligne commentée : /* class Ca10Test" 1 A.java <<'EOF'
+/* class Ca10Test {
+EOF
+critere_fichier "ligne commentée : * @DisplayName" 1 A.java <<'EOF'
+ * @DisplayName("CA-10")
+EOF
+critere_fichier "ligne commentée : # def test_ca10" 1 t.py <<'EOF'
+    # def test_ca10():
+EOF
+critere_fichier "ligne commentée : // it('CA-10')" 1 a.test.js <<'EOF'
+  // it('CA-10', () => {});
+EOF
+critere_fichier "non déclaration : méthode Java privée (auxiliaire, jamais un test)" 1 A.java <<'EOF'
+private void ca10_x() {}
+EOF
+critere_fichier "non déclaration : fonction Python sans préfixe test" 1 t.py <<'EOF'
+def ca10_aide():
+    pass
+EOF
+critere_fichier "non déclaration : classe Python sans préfixe Test" 1 t.py <<'EOF'
+class Ca10Aide:
+    pass
+EOF
+critere_fichier "non déclaration : it.todo et it.skip" 1 a.test.js <<'EOF'
+it.todo('CA-10');
+it.skip('CA-10', () => {});
+EOF
+critere_fichier "déclaration : classe Java" 0 Ca10Test.java <<'EOF'
+public final class Ca10Test {
+EOF
+critere_fichier "déclaration : méthode Java" 0 A.java <<'EOF'
+    void ca10_x() {
+EOF
+critere_fichier "déclaration : méthode Java annotée, sur une ligne" 0 A.java <<'EOF'
+    @Test @Timeout(value = 5) public void CA_10_x() throws Exception {
+EOF
+critere_fichier "déclaration : @DisplayName" 0 A.java <<'EOF'
+    @DisplayName("CA-10 : la somme") 
+EOF
+critere_fichier "déclaration : @DisplayName devant la méthode" 0 A.java <<'EOF'
+    @DisplayName("CA 10") @Test void autre() {}
+EOF
+critere_fichier "déclaration : méthode après un @DisplayName sur la même ligne" 0 A.java <<'EOF'
+    @DisplayName("autre") @Test void ca10_x() {}
+EOF
+critere_fichier "déclaration : classe Kotlin" 0 A.kt <<'EOF'
+internal class Ca10Test {
+EOF
+critere_fichier "déclaration : fonction Kotlin" 0 A.kt <<'EOF'
+    @Test fun ca10_x() = runTest {
+EOF
+critere_fichier "déclaration : fonction Kotlin entre backticks" 0 A.kt <<'EOF'
+    fun `CA-10 la somme est juste`() {
+EOF
+critere_fichier "déclaration : @DisplayName en Kotlin" 0 A.kt <<'EOF'
+    @DisplayName("ca10 la somme")
+EOF
+critere_fichier "déclaration : def test_ Python" 0 t.py <<'EOF'
+def test_ca10_x():
+EOF
+critere_fichier "déclaration : async def test_ Python indenté" 0 t.py <<'EOF'
+    async def test_ca_10(self):
+EOF
+critere_fichier "déclaration : def testCa10 Python" 0 t.py <<'EOF'
+    def testCa10(self):
+EOF
+critere_fichier "déclaration : class TestCa10 Python" 0 t.py <<'EOF'
+class TestCa10:
+EOF
+critere_fichier "déclaration : class TestCa10 Python avec parent" 0 t.py <<'EOF'
+class TestCa10Somme(unittest.TestCase):
+EOF
+critere_fichier "déclaration : it, guillemets simples" 0 a.test.js <<'EOF'
+  it('CA-10 : la somme', () => {});
+EOF
+critere_fichier "déclaration : test, guillemets doubles" 0 a.test.ts <<'EOF'
+test("ca10 la somme", async () => {});
+EOF
+critere_fichier "déclaration : describe, backticks" 0 a.spec.mjs <<'EOF'
+describe(`CA 10`, () => {});
+EOF
+critere_fichier "déclaration : it.each sur une ligne" 0 a.test.tsx <<'EOF'
+it.each([1, 2])('CA-10 %s', (n) => {});
+EOF
+critere_fichier "déclaration : test.each, table entre backticks" 0 a.test.js <<'EOF'
+test.each`a${1}`("CA-10 $a", () => {});
+EOF
+critere_fichier "déclaration : it.each sur plusieurs lignes" 0 a.test.js <<'EOF'
+it.each([
+  [1],
+])(`CA-10 %s`, (n) => {});
+EOF
+critere_fichier "déclaration : test.describe, await" 0 a.spec.ts <<'EOF'
+await test.describe('CA-10', () => {});
+EOF
+critere_fichier "déclaration : méthode Java au nom accentué" 0 A.java <<'EOF'
+    void ca10_leJsonDuReçuEstComplet() {
+EOF
+critere_fichier "déclaration : classe Java au nom accentué" 0 A.java <<'EOF'
+class ReçuTest_ca10 extends Base {
+EOF
+critere_fichier "déclaration : fonction Python au nom accentué" 0 t.py <<'EOF'
+def test_reçu_ca10():
+EOF
+critere_fichier "motif : zéros de tête ignorés (ca010)" 0 A.java <<'EOF'
+void ca010_x() {
+EOF
+critere_fichier "motif : CA-1 n'est pas CA-10" 1 A.java <<'EOF'
+void ca1_x() {
+void ca100_x() {
+void xca10_x() {
+EOF
 
 echo "etat-issues.sh"
 p="$(nouveau_projet)"; cd "$p" || exit 1
@@ -157,6 +342,15 @@ grep -q '<h3 class="statut-fait">Fait (1)</h3>' dashboard.html && grep -q '<h3 c
 carte 001-02 | grep -q 'class="carte prochaine".*<span class="marqueur marqueur-prochaine">prochaine</span>' && ! carte 001-02 | grep -q 'bloquée' && ok "marqueur « prochaine » sur l'issue de etat-issues.sh --prochaine (dépendance Fait : pas bloquée)" || ko "marqueur prochaine" "$(carte 001-02)"
 carte 001-03 | grep -q 'class="carte bloquee".*<span class="marqueur marqueur-bloquee">bloquée</span>' && ! carte 001-03 | grep -q '>prochaine<' && ok "marqueur « bloquée » sur une issue À faire dont une dépendance n'est pas Fait" || ko "marqueur bloquée" "$(carte 001-03)"
 [ "$(carte 001-01)" = '<div class="carte"><strong>001-01</strong> <span class="titre">T001-01</span></div>' ] && ok "carte d'issue Fait sans besoin ni dépendance : ni marqueur ni ligne vide" || ko "carte d'issue minimale" "$(carte 001-01)"
+# Descriptifs : « Objectif » de l'issue et « Décisions » du besoin, en un détail discret ; rien si absent (cartes ci-dessus inchangées).
+sed -i.bak 's/^| F-02 | Import des données | P2 | En cours | | |/| F-02 | Import des données | P2 | En cours | | Pourquoi : <b>reprise<\/b> des anciens fichiers |/' backlog.md; rm -f backlog.md.bak
+printf -- '---\nid: 001-09\ntitre: T001-09\nstatut: À faire\ndepend_de: []\nbranche:\n---\n\n## Objectif\nPermettre l'"'"'import <i>CSV</i>\nsur deux lignes.\n\nSecond paragraphe ignoré.\n\n## Périmètre\n- Dans : x\n' > docs/issues/001-09-x.md
+scripts/dashboard.sh >/dev/null
+carte F-02 | grep -qF '<span class="detail desc">Pourquoi : &lt;b&gt;reprise&lt;/b&gt; des anciens fichiers</span>' && ok "cartes : la décision du besoin est affichée (échappée)" || ko "descriptif de besoin" "$(carte F-02)"
+carte 001-09 | grep -qF '<span class="detail desc">Permettre l&#39;import &lt;i&gt;CSV&lt;/i&gt; sur deux lignes.</span>' && ! carte 001-09 | grep -q 'Second paragraphe' && ok "cartes : l'objectif de l'issue (premier paragraphe, échappé) est affiché" || ko "descriptif d'issue" "$(carte 001-09)"
+grep '^\.detail\.desc {' dashboard.html | grep -q 'color: var(--texte)' && ok "cartes : le descriptif suit la palette (lisible en thème sombre)" || ko "couleur du descriptif" "$(grep '^\.detail\.desc' dashboard.html)"
+scripts/dashboard.sh --theme sombre >/dev/null; ! grep '^\.detail\.desc {' dashboard.html | grep -q '#[0-9a-f]\{3,6\}' && ok "thème sombre : aucune couleur en dur sur le descriptif" || ko "couleur en dur du descriptif"
+rm -f docs/issues/001-09-x.md; scripts/dashboard.sh >/dev/null
 awk '/<section id="issues"/ { s = 1 } s && /<h3[^>]*>En cours \(0\)<\/h3>/ { getline; print; exit }' dashboard.html | grep -qx '<p class="vide">—</p>' && ok "colonne vide : « — » discret" || ko "colonne vide" "$(grep -n -A1 'En cours (0)' dashboard.html | head -4)"
 awk '/<section id="issues"/ { s = 1 } s && /class="carte/ { sub(/.*<strong>/, ""); sub(/<\/strong>.*/, ""); printf "%s ", $0 }' dashboard.html | grep -qx '001-02 001-03 001-01 ' && ok "cartes dans l'ordre des fichiers, par colonne" || ko "ordre des cartes" "$(grep -n 'class="carte' dashboard.html)"
 grep -A2 '<section id="en-cours">' dashboard.html | grep -q 'Aucune issue en cours.' && [ "$(grep -n '<section id="en-cours">' dashboard.html | cut -d: -f1)" -lt "$(grep -n '<section id="besoins">' dashboard.html | cut -d: -f1)" ] && ok "encart En cours en haut de page : « Aucune issue en cours. »" || ko "encart sans issue en cours" "$(grep -n -A3 'en-cours' dashboard.html)"
@@ -172,6 +366,31 @@ scripts/dashboard.sh --attente 5 >/dev/null
 grep -q 'content="5"' dashboard.html && ok "--attente change le rafraîchissement" || ko "--attente"
 verifier "--attente non numérique = 64" 64 "Usage" scripts/dashboard.sh --attente abc
 verifier "argument inconnu = 64" 64 "Usage" scripts/dashboard.sh --bad
+# Thème : clair (défaut, rendu inchangé), sombre, auto (prefers-color-scheme). Pas de JavaScript ni de ressource externe, quel que soit le thème.
+sans_horodatage() { grep -v 'Généré le' "$1"; }
+scripts/dashboard.sh --sortie defaut.html >/dev/null; scripts/dashboard.sh --sortie clair.html --theme clair >/dev/null
+scripts/dashboard.sh --sortie sombre.html --theme sombre >/dev/null; scripts/dashboard.sh --sortie auto.html --theme auto >/dev/null
+[ "$(sans_horodatage defaut.html)" = "$(sans_horodatage clair.html)" ] && ok "thème : le défaut est « clair »" || ko "thème par défaut = clair"
+grep -q '<html lang="fr" data-theme="light">' clair.html && grep -q '<meta name="color-scheme" content="light">' clair.html && grep -q -- '--fond: #f3f4f6;' clair.html && grep -q -- '--carte: #fff;' clair.html && ! grep -q 'prefers-color-scheme: dark' clair.html && ok "thème clair : data-theme=light, color-scheme light, palette claire d'origine, pas de palette sombre" || ko "thème clair" "$(grep -n 'data-theme\|color-scheme\|--fond' clair.html | head -5)"
+grep -q '<html lang="fr" data-theme="dark">' sombre.html && grep -q '<meta name="color-scheme" content="dark">' sombre.html && grep -q -- '--fond: #111827;' sombre.html && ! grep -q 'prefers-color-scheme: dark' sombre.html && ok "thème sombre : data-theme=dark, color-scheme dark, palette sombre" || ko "thème sombre" "$(grep -n 'data-theme\|color-scheme\|--fond' sombre.html | head -5)"
+grep -q '<html lang="fr">' auto.html && grep -q '<meta name="color-scheme" content="light dark">' auto.html && grep -q -- '--fond: #f3f4f6;' auto.html && grep -q '@media (prefers-color-scheme: dark)' auto.html && grep -q -- '--fond: #111827;' auto.html && ok "thème auto : sans data-theme, palette claire puis sombre sous prefers-color-scheme" || ko "thème auto" "$(grep -n 'data-theme\|color-scheme\|--fond' auto.html | head -5)"
+for t in clair sombre auto; do
+  ! grep -Eqi '<script|<link|<img|<iframe|@import|url\(|https?://' "$t.html" && grep -q -- '@media print' "$t.html" && ok "thème $t : aucune ressource externe ni JavaScript, impression prévue" || ko "thème $t : ressource externe ou impression" "$(grep -Eni '<script|<link|<img|<iframe|@import|url\(|https?://' "$t.html" | head -3)"
+done
+# L'impression redevient claire : la palette claire est réécrite après la palette sombre.
+[ "$(awk '/@media print/ { p = 1 } p && /--fond: #f3f4f6;/ { n++ } END { print n + 0 }' sombre.html)" = 1 ] && ok "thème sombre : impression en palette claire" || ko "impression claire du thème sombre"
+verifier "--theme invalide = 64" 64 "DASHBOARD_THEME invalide : clair, sombre ou auto attendu" scripts/dashboard.sh --theme violet
+verifier "--theme sans valeur = 64" 64 "Usage" scripts/dashboard.sh --theme
+printf 'DASHBOARD_THEME=sombre\n' > .factory.conf; scripts/dashboard.sh --sortie conf.html >/dev/null
+grep -q 'data-theme="dark"' conf.html && ok "DASHBOARD_THEME lu dans .factory.conf" || ko "DASHBOARD_THEME dans .factory.conf"
+FACTORY_DASHBOARD_THEME=auto scripts/dashboard.sh --sortie env.html >/dev/null
+! grep -q 'data-theme' env.html && grep -q 'prefers-color-scheme: dark' env.html && ok "FACTORY_DASHBOARD_THEME l'emporte sur .factory.conf" || ko "FACTORY_DASHBOARD_THEME"
+scripts/dashboard.sh --sortie opt.html --theme clair >/dev/null
+grep -q 'data-theme="light"' opt.html && ok "--theme l'emporte sur la configuration" || ko "--theme prioritaire"
+printf 'DASHBOARD_THEME=violet\n' > .factory.conf
+verifier "DASHBOARD_THEME invalide en configuration = 64" 64 "DASHBOARD_THEME invalide" scripts/dashboard.sh
+rm -f .factory.conf defaut.html clair.html sombre.html auto.html conf.html env.html opt.html
+verifier "config-factory.sh : DASHBOARD_THEME=clair par défaut" 0 "^DASHBOARD_THEME=clair$" scripts/config-factory.sh
 rm -f dashboard.html
 { perl -e 'alarm 4; exec @ARGV' scripts/dashboard.sh --boucle 1 >/dev/null 2>&1; } 2>/dev/null; code=$?
 [ -f dashboard.html ] && [ "$code" -ne 0 ] && ok "--boucle régénère en continu (arrêté par signal)" || ko "--boucle" "code $code"
@@ -209,12 +428,531 @@ rm -f dashboard.html; (umask 027 && scripts/dashboard.sh >/dev/null)
 # Génération bloquée (etat-issues.sh lent) puis interrompue par un signal : le fichier temporaire ne doit pas rester.
 cp factory/scripts/etat-issues.sh "$racine_tmp/etat-issues.sh.orig"
 printf '#!/bin/sh\ntouch "%s/generation-en-cours"\nsleep 2\n' "$p" > factory/scripts/etat-issues.sh
-rm -f generation-en-cours; scripts/dashboard.sh --boucle 1 >/dev/null 2>&1 & pid=$!
+# Le cas --boucle plus haut est tué par SIGALRM : il a laissé son temporaire 2 fois sur 250 (mesure), par un mécanisme non identifié. À retirer ici, sinon ce cas échoue au hasard.
+rm -f generation-en-cours dashboard.html.*; scripts/dashboard.sh --boucle 1 >/dev/null 2>&1 & pid=$!
 n=0; while [ ! -e generation-en-cours ] && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
 kill -TERM "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
 restes="$(ls dashboard.html.* 2>/dev/null)"
 [ -e generation-en-cours ] && [ -z "$restes" ] && ok "interruption pendant la génération : aucun fichier temporaire résiduel" || ko "fichier temporaire résiduel après interruption" "$restes"
 cp "$racine_tmp/etat-issues.sh.orig" factory/scripts/etat-issues.sh; rm -f generation-en-cours dashboard.html*
+
+echo "dashboard.sh : statut lu sur la branche de l'issue"
+p="$(nouveau_projet)"; cd "$p" || exit 1
+git init -q -b develop .; printf 'dashboard.html\n' > .gitignore; rm -f docs/issues/[0-9]*.md
+gd_() { git -c user.name=t -c user.email=t@t "$@"; }
+issue_b() { # issue_b <id> <statut> <branche> [dépendances] : écrit l'issue
+  printf -- '---\nid: %s\ntitre: T%s\nbesoin: F-01\nstatut: %s\nbranche: %s\ndepend_de: [%s]\n---\n' "$1" "$1" "$2" "$3" "${4:-}" > "${DOSSIER_B:-docs/issues}/$1-x.md"
+}
+sur_branche() { # sur_branche <branche> <id> <statut> <branche de l'en-tête> : crée la branche avec ce statut d'issue
+  git branch "$1" >/dev/null || return 1
+  git worktree add -q "$racine_tmp/wt-$2" "$1" >/dev/null 2>&1
+  DOSSIER_B="$racine_tmp/wt-$2/docs/issues" issue_b "$2" "$3" "$4"
+  gd_ -C "$racine_tmp/wt-$2" add -A; gd_ -C "$racine_tmp/wt-$2" commit -qm "statut $2"
+  git worktree remove --force "$racine_tmp/wt-$2"
+}
+H1='feat/$(touch${IFS}pwn1)<script>alert(1)</script>'
+H2='a b $(touch pwn2) <script>alert(2)</script>'
+for ligne in "002-01|feat/a" "002-02|feat/absente" "002-03|feat/c" "002-04|feat/d" "002-05|feat/e" "002-06|$H1" "002-07|$H2" "002-08|--output=pwn3" "002-09|develop..feat/a" "002-10|feat/f" ; do
+  issue_b "${ligne%%|*}" "À faire" "${ligne#*|}"
+done
+issue_b 002-03 "En revue" feat/c
+issue_b 002-11 "À faire" "" 002-10
+gd_ add -A; gd_ commit -qm init
+sur_branche feat/a 002-01 "En cours" feat/a
+sur_branche feat/c 002-03 "À faire" feat/c
+git branch feat/d >/dev/null; git worktree add -q "$racine_tmp/wt-d" feat/d >/dev/null 2>&1; git -C "$racine_tmp/wt-d" rm -q docs/issues/002-04-x.md; gd_ -C "$racine_tmp/wt-d" commit -qm retire; git worktree remove --force "$racine_tmp/wt-d"
+sur_branche feat/e 002-05 '<b>Inventé</b>' feat/e
+sur_branche "$H1" 002-06 "En revue" "$H1"
+sur_branche feat/f 002-10 "Fait" feat/f
+colonne_de() { awk -v id="<strong>$1</strong>" '/<section id="issues"/ { s = 1 } s && /<h3/ { c = $0; sub(/<\/h3>.*/, "", c); sub(/.*>/, "", c); sub(/ \([0-9]+\)$/, "", c) } s && /class="carte/ && index($0, id) { print c; exit }' "$2"; }
+carte_de() { grep -F "<strong>$1</strong>" "$2" | grep -F 'class="carte'; }
+sortie_b="$racine_tmp/branche.html"
+verifier_exact "branche : aucune erreur, noms hostiles compris" 0 "$sortie_b" scripts/dashboard.sh --sortie "$sortie_b"
+[ "$(colonne_de 002-01 "$sortie_b")" = "En cours" ] && ok "branche : statut plus avancé sur la branche affiché" || ko "branche : statut plus avancé" "$(colonne_de 002-01 "$sortie_b")"
+grep -A3 '<section id="en-cours">' "$sortie_b" | grep -q '002-01' && ok "branche : l'encart En cours compte aussi ce statut" || ko "branche : encart En cours"
+attendu_a="$(git log -1 --format='%h' feat/a) du $(git log -1 --format='%cs' feat/a)"
+carte_de 002-01 "$sortie_b" | grep -qF "dernier commit : $attendu_a" && ok "branche : dernier commit (hash court et date) sur la carte" || ko "branche : dernier commit" "$(carte_de 002-01 "$sortie_b")"
+[ "$(colonne_de 002-02 "$sortie_b")" = "À faire" ] && ! carte_de 002-02 "$sortie_b" | grep -q 'dernier commit' && ok "branche absente : statut local, sans commit" || ko "branche absente"
+[ "$(colonne_de 002-03 "$sortie_b")" = "En revue" ] && ok "branche : statut local plus avancé conservé" || ko "statut local plus avancé" "$(colonne_de 002-03 "$sortie_b")"
+[ "$(colonne_de 002-04 "$sortie_b")" = "À faire" ] && carte_de 002-04 "$sortie_b" | grep -q 'dernier commit' && ok "fichier absent sur la branche : statut local, commit affiché" || ko "fichier absent sur la branche"
+[ "$(colonne_de 002-05 "$sortie_b")" = "À faire" ] && ! grep -q 'Inventé' "$sortie_b" && ok "statut inconnu sur la branche : statut local, valeur non écrite" || ko "statut inconnu sur la branche"
+[ "$(colonne_de 002-06 "$sortie_b")" = "En revue" ] && ok "branche au nom hostile mais valide : lue comme une donnée" || ko "branche hostile valide" "$(colonne_de 002-06 "$sortie_b")"
+[ "$(colonne_de 002-07 "$sortie_b")" = "À faire" ] && [ "$(colonne_de 002-08 "$sortie_b")" = "À faire" ] && [ "$(colonne_de 002-09 "$sortie_b")" = "À faire" ] && ! carte_de 002-09 "$sortie_b" | grep -q 'dernier commit' && ok "espaces, option ou intervalle dans le nom : statut local" || ko "noms invalides"
+[ ! -e pwn1 ] && [ ! -e pwn2 ] && [ ! -e pwn3 ] && [ ! -e '=pwn3' ] && ok "cs_ nom de branche hostile : rien n'est exécuté" || ko "cs_ exécution depuis un nom de branche"
+! grep -q 'alert' "$sortie_b" && ! grep -Eq '<script|<b>' "$sortie_b" && ok "cs_ nom de branche hostile : aucun HTML injecté" || ko "cs_ HTML injecté"
+carte_de 002-11 "$sortie_b" | grep -q 'marqueur-bloquee' && ok "dépendance Fait sur sa branche seule, pas fusionnée : reste bloquée" || ko "dépendance non fusionnée" "$(carte_de 002-11 "$sortie_b")"
+verifier_exact "etat-issues --prochaine : une issue En cours sur sa branche n'est pas prête" 0 "002-02" scripts/etat-issues.sh --prochaine
+git worktree add -q "$racine_tmp/wt-classique" -b wt-classique >/dev/null 2>&1
+"$racine_tmp/wt-classique/scripts/dashboard.sh" --sortie "$racine_tmp/wt.html" >/dev/null 2>&1
+[ "$(colonne_de 002-01 "$racine_tmp/wt.html")" = "En cours" ] && ok "worktree d'un dépôt classique : branche lue" || ko "worktree classique"
+git worktree remove --force "$racine_tmp/wt-classique"
+git clone -q --bare . "$racine_tmp/nu.git" >/dev/null 2>&1; git -C "$racine_tmp/nu.git" worktree add -q "$racine_tmp/wt-nu" develop >/dev/null 2>&1
+"$racine_tmp/wt-nu/scripts/dashboard.sh" --sortie "$racine_tmp/nu.html" >/dev/null 2>&1
+[ "$(colonne_de 002-01 "$racine_tmp/nu.html")" = "En cours" ] && [ -n "$(carte_de 002-01 "$racine_tmp/nu.html" | grep 'dernier commit')" ] && ok "worktree d'un clone bare : branche lue" || ko "worktree de clone bare"
+lire_depot "$depot" factory/scripts/dashboard.sh | grep -q "Limites : une preuve d'activité, pas un état" && ! lire_depot "$depot" factory/scripts/dashboard.sh | grep -q "agent tourne encore" && lire_depot "$depot" factory/README.md | grep -q "limites : une preuve d'activité, pas un état" && ! lire_depot "$depot" factory/README.md | grep -q "agent tourne encore" && ok "limite du bandeau écrite (en-tête et README ; l'ancienne, devenue fausse, retirée)" || ko "limite du bandeau absente"
+for f in factory/scripts/dashboard.sh factory/README.md factory/CHANGELOG.md; do
+  lire_depot "$depot" "$f" | grep -q "dossier entièrement non suivi" && ok "$f : limite des dossiers non suivis écrite" || ko "$f : limite des dossiers non suivis absente"
+done
+
+echo "dashboard.sh : agents actifs (journal des hooks)"
+p="$(nouveau_projet)"; cd "$p" || exit 1
+git init -q -b develop .
+date_t() { date -r "$1" +%Y%m%d%H%M.%S 2>/dev/null || date -d "@$1" +%Y%m%d%H%M.%S; } # date_t <epoch> : format de touch -t (BSD puis GNU)
+bandeau() { awk '/<section id="agents-actifs">/ { s = 1 } s { print } s && /<\/section>/ { exit }' "${1:-dashboard.html}"; }
+scripts/dashboard.sh >/dev/null
+[ "$(bandeau | sed -n 3p)" = "<p>Aucun agent signalé (journal absent : hooks non installés, ou aucun sous-agent lancé depuis l'installation ; voir factory/sync-claude.sh).</p>" ] && ok "journal absent : « Aucun agent signalé (journal absent…) »" || ko "journal absent" "$(bandeau)"
+[ "$(sed -n 2p <(bandeau))" = "<h2>Agents actifs</h2>" ] && [ "$(grep -n '<section id="agents-actifs">' dashboard.html | cut -d: -f1)" -lt "$(grep -n '<section id="en-cours">' dashboard.html | cut -d: -f1)" ] && ok "bandeau « Agents actifs » en haut, avant l'encart En cours" || ko "position du bandeau" "$(grep -n '<section' dashboard.html)"
+maintenant=$(date +%s); jr=.git/factory-agents.log; T=$'\t'
+printf 'debut%s%s%sF1%sdeveloper%s\nfin%s%s%sF1\n' "$T" "$((maintenant - 60))" "$T" "$T" "$T" "$T" "$((maintenant - 30))" "$T" > "$jr"
+scripts/dashboard.sh >/dev/null
+[ "$(bandeau | sed -n 3p)" = "<p>Aucun agent signalé.</p>" ] && ok "agent terminé (fin inscrite) : « Aucun agent signalé. »" || ko "fin inscrite" "$(bandeau)"
+touch "$p/j-a1.jsonl" "$p/j-h1.jsonl"; touch -t "$(date_t $((maintenant - 2700)))" "$p/j-s1.jsonl"
+{
+  printf 'debut\t%s\tA1\tdeveloper\t%s\n' "$((maintenant - 720))" "$p/j-a1.jsonl"
+  printf 'debut\t%s\tA2\tdeveloper\t%s\n' "$((maintenant - 180))" "$p/absent.jsonl"
+  printf 'description\t%s\tA1\tancienne\n' "$maintenant"
+  printf 'description\t%s\tA2\tEssai deux\n' "$maintenant"
+  printf 'description\t%s\tA1\tEssai un\n' "$maintenant"
+  printf 'debut\t%s\tS1\tcode-reviewer\t%s\n' "$((maintenant - 3000))" "$p/j-s1.jsonl"
+  printf 'description\t%s\tS1\tRelecture\n' "$maintenant"
+  printf 'debut\t%s\tR1\tdeveloper\t\n' "$((maintenant - 7200))"
+  printf 'debut\t%s\tZ1\tspec-writer\t\n' "$((maintenant + 600))"
+  printf 'debut\t%s\tH1\tdeveloper\t%s\n' "$((maintenant - 7500))" "$p/j-h1.jsonl"
+  printf 'debut\t%s\tX1\t<script>alert(1)</script>\t\n' "$maintenant"
+  printf 'description\t%s\tX1\t<img src=x onerror=1> & "q"\n' "$maintenant"
+  printf 'debut\tabc\tM1\tdeveloper\t\nnimporte quoi\ndebut\t1\ndescription\t1\tA1\nfin\t1\tA1\textra\ndebut\t%s\t../M2\tdeveloper\t\n\n' "$maintenant"
+} >> "$jr"
+verifier_exact "journal malformé : aucune erreur" 0 "$p/x.html" scripts/dashboard.sh --sortie "$p/x.html"; rm -f "$p/x.html"; scripts/dashboard.sh >/dev/null
+attendu_bandeau='<section id="agents-actifs">
+<h2>Agents actifs</h2>
+<ul>
+<li class="agent-actif"><strong>developer</strong> Essai un depuis 12 min</li>
+<li class="agent-actif"><strong>developer</strong> Essai deux depuis 3 min</li>
+<li class="agent-sans-nouvelles"><strong>code-reviewer</strong> Relecture sans nouvelles depuis 45 min</li>
+<li class="agent-actif"><strong>spec-writer</strong> depuis moins d'"'"'1 min</li>
+<li class="agent-actif"><strong>developer</strong> depuis 2 h 05</li>
+<li class="agent-actif"><strong>&lt;script&gt;alert(1)&lt;/script&gt;</strong> &lt;img src=x onerror=1&gt; &amp; &quot;q&quot; depuis moins d'"'"'1 min</li>
+</ul>
+</section>'
+[ "$(bandeau)" = "$attendu_bandeau" ] && ok "bandeau : actif, sans nouvelles, retiré, fin, description la plus récente, deux agents de même rôle, horloge en avance, durées" || ko "bandeau" "$(diff <(printf '%s\n' "$attendu_bandeau") <(bandeau) | tr '\n' '|')"
+! grep -q '<script\|<img' dashboard.html && ok "cs_agents rôle et description échappés : aucune balise injectée" || ko "cs_agents injection" "$(grep -n 'script\|img' dashboard.html | head -3)"
+! grep -qi 'tourne' dashboard.html && ok "le bandeau affirme une preuve, jamais un état (« tourne » absent)" || ko "« tourne » dans la page"
+FACTORY_AGENTS_SILENCE_MINUTES=1 FACTORY_AGENTS_RETRAIT_MINUTES=180 scripts/dashboard.sh >/dev/null
+bandeau | grep -qxF '<li class="agent-sans-nouvelles"><strong>developer</strong> Essai deux sans nouvelles depuis 3 min</li>' && bandeau | grep -qxF '<li class="agent-sans-nouvelles"><strong>developer</strong> sans nouvelles depuis 2 h 00</li>' && ok "FACTORY_AGENTS_SILENCE_MINUTES et FACTORY_AGENTS_RETRAIT_MINUTES respectées" || ko "FACTORY_AGENTS_*" "$(bandeau)"
+printf 'AGENTS_SILENCE_MINUTES=60\nAGENTS_RETRAIT_MINUTES=30\n' > .factory.conf; scripts/dashboard.sh >/dev/null
+! bandeau | grep -q 'sans nouvelles' && bandeau | grep -qF 'Essai un depuis 12 min' && ok "silence >= retrait (.factory.conf) : pas d'état « sans nouvelles », permis" || ko "silence >= retrait" "$(bandeau)"
+rm -f .factory.conf dashboard.html
+for cle in AGENTS_SILENCE_MINUTES AGENTS_RETRAIT_MINUTES; do
+  for v in 0 abc 01 -3 '' '5<script>' 9999999999; do
+    printf '%s=%s\n' "$cle" "$v" > .factory.conf
+    verifier_exact "$cle=« $v » refusée : code 64, message sans la valeur, rien d'écrit" 64 "$cle invalide : entier entre 1 et 999999 attendu (voir .factory.conf, .factory.local.conf, FACTORY_$cle)." scripts/dashboard.sh
+    [ ! -e dashboard.html ] || { ko "$cle=$v : page écrite malgré une valeur invalide"; rm -f dashboard.html; }
+  done
+done
+rm -f .factory.conf
+config_liste="$(scripts/config-factory.sh)"
+printf '%s\n' "$config_liste" | grep -qx 'AGENTS_SILENCE_MINUTES=5' && printf '%s\n' "$config_liste" | grep -qx 'AGENTS_RETRAIT_MINUTES=60' && ok "config-factory.sh : AGENTS_SILENCE_MINUTES=5 et AGENTS_RETRAIT_MINUTES=60 par défaut" || ko "défauts AGENTS_*" "$config_liste"
+grep -qx 'AGENTS_SILENCE_MINUTES=5' "$factory/templates/.factory.conf" && grep -qx 'AGENTS_RETRAIT_MINUTES=60' "$factory/templates/.factory.conf" && ok "modèle .factory.conf : clés AGENTS_*" || ko "modèle .factory.conf sans AGENTS_*"
+
+echo "dashboard.sh : signaux Git des worktrees"
+p="$(nouveau_projet)"; cd "$p" || exit 1
+git init -q -b develop .; printf 'dashboard.html\n' > .gitignore; rm -f docs/issues/[0-9]*.md
+issue_s() { printf -- '---\nid: %s\ntitre: T%s\nbesoin: F-01\nstatut: %s\nbranche: %s\ndepend_de: []\n---\n' "$1" "$1" "$2" "$3" > "docs/issues/$1-x.md"; }
+issue_s 003-01 "En cours" feat/s1; issue_s 003-02 "À faire" feat/s2; issue_s 003-03 "À faire" feat/s3; issue_s 003-04 "À faire" feat/s4; issue_s 003-05 "À faire" feat/s5
+printf 'a\n' > f1.txt; printf 'b\n' > old.txt
+gd_ add -A; gd_ commit -qm init
+maintenant=$(date +%s)
+for b in s1 s2 s3 s5; do git worktree add -q "$racine_tmp/wt-$b" -b "feat/$b" >/dev/null 2>&1; done
+git branch feat/s4
+w1="$racine_tmp/wt-s1"
+printf 'modifié\n' >> "$w1/f1.txt"; git -C "$w1" mv old.txt new.txt; printf 'x\n' > "$w1/a b.txt"
+printf 'c\n' > "$racine_tmp/wt-s2/c2.txt"; gd_ -C "$racine_tmp/wt-s2" add c2.txt
+GIT_COMMITTER_DATE="@$((maintenant - 3600)) +0000" gd_ -C "$racine_tmp/wt-s2" commit -qm s2
+printf 'u\n' > "$racine_tmp/wt-s2/u.txt"; touch -t "$(date_t $((maintenant - 600)))" "$racine_tmp/wt-s2/u.txt"
+printf 'd\n' > "$racine_tmp/wt-s3/d.txt"; gd_ -C "$racine_tmp/wt-s3" add d.txt
+GIT_COMMITTER_DATE="@$((maintenant - 7500)) +0000" gd_ -C "$racine_tmp/wt-s3" commit -qm s3
+mv "$racine_tmp/wt-s5" "$racine_tmp/wt-s5-parti"
+# Index périmé (fichier suivi touché, contenu identique) : un git status ordinaire réécrirait l'index en prenant index.lock.
+index_w3="$(git -C "$racine_tmp/wt-s3" rev-parse --path-format=absolute --git-path index 2>/dev/null || echo "$p/.git/worktrees/wt-s3/index")"
+touch -t "$(date_t $((maintenant + 5)))" "$racine_tmp/wt-s3/d.txt"; avant_index="$(cksum < "$index_w3")"
+verifier_exact "signaux Git : aucune erreur (worktree disparu compris)" 0 "$p/x.html" scripts/dashboard.sh --sortie "$p/x.html"
+mv "$p/x.html" dashboard.html
+carte_s() { grep -F "<strong>$1</strong>" dashboard.html | grep -F 'class="carte'; }
+carte_s 003-01 | grep -qF '<span class="detail signal">3 fichiers non commités · activité il y a moins d'"'"'1 min</span>' && ok "compte des fichiers non commités : modifié, renommé (une entrée), nom avec espace" || ko "compte" "$(carte_s 003-01)"
+carte_s 003-02 | grep -qF '<span class="detail signal">1 fichier non commité · activité il y a 10 min</span>' && ok "singulier ; activité = fichier modifié plus récent que le dernier commit" || ko "singulier" "$(carte_s 003-02)"
+carte_s 003-03 | grep -qF '<span class="detail signal">aucun fichier non commité · activité il y a 2 h 05</span>' && ok "aucun fichier : « aucun fichier non commité », activité = dernier commit" || ko "zéro" "$(carte_s 003-03)"
+! carte_s 003-04 | grep -q 'signal' && ! carte_s 003-05 | grep -q 'signal' && ok "issue sans worktree, ou worktree disparu : aucun signal" || ko "sans worktree" "$(carte_s 003-04; carte_s 003-05)"
+awk '/<section id="en-cours">/ { s = 1 } s && /003-01/ { print; exit }' dashboard.html | grep -qF '<span class="signal">3 fichiers non commités · activité il y a moins d'"'"'1 min</span></li>' && ok "encart En cours : signal sur la ligne de l'issue" || ko "encart" "$(grep -A4 'id="en-cours"' dashboard.html)"
+[ "$(cksum < "$index_w3")" = "$avant_index" ] && [ ! -e "${index_w3}.lock" ] && ok "git status sans verrou optionnel : index d'un agent jamais réécrit" || ko "index réécrit par le dashboard"
+git -C "$racine_tmp/wt-s3" status --porcelain >/dev/null; [ "$(cksum < "$index_w3")" != "$avant_index" ] && ok "témoin : un git status ordinaire, lui, réécrit cet index" || ko "témoin de l'index (le cas ne prouve rien)"
+# Git en échec ou activité illisible : « état Git illisible », jamais « aucun fichier » ni une durée absurde.
+issue_s 003-06 "À faire" feat/s6; issue_s 003-07 "À faire" feat/s7; issue_s 003-08 "À faire" feat/s8
+for b in s6 s7 s8; do git worktree add -q "$racine_tmp/wt-$b" -b "feat/$b" >/dev/null 2>&1; done
+printf 'c\n' > "$racine_tmp/wt-s6/c6.txt"; gd_ -C "$racine_tmp/wt-s6" add c6.txt
+GIT_COMMITTER_DATE="@$((maintenant - 7500)) +0000" gd_ -C "$racine_tmp/wt-s6" commit -qm s6
+mkdir "$racine_tmp/wt-s6/inconnu"; printf 'a\n' > "$racine_tmp/wt-s6/inconnu/f.txt"; printf 'b\n' >> "$racine_tmp/wt-s6/inconnu/f.txt"
+touch -t "$(date_t $((maintenant - 9000)))" "$racine_tmp/wt-s6/inconnu"
+printf 'gitdir: /inexistant\n' > "$racine_tmp/wt-s7/.git"
+scripts/dashboard.sh >/dev/null
+carte_s 003-07 | grep -qF '<span class="detail signal">état Git illisible</span>' && ok "git status en échec (.git corrompu) : « état Git illisible », sans durée" || ko "git status en échec" "$(carte_s 003-07)"
+carte_s 003-06 | grep -qF '<span class="detail signal">1 fichier non commité · activité il y a 2 h 05</span>' && ok "limite figée : modifier un fichier existant d'un dossier non suivi ne bouge pas l'âge (entrée « dir/ »)" || ko "dossier non suivi" "$(carte_s 003-06)"
+real_git="$(command -v git)"; mkdir -p "$p/stub"
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in *%%ct*) exit 1 ;; esac; done\nexec "%s" "$@"\n' "$real_git" > "$p/stub/git"; chmod +x "$p/stub/git"
+PATH="$p/stub:$PATH" scripts/dashboard.sh --sortie "$p/stub.html" >/dev/null 2>&1
+grep -F '<strong>003-08</strong>' "$p/stub.html" | grep -qF '<span class="detail signal">état Git illisible</span>' && ! grep -Eq 'il y a [0-9]{4,} h' "$p/stub.html" && ok "activité illisible (git log en échec) : « état Git illisible », pas d'âge absurde" || ko "git log en échec" "$(grep -F '<strong>003-08</strong>' "$p/stub.html")"
+echo "dashboard.sh : encart « Autres travaux » (worktrees sans issue)"
+p="$(nouveau_projet)"; cd "$p" || exit 1
+git init -q -b develop .; printf 'dashboard.html\n' > .gitignore; rm -f docs/issues/[0-9]*.md
+issue_a() { printf -- '---\nid: %s\ntitre: T%s\nbesoin: F-01\nstatut: En cours\nbranche: %s\ndepend_de: []\n---\n' "$1" "$1" "$2" > "docs/issues/$1-x.md"; }
+issue_a 004-01 feat/i1
+gd_ add -A; gd_ commit -qm init
+HA='fix/<b>x&y</b>'
+git worktree add -q "$racine_tmp/wt-i1" -b feat/i1 >/dev/null 2>&1
+git worktree add -q "$racine_tmp/wt-rx" -b refactor/x >/dev/null 2>&1
+git worktree add -q "$racine_tmp/wt-ha" -b "$HA" >/dev/null 2>&1
+git worktree add -q "$racine_tmp/wt-dz" -b docs/z >/dev/null 2>&1
+git worktree add -q "$racine_tmp/wt-main" -b main >/dev/null 2>&1
+git worktree add -q --detach "$racine_tmp/wt-det" >/dev/null 2>&1
+printf 'a\n' > "$racine_tmp/wt-rx/a.txt"; printf 'b\n' > "$racine_tmp/wt-rx/b.txt"
+printf 'a\n' > "$racine_tmp/wt-i1/a.txt"; printf 'a\n' > "$racine_tmp/wt-main/a.txt"; printf 'a\n' > "$racine_tmp/wt-det/a.txt"; printf 'a\n' > f-develop.txt
+printf 'a\n' > "$racine_tmp/wt-ha/a.txt"
+printf 'gitdir: /inexistant\n' > "$racine_tmp/wt-dz/.git"
+sortie_a="$racine_tmp/autres.html"
+verifier_exact "autres travaux : aucune erreur (branche hostile, détachée, .git corrompu)" 0 "$sortie_a" scripts/dashboard.sh --sortie "$sortie_a"
+autres() { awk '/<section id="autres-travaux">/ { s = 1 } s { print } s && /<\/section>/ { exit }' "$1"; }
+autres "$sortie_a" | grep -qF '<li><strong>refactor/x</strong> <span class="signal">2 fichiers non commités · activité il y a moins d'"'"'1 min</span></li>' && ok "autres travaux : worktree sans issue = branche, fichiers non commités et activité" || ko "autres travaux : ligne refactor/x" "$(autres "$sortie_a")"
+! autres "$sortie_a" | grep -qF 'feat/i1' && [ -n "$(autres "$sortie_a")" ] && ok "autres travaux : la branche d'une issue n'y figure pas" || ko "autres travaux : branche d'issue présente" "$(autres "$sortie_a")"
+! autres "$sortie_a" | grep -qF '<strong>develop</strong>' && ! autres "$sortie_a" | grep -qF '<strong>main</strong>' && [ -n "$(autres "$sortie_a")" ] && ok "autres travaux : ni develop ni main" || ko "autres travaux : develop ou main présent" "$(autres "$sortie_a")"
+[ "$(autres "$sortie_a" | grep -c '<li>')" = 3 ] && ok "autres travaux : une ligne par worktree sur branche (HEAD détaché exclu)" || ko "autres travaux : nombre de lignes" "$(autres "$sortie_a")"
+autres "$sortie_a" | grep -qF '<li><strong>fix/&lt;b&gt;x&amp;y&lt;/b&gt;</strong> ' && ! grep -qF '<b>x' "$sortie_a" && ok "cs_ autres travaux : nom de branche hostile échappé HTML" || ko "cs_ autres travaux : branche non échappée" "$(autres "$sortie_a")"
+autres "$sortie_a" | grep -qF '<li><strong>docs/z</strong> <span class="signal">état Git illisible</span></li>' && ok "autres travaux : git en échec = « état Git illisible »" || ko "autres travaux : git en échec" "$(autres "$sortie_a")"
+ordre_git="$(git worktree list --porcelain | sed -n 's#^branch refs/heads/##p' | grep -v -e '^develop$' -e '^main$' -e '^feat/i1$' | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' | paste -sd' ' -)"
+[ "$(autres "$sortie_a" | sed -n 's#^<li><strong>\(.*\)</strong> <span.*#\1#p' | paste -sd' ' -)" = "$ordre_git" ] && [ -n "$ordre_git" ] && ok "autres travaux : lignes dans l'ordre de git worktree list" || ko "autres travaux : ordre" "$(autres "$sortie_a")"
+[ "$(grep -n '<section id="issues">' "$sortie_a" | cut -d: -f1)" -lt "$(grep -n '<section id="autres-travaux">' "$sortie_a" | cut -d: -f1)" ] && ok "autres travaux : l'encart vient après les issues" || ko "autres travaux : position" "$(grep -n '<section' "$sortie_a")"
+for w in i1 rx ha dz main det; do git worktree remove --force "$racine_tmp/wt-$w" >/dev/null 2>&1; done
+rm -rf "$racine_tmp/wt-dz"; git worktree prune
+scripts/dashboard.sh --sortie "$sortie_a" >/dev/null
+autres "$sortie_a" | grep -qF '<p>Aucun autre travail.</p>' && ! autres "$sortie_a" | grep -q '<li>' && ok "autres travaux : aucun worktree concerné = « Aucun autre travail. »" || ko "autres travaux : aucun autre travail" "$(autres "$sortie_a")"
+for f in factory/scripts/dashboard.sh factory/README.md factory/CHANGELOG.md; do
+  lire_depot "$depot" "$f" | grep -q "Autres travaux" && ok "$f : encart « Autres travaux » documenté" || ko "$f : encart « Autres travaux » non documenté"
+done
+version_courante="$(lire_depot "$depot" factory/VERSION | head -n1)"; titre_tete="$(lire_depot "$depot" factory/CHANGELOG.md | sed -n 's/^## //p' | head -n1)"
+[ -n "$version_courante" ] && [ "$titre_tete" = "$version_courante" ] && ok "version $version_courante : VERSION et en-tête du CHANGELOG concordent" || ko "VERSION ($version_courante) et première section du CHANGELOG ($titre_tete) divergent"
+
+
+echo "hook-agents-claude.sh (journal des agents, propre à Claude Code)"
+h="$(mktemp -d "$racine_tmp/h.XXXXXX")" || { ko "mktemp du dépôt du hook"; h=/inexistant; }
+mkdir -p "$h/depot/factory" "$h/sessions/s1/subagents" && cp "$factory/hook-agents-claude.sh" "$h/depot/factory/" && git -C "$h/depot" init -q .
+hook="$h/depot/factory/hook-agents-claude.sh"; journal_h="$h/depot/.git/factory-agents.log"; trans="$h/sessions/s1.jsonl"; sous="$h/sessions/s1/subagents"
+json_debut() { # json_debut <agent_id (JSON brut)> <type (JSON brut)> [transcript] : entrée de SubagentStart
+  printf '{"session_id":"s1","transcript_path":"%s","cwd":"/x","agent_id":"%s","agent_type":"%s","hook_event_name":"SubagentStart"}' "${3:-$trans}" "$1" "$2"
+}
+hook_muet() { # hook_muet <description> <entrée> <arguments...> : code 0 et aucune sortie
+  local desc="$1" entree="$2" sortie code; shift 2
+  sortie="$(printf '%s' "$entree" | "$@" 2>&1)"; code=$?
+  [ "$code" -eq 0 ] && [ -z "$sortie" ] && ok "$desc" || ko "$desc" "code $code ; sortie : $sortie"
+}
+lignes_h() { [ -f "$journal_h" ] && wc -l < "$journal_h" | tr -d ' ' || echo 0; }
+hook_muet "hook debut : code 0, aucune sortie" "$(json_debut a1 developer)" "$hook" debut
+avant=$(date +%s)
+derniere="$(tail -n 1 "$journal_h" 2>/dev/null)"
+printf '%s\n' "$derniere" | awk -F'\t' -v t="$avant" -v c="$sous/agent-a1.jsonl" 'NF == 5 && $1 == "debut" && $2 ~ /^[0-9]+$/ && $2 <= t && $2 > t - 60 && $3 == "a1" && $4 == "developer" && $5 == c { ok = 1 } END { exit !ok }' && ok "hook debut : « debut, epoch, agent_id, rôle, journal de l'agent » séparés par des tabulations" || ko "format debut" "$derniere"
+hook_muet "hook fin : code 0, aucune sortie" '{"session_id":"s1","agent_id":"a1","agent_type":"developer","last_assistant_message":"faux \"agent_id\":\"zz\"","agent_transcript_path":"/x"}' "$hook" fin
+derniere="$(tail -n 1 "$journal_h" 2>/dev/null)"
+printf '%s\n' "$derniere" | awk -F'\t' 'NF == 3 && $1 == "fin" && $2 ~ /^[0-9]+$/ && $3 == "a1" { ok = 1 } END { exit !ok }' && ok "hook fin : « fin, epoch, agent_id » ; un agent_id cité dans un message n'est pas pris" || ko "format fin" "$derniere"
+n=$(lignes_h)
+hook_muet "hook : JSON invalide, code 0 et muet" 'pas du json' "$hook" debut
+hook_muet "hook : argument inconnu, code 0 et muet" "$(json_debut a9 developer)" "$hook" autre
+hook_muet "hook : sans argument, code 0 et muet" "$(json_debut a9 developer)" "$hook"
+hook_muet "cs_hook : agent_id avec tabulation, code 0 et muet" "$(json_debut 'a\tb' developer)" "$hook" debut
+hook_muet "cs_hook : agent_id hors [A-Za-z0-9_-], code 0 et muet" "$(json_debut '../x$(touch pwn)' developer)" "$hook" debut
+[ "$(lignes_h)" = "$n" ] && [ ! -e "$h/depot/pwn" ] && ok "cs_hook : entrée invalide ou agent_id hostile : rien n'est écrit" || ko "entrée invalide écrite" "$(tail -n 3 "$journal_h")"
+hook_muet "cs_hook : rôle avec tabulation et retour à la ligne" "$(json_debut a7 'dev\teloper\nx')" "$hook" debut
+tail -n 1 "$journal_h" | awk -F'\t' 'NF == 5 && $3 == "a7" && $4 == "dev eloper x" { ok = 1 } END { exit !ok }' && ok "cs_hook : tabulation et retour à la ligne du rôle remplacés par une espace" || ko "rôle assaini" "$(tail -n 1 "$journal_h")"
+# Hors dépôt git, et journal non inscriptible : toujours muet, code 0.
+mkdir -p "$h/hors/factory" && cp "$factory/hook-agents-claude.sh" "$h/hors/factory/"
+GIT_CEILING_DIRECTORIES="$h" hook_muet "hook hors dépôt git : code 0 et muet" "$(json_debut a1 developer)" "$h/hors/factory/hook-agents-claude.sh" debut
+if [ "$(id -u)" -eq 0 ]; then ok "journal non inscriptible : sauté sous root (les droits ne s'appliquent pas)"; else
+  mkdir -p "$h/ro/factory" && cp "$factory/hook-agents-claude.sh" "$h/ro/factory/" && git -C "$h/ro" init -q . && chmod a-w "$h/ro/.git"
+  hook_muet "hook : journal non inscriptible, code 0 et muet" "$(json_debut a1 developer)" "$h/ro/factory/hook-agents-claude.sh" debut
+  chmod u+w "$h/ro/.git"
+fi
+# Description : meta.json apparaît APRÈS SubagentStart ; le hook l'attend en arrière-plan, détaché.
+attendre_ligne() { # attendre_ligne <motif awk> : vrai dès qu'une ligne du journal y répond (5 s au plus)
+  local n=0
+  while [ "$n" -lt 50 ]; do awk -F'\t' "$1 { t = 1 } END { exit !t }" "$journal_h" 2>/dev/null && return 0; sleep 0.1; n=$((n + 1)); done
+  return 1
+}
+debut_h=$(date +%s)
+# Sortie capturée : si le sous-processus gardait la sortie du hook ouverte, la capture attendrait sa fin (15 s).
+sortie_h="$(for a in a2 a3 a4 a5; do printf '%s' "$(json_debut "$a" developer)" | "$hook" debut; done 2>&1)"
+duree_h=$(( $(date +%s) - debut_h ))
+[ "$duree_h" -le 2 ] && [ -z "$sortie_h" ] && ok "hook debut rend la main sans attendre meta.json (${duree_h} s pour 4 appels)" || ko "hook debut bloquant" "${duree_h} s"
+printf '{"agentType":"developer","description":"Essai A \\"guillemets\\" \\\\ et\\ttab\\nligne"}' > "$sous/agent-a2.meta.json"
+e_long="$(printf 'é%.0s' $(seq 1 130))"
+printf '{"agentType":"developer","description":"a%s"}' "$e_long" > "$sous/agent-a3.meta.json"
+printf '{"agentType":"developer","autre":"rien"}' > "$sous/agent-a5.meta.json"
+attendu_a2='Essai A "guillemets" \ et tab ligne'
+attendre_ligne "\$1 == \"description\" && \$3 == \"a2\"" && D="$attendu_a2" awk -F'\t' '$1 == "description" && $3 == "a2" && NF == 4 && $2 ~ /^[0-9]+$/ && $4 == ENVIRON["D"] { t = 1 } END { exit !t }' "$journal_h" && ok "hook : description de meta.json inscrite (guillemets et barre oblique décodés, sans tabulation ni retour à la ligne)" || ko "description extraite" "$(grep 'a2' "$journal_h")"
+attendu_a3="a$(printf 'é%.0s' $(seq 1 119))"
+attendre_ligne "\$1 == \"description\" && \$3 == \"a3\"" && [ "$(awk -F'\t' '$1 == "description" && $3 == "a3" { print $4 }' "$journal_h")" = "$attendu_a3" ] && ok "hook : description tronquée à 120 caractères, sans couper un caractère multioctet" || ko "troncature" "$(awk -F'\t' '$3 == "a3" { print $4 }' "$journal_h" | wc -c)"
+sleep 1
+! grep -q "^description	[0-9]*	a4	" "$journal_h" && ! grep -q "^description	[0-9]*	a5	" "$journal_h" && ok "hook : sans meta.json, ou sans description, aucune ligne description" || ko "description inventée" "$(grep -E 'a4|a5' "$journal_h")"
+# Entrée volumineuse : un gros champ AVANT agent_id ne fait pas perdre l'écriture (borne de lecture : 1 Mio).
+gros="$(head -c 70000 /dev/zero | tr '\0' 'x')"
+printf '{"session_id":"s1","last_assistant_message":"%s","agent_id":"big1","agent_type":"developer","transcript_path":"%s"}' "$gros" "$trans" | "$hook" debut
+grep -q "^debut	[0-9]*	big1	developer	" "$journal_h" && ok "hook : entrée de 70 Kio, gros champ avant agent_id : début inscrit" || ko "entrée volumineuse" "$(tail -n 2 "$journal_h" | cut -c1-80)"
+# Clé répétée : la première occurrence gagne (pas celle d'un objet imbriqué plus loin).
+printf '%s' "$(json_debut a6 developer)" | "$hook" debut
+printf '{"description":"vraie","tools":[{"description":"outil"}]}' > "$sous/agent-a6.meta.json"
+attendre_ligne "\$1 == \"description\" && \$3 == \"a6\"" && [ "$(awk -F'\t' '$1 == "description" && $3 == "a6" { print $4 }' "$journal_h")" = vraie ] && ok "hook : clé répétée dans meta.json, la première occurrence est prise" || ko "première occurrence" "$(grep 'a6' "$journal_h")"
+# Rotation : au-delà de 2000 lignes, seules les 1000 dernières restent.
+awk 'BEGIN { for (i = 1; i <= 2000; i++) print "fin\t1\tr" i }' > "$journal_h"
+printf '%s' "$(json_debut a8 developer)" | "$hook" debut
+[ "$(lignes_h)" = 2001 ] && ok "rotation : 2000 lignes, rien n'est retiré" || ko "rotation à 2000" "$(lignes_h)"
+printf '%s' "$(json_debut a9 developer)" | "$hook" debut
+[ "$(lignes_h)" = 1001 ] && [ "$(head -n 1 "$journal_h" | cut -f3)" = r1002 ] && [ "$(tail -n 1 "$journal_h" | cut -f3)" = a9 ] && [ -z "$(ls "$h/depot/.git" | grep 'factory-agents.log.')" ] && ok "rotation : au-delà de 2000 lignes, les 1000 dernières puis la nouvelle, sans temporaire" || ko "rotation" "$(lignes_h) lignes ; $(head -n 1 "$journal_h")"
+# Journal commun à tous les worktrees, clone bare compris.
+git -C "$h/depot" add -A && git -C "$h/depot" -c user.name=t -c user.email=t@t commit -qm hook
+git -C "$h/depot" worktree add -q "$h/wt2" -b b2 >/dev/null 2>&1
+printf '%s' "$(json_debut w2 developer)" | "$h/wt2/factory/hook-agents-claude.sh" debut
+[ "$(tail -n 1 "$journal_h" | cut -f3)" = w2 ] && [ ! -e "$h/wt2/.git/factory-agents.log" ] && ok "worktree secondaire : même journal que le dépôt principal" || ko "journal du worktree secondaire" "$(tail -n 1 "$journal_h")"
+git clone -q --bare "$h/depot" "$h/nu.git" && git -C "$h/nu.git" worktree add -q "$h/wt-nu" "$(git -C "$h/depot" symbolic-ref --short HEAD)" >/dev/null 2>&1
+printf '%s' "$(json_debut b1 developer)" | "$h/wt-nu/factory/hook-agents-claude.sh" debut
+[ "$(cut -f3 "$h/nu.git/factory-agents.log" 2>/dev/null)" = b1 ] && ok "clone bare : journal dans le dépôt bare commun" || ko "journal du clone bare" "$(ls "$h/nu.git")"
+
+echo "fin-issue.sh"
+p="$(nouveau_projet)"; cd "$p" || exit 1
+fin_projet() { # dépôt git propre ; .factory-verify = <commande> ; un test ca10 dans src/test
+  printf '%s\n' "$1" > .factory-verify; printf 'void ca10_x() {}\n' > src/test/A.java
+  git add -A >/dev/null; git -c user.name=t -c user.email=t@t commit -qm "etat $RANDOM" --allow-empty
+}
+git init -q .; printf 'args.txt\n' > .gitignore
+issue_id "$p" 001-01 "En cours" docs/prd/001-m.md "[CA-10]" "[]"
+issue_id "$p" 001-02 "En cours" docs/prd/001-m.md "[CA-99]" "[]"
+maven() { printf "echo '[INFO] Tests run: %s, Failures: 0, Errors: 0, Skipped: %s'" "$1" "$2"; }
+fin_projet "$(maven 7 0)"; court="$(git rev-parse --short HEAD)"
+verifier_exact "fin-issue : dernière ligne de succès" 0 "FIN-ISSUE OK 001-01 $court : 7 tests, 0 échec, 0 ignoré" sh -c 'scripts/fin-issue.sh 001-01 2>&1 | tail -1; exit $(scripts/fin-issue.sh 001-01 >/dev/null 2>&1; echo $?)'
+verifier "fin-issue : commit vérifié complet affiché" 0 "Commit vérifié : $(git rev-parse HEAD)" scripts/fin-issue.sh 001-01
+verifier "fin-issue : critère manquant" 1 "FIN-ISSUE ECHEC : .*critère" scripts/fin-issue.sh 001-02
+verifier "fin-issue : issue inconnue = 64" 64 "Aucune issue" scripts/fin-issue.sh 999
+verifier "fin-issue : sans argument = 64" 64 "Usage" scripts/fin-issue.sh
+verifier "fin-issue : argument après l'issue sans -- = 64" 64 "Usage" scripts/fin-issue.sh 001-01 x
+fin_projet "exit 3"
+verifier "fin-issue : build rouge" 1 "FIN-ISSUE ECHEC : .*build" scripts/fin-issue.sh 001-01
+fin_projet "$(maven 7 6)"
+verifier "fin-issue : tests ignorés = échec" 1 "FIN-ISSUE ECHEC : 6 test\(s\) ignoré" scripts/fin-issue.sh 001-01
+printf 'FIN_ISSUE_IGNORES_AUTORISES=6\n' > .factory.conf; git add -A; git -c user.name=t -c user.email=t@t commit -qm conf
+verifier "fin-issue : ignorés autorisés par la configuration" 0 "FIN-ISSUE OK 001-01 .* : 7 tests, 0 échec, 6 ignorés \(autorisés\)" scripts/fin-issue.sh 001-01
+printf 'FIN_ISSUE_IGNORES_AUTORISES=5\n' > .factory.conf; git add -A; git -c user.name=t -c user.email=t@t commit -qm conf
+verifier "fin-issue : plus d'ignorés que l'autorisation = échec (borne)" 1 "FIN-ISSUE ECHEC : 6 test\(s\) ignoré" scripts/fin-issue.sh 001-01
+printf 'FIN_ISSUE_IGNORES_AUTORISES=abc\n' > .factory.conf; git add -A; git -c user.name=t -c user.email=t@t commit -qm conf
+verifier "fin-issue : autorisation invalide = 64" 64 "FIN_ISSUE_IGNORES_AUTORISES invalide" scripts/fin-issue.sh 001-01
+git rm -qf .factory.conf; git -c user.name=t -c user.email=t@t commit -qm conf
+fin_projet "echo bonjour"
+verifier "fin-issue : nombre illisible = échec dit clairement" 1 "FIN-ISSUE ECHEC : nombre de tests ignorés illisible" scripts/fin-issue.sh 001-01
+printf 'FIN_ISSUE_IGNORES_AUTORISES=inconnu\n' > .factory.conf; git add -A; git -c user.name=t -c user.email=t@t commit -qm conf
+verifier "fin-issue : illisible autorisé explicitement" 0 "FIN-ISSUE OK 001-01 .* : tests non comptés, ignorés inconnus \(autorisé\)" scripts/fin-issue.sh 001-01
+git rm -qf .factory.conf; git -c user.name=t -c user.email=t@t commit -qm conf
+fin_projet "$(maven 0 0)"
+verifier "fin-issue : zéro test = échec" 1 "FIN-ISSUE ECHEC : aucun test" scripts/fin-issue.sh 001-01
+fin_projet "echo '= 5 passed, 2 skipped in 0.1s ='"
+verifier "fin-issue : ignorés lus chez pytest" 1 "FIN-ISSUE ECHEC : 2 test\(s\) ignoré" scripts/fin-issue.sh 001-01
+fin_projet "echo 'Ran 4 tests in 0.1s'; echo 'OK (skipped=1)'"
+verifier "fin-issue : ignorés lus chez unittest" 1 "FIN-ISSUE ECHEC : 1 test\(s\) ignoré" scripts/fin-issue.sh 001-01
+fin_projet "echo 'Ran 4 tests in 0.1s'; echo OK"
+verifier "fin-issue : unittest sans ignoré" 0 "FIN-ISSUE OK 001-01 .* : 4 tests, 0 échec, 0 ignoré" scripts/fin-issue.sh 001-01
+fin_projet "echo 'TESTS OK : 9 vérifications'"
+verifier "fin-issue : suite de la factory" 0 "FIN-ISSUE OK 001-01 .* : 9 tests, 0 échec, 0 ignoré" scripts/fin-issue.sh 001-01
+fin_projet "echo '[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 2'; echo '[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0'"
+verifier "verify-clean : Maven, les résumés de plusieurs modules sont additionnés" 0 "Tests : Tests run: 8, Failures: 0, Errors: 0, Skipped: 2" scripts/verify-clean.sh
+verifier "fin-issue : ignorés d'un premier module vus" 1 "FIN-ISSUE ECHEC : 2 test\(s\) ignoré" scripts/fin-issue.sh 001-01
+ecrit="$p/args.txt"
+fin_projet "printf '[%s]\n' \"\$@\" > '$ecrit'; $(maven 1 0)"
+verifier "fin-issue : argument avec espaces après --" 0 "FIN-ISSUE OK" scripts/fin-issue.sh 001-01 -- "-Dessai.chrome=/A B/Google Chrome"
+[ "$(cat args.txt)" = "[-Dessai.chrome=/A B/Google Chrome]" ] && ok "fin-issue : l'argument arrive entier" || ko "fin-issue : l'argument arrive entier" "$(cat args.txt)"
+printf 'FIN_ISSUE_ARGUMENTS=-Dx=/A B/C D|-Pessai\n' > .factory.local.conf; printf '.factory.local.conf\n' >> .gitignore; git add -A; git -c user.name=t -c user.email=t@t commit -qm conf
+verifier "fin-issue : arguments de la configuration" 0 "FIN-ISSUE OK" scripts/fin-issue.sh 001-01 -- -Z
+[ "$(cat args.txt)" = "[-Dx=/A B/C D]
+[-Pessai]
+[-Z]" ] && ok "fin-issue : configuration découpée sur |, espaces gardés, puis arguments de --" || ko "fin-issue : configuration découpée" "$(cat args.txt)"
+# Revue, itération 1
+: > .factory.local.conf; gc_() { git -c user.name=t -c user.email=t@t "$@"; }
+fin_projet "echo '[ERROR] Tests run: 5, Failures: 2, Errors: 1, Skipped: 0'"
+verifier "fin-issue : échecs Maven avec un build au code 0" 1 "FIN-ISSUE ECHEC : 3 test\(s\) en échec" scripts/fin-issue.sh 001-01
+fin_projet "echo '= 3 failed, 2 passed in 0.1s ='"
+verifier "fin-issue : échecs pytest avec un build au code 0" 1 "FIN-ISSUE ECHEC : 3 test\(s\) en échec" scripts/fin-issue.sh 001-01
+fin_projet "echo '= 1 error, 2 passed in 0.1s ='"
+verifier "fin-issue : erreur pytest" 1 "FIN-ISSUE ECHEC : 1 test\(s\) en échec" scripts/fin-issue.sh 001-01
+fin_projet "echo '= 5 passed, 2 deselected, 1 xfailed in 0.1s ='"
+verifier "fin-issue : pytest deselected et xfailed comptés comme ignorés" 1 "FIN-ISSUE ECHEC : 3 test\(s\) ignoré" scripts/fin-issue.sh 001-01
+fin_projet "echo 'Ran 4 tests in 0.1s'; echo 'OK (skipped=2)'; echo 'Ran 4 tests in 0.1s'; echo OK"
+verifier "verify-clean : suites unittest additionnées" 0 "Tests : Ran 8 tests ; OK \(skipped=2\)" scripts/verify-clean.sh
+verifier "fin-issue : ignorés de la première suite unittest vus" 1 "FIN-ISSUE ECHEC : 2 test\(s\) ignoré" scripts/fin-issue.sh 001-01
+fin_projet "echo 'Ran 4 tests in 0.1s'; echo 'FAILED (failures=1, errors=2)'"
+verifier "fin-issue : échecs unittest avec un build au code 0" 1 "FIN-ISSUE ECHEC : 3 test\(s\) en échec" scripts/fin-issue.sh 001-01
+fin_projet "echo 'Tests:       1 skipped, 2 failed, 5 passed, 8 total'"
+verifier "fin-issue : jest, échecs lus" 1 "FIN-ISSUE ECHEC : 2 test\(s\) en échec" scripts/fin-issue.sh 001-01
+fin_projet "echo 'Tests:       1 skipped, 5 passed, 6 total'"
+verifier "fin-issue : jest, ignorés lus" 1 "FIN-ISSUE ECHEC : 1 test\(s\) ignoré" scripts/fin-issue.sh 001-01
+fin_projet "echo 'Tests:       5 passed, 5 total'"
+verifier "fin-issue : jest, succès" 0 "FIN-ISSUE OK 001-01 .* : 5 tests, 0 échec, 0 ignoré" scripts/fin-issue.sh 001-01
+fin_projet "printf 'ℹ tests 5\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 1\nℹ todo 0\n'"
+verifier "fin-issue : node:test, ignorés lus" 1 "FIN-ISSUE ECHEC : 1 test\(s\) ignoré" scripts/fin-issue.sh 001-01
+fin_projet "printf '# tests 5\n# pass 3\n# fail 1\n# cancelled 1\n# skipped 0\n# todo 0\n'"
+verifier "fin-issue : node:test en TAP, échecs lus" 1 "FIN-ISSUE ECHEC : 2 test\(s\) en échec" scripts/fin-issue.sh 001-01
+fin_projet "printf '# tests 5\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n'"
+verifier "fin-issue : node:test, succès" 0 "FIN-ISSUE OK 001-01 .* : 5 tests, 0 échec, 0 ignoré" scripts/fin-issue.sh 001-01
+fin_projet "echo '[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0'; true"
+verifier "fin-issue : arguments de ligne de commande signalés" 0 "FIN-ISSUE OK .* ; arguments : -Dtest=Seul \(ligne de commande\)" scripts/fin-issue.sh 001-01 -- -Dtest=Seul
+printf 'FIN_ISSUE_ARGUMENTS=-Pessai\n' > .factory.local.conf
+verifier "fin-issue : arguments de configuration signalés" 0 "FIN-ISSUE OK .* ; arguments : -Pessai \(configuration\)" scripts/fin-issue.sh 001-01
+: > .factory.local.conf
+fin_projet "echo '[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 1'"
+verifier "fin-issue : autorisation venue de l'environnement signalée" 0 "FIN-ISSUE OK .* ; autorisation d'ignorés venue de l'environnement" env FACTORY_FIN_ISSUE_IGNORES_AUTORISES=1 scripts/fin-issue.sh 001-01
+fin_projet "echo '[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0'"
+touch cache-invisible; git -c status.showUntrackedFiles=no status --porcelain >/dev/null; git config status.showUntrackedFiles no
+verifier "fin-issue : non suivi vu malgré status.showUntrackedFiles=no" 1 "FIN-ISSUE ECHEC : arbre Git non propre" scripts/fin-issue.sh 001-01
+git config --unset status.showUntrackedFiles; : > .gitignore.tmp; /bin/rm -f cache-invisible .gitignore.tmp
+printf 'marque\n' > marque.txt; git add marque.txt; gc_ commit -qm marque; git update-index --skip-worktree marque.txt; printf 'x\n' >> marque.txt
+verifier "fin-issue : fichier skip-worktree refusé" 1 "FIN-ISSUE ECHEC : fichiers marqués" scripts/fin-issue.sh 001-01
+git update-index --no-skip-worktree marque.txt; git update-index --assume-unchanged marque.txt
+verifier "fin-issue : fichier assume-unchanged refusé" 1 "FIN-ISSUE ECHEC : fichiers marqués" scripts/fin-issue.sh 001-01
+git update-index --no-assume-unchanged marque.txt; git checkout -q -- marque.txt 2>/dev/null || printf 'marque\n' > marque.txt
+printf 'void ca77_x() {}\n' > src/test/Ignore.java; printf 'src/test/Ignore.java\n' >> .gitignore; git add .gitignore; gc_ commit -qm ignore
+issue_id "$p" 001-03 "En cours" docs/prd/001-m.md "[CA-77]" "[]"; git add -A; gc_ commit -qm i3
+verifier "fin-issue : test dans un fichier ignoré, critère manquant" 1 "FIN-ISSUE ECHEC : .*critère sans test" scripts/fin-issue.sh 001-03
+fin_projet "touch '$p/pendant.txt'; echo '[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0'"
+verifier "fin-issue : arbre modifié pendant la vérification" 1 "FIN-ISSUE ECHEC : arbre Git modifié pendant" scripts/fin-issue.sh 001-01
+/bin/rm -f pendant.txt
+fin_projet "echo 'Ran 3 tests in 0.1s'; echo 'FAILED (unexpected successes=1)'"
+verifier "fin-issue : verdict FAILED sans échec compté" 1 "FIN-ISSUE ECHEC : .*verdict FAILED" scripts/fin-issue.sh 001-01
+fin_projet "echo 'Tests:       1 skipped, 5 passed, 6 total'; echo 'Tests:       2 passed, 2 total'"
+verifier "fin-issue : jest, ignorés du premier résumé vus" 1 "FIN-ISSUE ECHEC : 1 test\\(s\\) ignoré" scripts/fin-issue.sh 001-01
+fin_projet "echo '= 1 failed, 1 passed in 0.1s ='; echo '= 2 passed in 0.1s ='"
+verifier "fin-issue : pytest unit puis integ, échec du premier vu" 1 "FIN-ISSUE ECHEC : 1 test\\(s\\) en échec" scripts/fin-issue.sh 001-01
+fin_projet "echo '= 3 passed in 0.1s ='; echo '= 2 passed, 1 skipped in 0.1s ='"
+verifier "verify-clean : résumés pytest additionnés" 0 "Tests : 5 passed, 1 skipped" scripts/verify-clean.sh
+fin_projet "printf '# tests 2\\n# pass 1\\n# fail 1\\n# cancelled 0\\n# skipped 0\\n# todo 0\\n# tests 3\\n# pass 3\\n# fail 0\\n# cancelled 0\\n# skipped 0\\n# todo 0\\n'"
+verifier "fin-issue : deux blocs node:test, échec du premier vu" 1 "FIN-ISSUE ECHEC : 1 test\\(s\\) en échec" scripts/fin-issue.sh 001-01
+fin_projet "touch '$p/cree.txt'; echo '[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0'"; git config status.showUntrackedFiles no
+verifier "fin-issue : fichier créé par le build vu malgré status.showUntrackedFiles=no" 1 "FIN-ISSUE ECHEC : arbre Git modifié pendant" scripts/fin-issue.sh 001-01
+git config --unset status.showUntrackedFiles; /bin/rm -f cree.txt
+fin_projet "echo '[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0'"
+verifier "fin-issue : DOSSIER_TESTS absolu refusé" 64 "FIN-ISSUE ECHEC : DOSSIER_TESTS" env DOSSIER_TESTS="$p/src/test" scripts/fin-issue.sh 001-01
+verifier "fin-issue : DOSSIER_TESTS avec .. refusé" 64 "FIN-ISSUE ECHEC : DOSSIER_TESTS" env DOSSIER_TESTS="src/../../x" scripts/fin-issue.sh 001-01
+verifier "fin-issue : DOSSIER_TESTS relatif admis" 0 "FIN-ISSUE OK" env DOSSIER_TESTS="src/test" scripts/fin-issue.sh 001-01
+# Plusieurs types de résumé : un seul serait lu, les ignorés ou échecs des autres se perdraient.
+MELANGE='FIN-ISSUE ECHEC : nombre de tests ignorés illisible dans le résumé \(« plusieurs types de résumé'
+M_OK="echo '[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0'"
+fin_projet "$M_OK && echo 'Tests: 4 skipped, 5 passed, 9 total'"
+verifier "fin-issue : Maven puis jest = résumé illisible" 1 "$MELANGE \(Maven, jest\)" scripts/fin-issue.sh 001-01
+verifier "verify-clean : Maven puis jest, code du build gardé" 0 "VERIFY OK" scripts/verify-clean.sh
+fin_projet "echo 'Ran 1 test in 0.001s'; echo OK; echo '2 passed, 4 skipped'"
+verifier "fin-issue : unittest puis pytest = résumé illisible" 1 "$MELANGE \(unittest, pytest\)" scripts/fin-issue.sh 001-01
+fin_projet "echo '= 1 passed in 0.1s ='; echo 'Tests: 4 skipped, 1 passed, 5 total'"
+verifier "fin-issue : pytest puis jest = résumé illisible" 1 "$MELANGE \(pytest, jest\)" scripts/fin-issue.sh 001-01
+fin_projet "echo 'Tests: 1 failed, 1 passed, 2 total'; echo '= 3 passed in 0.1s ='"
+verifier "fin-issue : échec jest avant pytest, enchaînés par ; = résumé illisible" 1 "$MELANGE \(pytest, jest\)" scripts/fin-issue.sh 001-01
+fin_projet "$M_OK; echo 'Tests: 4 skipped, 5 passed, 9 total'"
+verifier "fin-issue : FIN_ISSUE_IGNORES_AUTORISES=inconnu tolère aussi ce résumé, et le dit" 0 "FIN-ISSUE OK 001-01 .* : tests non comptés, ignorés inconnus \(autorisé\)" env FACTORY_FIN_ISSUE_IGNORES_AUTORISES=inconnu scripts/fin-issue.sh 001-01
+# Une ligne de journal qui ressemble à un résumé n'en est pas un.
+fin_projet "echo '=== build failed ==='; echo '3 passed checks'; echo 'Ran 3 tests in the previous phase'; echo 'Tests: compiled 3 total'; echo '# tests 5'; echo '2 failed logins'; $M_OK"
+verifier "fin-issue : Maven et lignes de journal ordinaires, pas de faux échec" 0 "FIN-ISSUE OK 001-01 .* : 1 tests, 0 échec, 0 ignoré" scripts/fin-issue.sh 001-01
+fin_projet "echo 'Ran 3 tests in the previous phase'; echo '= 2 passed in 0.1s ='"
+verifier "fin-issue : pytest et « Ran n tests in » de journal, pas de faux échec" 0 "FIN-ISSUE OK 001-01 .* : 2 tests, 0 échec, 0 ignoré" scripts/fin-issue.sh 001-01
+fin_projet "echo '=== build failed ==='; echo 'Tests: 2 passed, 2 total'"
+verifier "fin-issue : jest et ligne « build failed », pas de faux échec" 0 "FIN-ISSUE OK 001-01 .* : 2 tests, 0 échec, 0 ignoré" scripts/fin-issue.sh 001-01
+fin_projet "echo '= 3 passed in 0.1s ='; echo '= 2 passed in 0.1s ='"
+verifier "fin-issue : un seul lanceur répété reste additionné" 0 "FIN-ISSUE OK 001-01 .* : 5 tests, 0 échec, 0 ignoré" scripts/fin-issue.sh 001-01
+fin_projet "echo '[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0'"
+out="$(env TMPDIR="$p/absent" scripts/fin-issue.sh 001-01 2>&1)"; code=$?; [ "$code" -eq 1 ] && [ "$(printf '%s\n' "$out" | tail -1 | cut -c1-15)" = "FIN-ISSUE ECHEC" ] && ok "fin-issue : mktemp en échec, dernière ligne écrite" || ko "fin-issue : mktemp en échec, dernière ligne écrite" "$code $out"
+touch nouveau.txt
+verifier "fin-issue : fichier non suivi = échec (il serait testé sans être dans le commit)" 1 "FIN-ISSUE ECHEC : arbre Git non propre" scripts/fin-issue.sh 001-01
+: > nouveau.txt; git add nouveau.txt
+verifier "fin-issue : modification non commitée = échec" 1 "FIN-ISSUE ECHEC : arbre Git non propre" scripts/fin-issue.sh 001-01
+git -c user.name=t -c user.email=t@t commit -qm n
+: > .factory.local.conf # sans argument : la commande de build ci-dessous les recopierait dans la ligne de résumé
+fin_projet "git -C '$p' -c user.name=t -c user.email=t@t commit -q --allow-empty -m pendant; $(maven 1 0)"
+verifier "fin-issue : commit pendant la vérification = échec" 1 "FIN-ISSUE ECHEC : HEAD a changé" scripts/fin-issue.sh 001-01
+
+echo "worktree-issue.sh : structure bare"
+p="$(nouveau_projet)"; cd "$p" || exit 1
+reel="$(mktemp -d "$racine_tmp/reel.XXXXXX")/reel.git"
+gc() { git -c user.name=t -c user.email=t@t "$@"; }
+git init -q -b main .; printf '.env\n.factory.local.conf\n.agents/\n' > .gitignore
+printf '#!/bin/sh\nmkdir -p "$(dirname "$0")/../.agents"; touch "$(dirname "$0")/../.agents/sync-lance"\n' > factory/sync.sh; chmod +x factory/sync.sh
+issue_id "$p" 001-01 "À faire" docs/prd/1.md "[CA-1]" "[]"; issue_id "$p" 001-02 "À faire" docs/prd/1.md "[CA-2]" "[]"
+git add -A; gc commit -qm init; git branch develop; printf 'SECRET=x\n' > .env
+git clone -q --bare . "$reel"; git remote add origin "$reel"; git fetch -q origin
+c="$(dirname "$reel")/conteneur"
+avant="$(git rev-parse HEAD) $(git remote get-url origin) $(git status --porcelain | tr -d '\n')"
+verifier "initialiser : conversion, fichiers non suivis rappelés" 0 "non suivis .*\.env" scripts/worktree-issue.sh initialiser "$p" "$c"
+[ "$(git --git-dir="$c/.git" remote get-url origin)" = "$reel" ] && ok "initialiser : origin vise l'URL réelle" || ko "initialiser : origin vise l'URL réelle" "$(git --git-dir="$c/.git" remote get-url origin)"
+[ "$(git --git-dir="$c/.git" config remote.origin.fetch)" = "+refs/heads/*:refs/remotes/origin/*" ] && git --git-dir="$c/.git" show-ref --verify --quiet refs/remotes/origin/develop && ok "initialiser : refspec de suivi et fetch faits" || ko "initialiser : refspec de suivi et fetch faits"
+[ "$(git --git-dir="$c/.git" config --bool core.bare)" = true ] && [ ! -e "$c/.env" ] && [ -z "$(git --git-dir="$c/.git" grep -l SECRET HEAD 2>/dev/null)" ] && ok "initialiser : clone bare, .env non copié" || ko "initialiser : clone bare, .env non copié"
+[ "$(git rev-parse HEAD) $(git remote get-url origin) $(git status --porcelain | tr -d '\n')" = "$avant" ] && ok "initialiser : source inchangée" || ko "initialiser : source inchangée"
+verifier "initialiser : conteneur existant refusé" 1 "existe déjà" scripts/worktree-issue.sh initialiser "$p" "$c"
+verifier "initialiser : source qui n'est pas un dépôt = 64" 64 "Pas un dépôt" scripts/worktree-issue.sh initialiser "$racine_tmp" "$c-2"
+verifier "initialiser : arguments manquants = 64" 64 "" scripts/worktree-issue.sh initialiser "$p"
+git --git-dir="$c/.git" worktree add -q "$c/develop" develop; cd "$c/develop" || exit 1
+d1="$(cd "$c" && pwd -P)/feat-001-01-x"; d2="$(cd "$c" && pwd -P)/feat-001-02-x"
+sortie_bare="$(scripts/worktree-issue.sh creer 001-01 2>&1)"; code=$?
+[ "$code" -eq 0 ] && [ -d "$c/feat-001-01-x" ] && printf '%s' "$sortie_bare" | grep -q "dossier : .*/feat-001-01-x" && ok "bare creer : dossier au même niveau que .git" || ko "bare creer : dossier au même niveau que .git" "$sortie_bare"
+printf '%s' "$sortie_bare" | grep -q "recommand" && ko "bare creer : pas d'avertissement" "$sortie_bare" || ok "bare creer : pas d'avertissement"
+[ "$(git -C "$c/feat-001-01-x" rev-parse HEAD)" = "$(git rev-parse develop)" ] && ok "bare creer : branche partie de la base" || ko "bare creer : branche partie de la base"
+[ -e "$c/feat-001-01-x/.agents/sync-lance" ] && ok "bare creer : sync.sh lancé dans le nouveau dossier" || ko "bare creer : sync.sh lancé dans le nouveau dossier"
+cd "$c/feat-001-01-x" || exit 1
+verifier "bare creer depuis un worktree de branche : pas d'imbrication" 0 "dossier : .*/conteneur/feat-001-02-x" scripts/worktree-issue.sh creer 001-02
+[ -d "$c/feat-001-02-x" ] && [ ! -e "$c/feat-001-01-x/feat-001-02-x" ] && ok "bare : le dossier est dans le conteneur" || ko "bare : le dossier est dans le conteneur"
+verifier "bare lister : worktrees du conteneur" 0 "feat-001-02-x" scripts/worktree-issue.sh lister
+cd "$c/develop" || exit 1
+gc -C "$c/feat-001-01-x" commit -q --allow-empty -m travail
+verifier "bare nettoyer : refusé si non fusionné" 1 "n'est pas fusionnée" scripts/worktree-issue.sh nettoyer 001-01
+[ -d "$c/feat-001-01-x" ] && ok "bare nettoyer refusé : dossier conservé" || ko "bare nettoyer refusé : dossier conservé"
+gc merge -q --no-ff -m m feat/001-01-x
+verifier "bare nettoyer : accepté après fusion" 0 "supprimé" scripts/worktree-issue.sh nettoyer 001-01 --branche
+[ ! -e "$c/feat-001-01-x" ] && ok "bare nettoyer : dossier retiré" || ko "bare nettoyer : dossier retiré"
+# Revue, itération 1
+git --git-dir="$c/.git" config branch.develop.remote >/dev/null && [ "$(git --git-dir="$c/.git" config branch.develop.merge)" = refs/heads/develop ] && ok "initialiser : suivi amont des branches locales" || ko "initialiser : suivi amont des branches locales"
+cd "$c/develop" || exit 1
+issue_id "$c/develop" 001-04 "À faire" docs/prd/1.md "[CA-4]" "[]"; issue_id "$c/develop" 001-05 "À faire" docs/prd/1.md "[CA-5]" "[]"; issue_id "$c/develop" 001-06 "À faire" docs/prd/1.md "[CA-6]" "[]"; issue_id "$c/develop" 001-07 "À faire" docs/prd/1.md "[CA-7]" "[]"; git add -A; gc commit -qm issues
+verifier "creer : préfixe ambigu refusé" 64 "Issue introuvable" scripts/worktree-issue.sh creer 00
+scripts/worktree-issue.sh creer 001-04 >/dev/null 2>&1
+git -C "$c/feat-001-04-x" checkout -q --detach; gc -C "$c/feat-001-04-x" commit -q --allow-empty -m perdu; git merge-base --is-ancestor feat/001-04-x develop || gc merge -q feat/001-04-x
+verifier "nettoyer : HEAD détaché refusé" 1 "n'est pas sur la branche" scripts/worktree-issue.sh nettoyer 001-04
+git -C "$c/feat-001-04-x" checkout -q feat/001-04-x
+printf 'S=1\n' > "$c/feat-001-04-x/.env"; mkdir -p "$c/feat-001-04-x/.agents/cache"
+sortie_n="$(scripts/worktree-issue.sh nettoyer 001-04 2>&1)"; code=$?
+[ "$code" -eq 1 ] && printf '%s' "$sortie_n" | grep -q '\.env' && ! printf '%s' "$sortie_n" | grep -q 'S=1' && [ -f "$c/feat-001-04-x/.env" ] && ok "nettoyer : .env ignoré, refus et liste sans contenu" || ko "nettoyer : .env ignoré" "$sortie_n"
+/bin/rm -f "$c/feat-001-04-x/.env"
+verifier "nettoyer : artefacts connus admis" 0 "supprimé" scripts/worktree-issue.sh nettoyer 001-04
+scripts/worktree-issue.sh creer 001-05 >/dev/null 2>&1; printf 'S=1\n' > "$c/feat-001-05-x/.env"
+verifier "nettoyer --force passe outre les fichiers ignorés" 0 "supprimé" scripts/worktree-issue.sh nettoyer 001-05 --force
+git push -q origin develop
+scripts/worktree-issue.sh creer 001-06 >/dev/null 2>&1; gc -C "$c/feat-001-06-x" commit -q --allow-empty -m travail; git -C "$c/feat-001-06-x" push -q origin feat/001-06-x
+distant="$(mktemp -d "$racine_tmp/dist.XXXXXX")"; git clone -q "$reel" "$distant/w"; gc -C "$distant/w" checkout -q develop; gc -C "$distant/w" merge -q --no-ff -m m origin/feat/001-06-x; git -C "$distant/w" push -q origin develop
+verifier "nettoyer : fusion faite sur le distant reconnue" 0 "supprimé" scripts/worktree-issue.sh nettoyer 001-06
+verifier "creer : develop en retard averti" 0 "develop a .* commit.* de retard" scripts/worktree-issue.sh creer 001-07
+git -C "$c/feat-001-07-x" status >/dev/null
+git --git-dir="$c/.git" remote set-url origin "$racine_tmp/absent.git"
+issue_id "$c/develop" 001-08 "À faire" docs/prd/1.md "[CA-8]" "[]"; git add -A; gc commit -qm i8
+verifier "creer : hors réseau, averti sans bloquer" 0 "fetch impossible" scripts/worktree-issue.sh creer 001-08
+git --git-dir="$c/.git" remote set-url origin "$reel"
+cd "$p" || exit 1
+c2="$(dirname "$reel")/rel"; (cd "$(dirname "$reel")" && "$p/scripts/worktree-issue.sh" initialiser "$p" rel >/dev/null 2>&1); [ -d "$c2/.git" ] && ok "initialiser : chemin relatif résolu depuis le dossier d'appel" || ko "initialiser : chemin relatif résolu depuis le dossier d'appel"
+verifier "initialiser : conteneur dans la source refusé" 64 "dans la source" scripts/worktree-issue.sh initialiser "$p" "$p/dedans"
+git remote set-url origin "https://tok:SECRET@$(basename "$reel").invalid/x.git"
+out="$(scripts/worktree-issue.sh initialiser "$p" "$c-m" 2>&1)"; printf '%s' "$out" | grep -q SECRET && ko "initialiser : identifiants masqués" "$out" || ok "initialiser : identifiants masqués"
+git remote set-url origin "$reel"
+s2="$(mktemp -d "$racine_tmp/so.XXXXXX")"; git init -q "$s2"; gc -C "$s2" commit -q --allow-empty -m a
+verifier "initialiser : sans origin, avertissement" 0 "origin vise le chemin local" scripts/worktree-issue.sh initialiser "$s2" "$s2-c"
+verifier "initialiser : conteneur dans un parent absent de la source refusé" 64 "dans la source" scripts/worktree-issue.sh initialiser "$p" "$p/a/b"
+out="$(scripts/worktree-issue.sh danser 2>&1)"; printf '%s' "$out" | grep -q 'set -uo' && ko "usage : en-tête seul" "$out" || ok "usage : en-tête seul"
+printf '%s' "$out" | grep -q 'Code de sortie' && ok "usage : en-tête complet" || ko "usage : en-tête complet" "$out"
+sortie_cl="$(scripts/worktree-issue.sh creer 001-01 2>&1)"; code=$?
+nomp="$(basename "$p")"
+[ "$code" -eq 0 ] && [ -d "../$nomp-001-01" ] && [ ! -e "../$nomp-001-01/.agents/sync-lance" ] && printf '%s' "$sortie_cl" | grep -q "structure bare recommand" && ok "dépôt classique : emplacement inchangé, sans sync, avec avertissement" || ko "dépôt classique" "$sortie_cl"
 
 echo "couverture-prd.sh"
 p="$(nouveau_projet)"; cd "$p" || exit 1
@@ -233,6 +971,58 @@ verifier "couverture exacte" 0 "OK .*3 critère" scripts/couverture-prd.sh docs/
 printf '# PRD sans critère\n' > docs/prd/002-v.md
 verifier "PRD sans critère défini = erreur" 1 "aucun critère défini" scripts/couverture-prd.sh docs/prd/002-v.md
 verifier "sans argument = usage (64)" 64 "Usage" scripts/couverture-prd.sh
+
+echo "couverture-prd.sh : taille maximale d'une issue"
+p="$(nouveau_projet)"; cd "$p" || exit 1
+mkdir -p docs/prd
+for n in 1 2 3 4 5 6 7 8 9 10 11 12; do printf -- '- **CA-%s** Given x\n' "$n"; done > docs/prd/001-m.md
+grosse() { # grosse <n> : l'issue 001-01 porte CA-1..n, l'issue 001-02 le reste
+  local i liste1="" liste2=""
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do if [ "$i" -le "$1" ]; then liste1="$liste1, CA-$i"; else liste2="$liste2, CA-$i"; fi; done
+  issue_id "$p" 001-01 "À faire" docs/prd/001-m.md "[${liste1#, }]" "[]"
+  issue_id "$p" 001-02 "À faire" docs/prd/001-m.md "[${liste2#, }]" "[]"
+}
+justifie() { sed -i.bak "2a\\
+criteres_justification: $1
+" docs/issues/001-01-x.md; rm -f docs/issues/*.bak; }
+AVERT='ATTENTION  001-01 : 11 critères, limite 10'
+OK_12="OK  docs/prd/001-m.md : 12 critère(s), chacun couvert par une seule issue"
+grosse 10
+verifier_exact "taille : au seuil (10), aucun avertissement" 0 "$OK_12" scripts/couverture-prd.sh docs/prd/001-m.md
+grosse 11
+verifier "taille : au-dessus (11), avertissement visible" 0 "$AVERT" scripts/couverture-prd.sh docs/prd/001-m.md
+verifier "taille : au-dessus, couverture encore annoncée OK" 0 "OK  docs/prd/001-m.md : 12 critère" scripts/couverture-prd.sh docs/prd/001-m.md
+grosse 11; justifie "Un seul écran, indivisible"
+verifier_exact "taille : justification présente, aucun avertissement" 0 "$OK_12" scripts/couverture-prd.sh docs/prd/001-m.md
+grosse 11; justifie '""'
+verifier "taille : justification vide entre guillemets, avertissement" 0 "$AVERT" scripts/couverture-prd.sh docs/prd/001-m.md
+grosse 11; justifie ''
+verifier "taille : justification vide, avertissement" 0 "$AVERT" scripts/couverture-prd.sh docs/prd/001-m.md
+grosse 11
+verifier "taille : limite configurée par variable" 0 "ATTENTION  001-01 : 11 critères, limite 2" env FACTORY_MAX_CRITERES_ISSUE=2 scripts/couverture-prd.sh docs/prd/001-m.md
+verifier_exact "taille : limite relevée, aucun avertissement" 0 "$OK_12" env FACTORY_MAX_CRITERES_ISSUE=11 scripts/couverture-prd.sh docs/prd/001-m.md
+printf 'MAX_CRITERES_ISSUE=11\n' > .factory.conf
+verifier_exact "taille : limite lue dans .factory.conf" 0 "$OK_12" scripts/couverture-prd.sh docs/prd/001-m.md
+printf 'MAX_CRITERES_ISSUE=20\n' > .factory.local.conf; printf 'MAX_CRITERES_ISSUE=1\n' > .factory.conf
+verifier_exact "taille : .factory.local.conf l'emporte" 0 "$OK_12" scripts/couverture-prd.sh docs/prd/001-m.md
+rm -f .factory.local.conf .factory.conf
+invalide_c="MAX_CRITERES_ISSUE invalide : entier >= 1 attendu (voir .factory.conf, .factory.local.conf, FACTORY_MAX_CRITERES_ISSUE)."
+verifier_exact "taille : limite 0 refusée (64)" 64 "$invalide_c" env FACTORY_MAX_CRITERES_ISSUE=0 scripts/couverture-prd.sh docs/prd/001-m.md
+verifier_exact "taille : limite non numérique refusée (64)" 64 "$invalide_c" env FACTORY_MAX_CRITERES_ISSUE='$(touch pwn)' scripts/couverture-prd.sh docs/prd/001-m.md
+[ ! -e pwn ] && ok "cs_ limite hostile : rien n'est exécuté" || ko "cs_ limite exécutée"
+verifier_exact "config-factory --max-criteres : 10 par défaut" 0 "10" scripts/config-factory.sh --max-criteres
+verifier_exact "config-factory --max-criteres : invalide = 64" 64 "$invalide_c" env FACTORY_MAX_CRITERES_ISSUE=abc scripts/config-factory.sh --max-criteres
+verifier "config-factory : clé listée" 0 "MAX_CRITERES_ISSUE=10" scripts/config-factory.sh
+for f in factory/skills/to-tickets/SKILL.md factory/prompts/spec-writer.md factory/UPGRADE.md; do
+  lire_depot "$depot" "$f" | grep -q "environ 10 critères au plus par issue" && lire_depot "$depot" "$f" | grep -q "ordre de grandeur, pas une mesure" && ok "$f : taille d'une issue écrite" || ko "$f : taille d'une issue absente"
+done
+
+echo "verify-clean.sh : copie temporaire impossible"
+p="$(nouveau_projet)"; cd "$p" || exit 1
+git init -q .; printf 'echo "[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0"\n' > .factory-verify; git add -A >/dev/null
+verifier_exact "verify-clean : dossier temporaire absent, échec net (1) sans rien lancer" 1 "Copie temporaire impossible : dossier temporaire inutilisable ($p/absent)" env TMPDIR="$p/absent" scripts/verify-clean.sh
+verifier "verify-clean : sans dossier temporaire, aucun résumé ni VERIFY OK" 1 "^Copie temporaire impossible" env TMPDIR="$p/absent" scripts/verify-clean.sh
+verifier_exact "run.sh : relancé depuis lui-même, échec immédiat et clair" 1 "run.sh : déjà en cours dans ce processus ou un ancêtre (relance récursive refusée, voir COMMANDE_VERIFY et .factory-verify)" env FACTORY_TESTS_EN_COURS=1 "$ici/run.sh"
 
 echo "verify-clean.sh"
 [ -z "${COMMANDE_VERIFY+x}" ] && [ -z "${STUB_CODE+x}" ] && ok "suite isolée de l'environnement appelant : ni COMMANDE_VERIFY ni STUB_CODE hérités" || ko "suite isolée de l'environnement appelant" "COMMANDE_VERIFY=${COMMANDE_VERIFY-<absent>} STUB_CODE=${STUB_CODE-<absent>}"
@@ -264,7 +1054,7 @@ verifier "aucune commande ni wrapper = 64 avec message" 64 "créez .factory-veri
 printf '#!/bin/sh\necho "gradlew: $*"; echo "Ran 2 tests in 0.1s"\n' > gradlew; chmod +x gradlew
 verifier "wrapper ./gradlew détecté" 0 "Tests : Ran 2 tests" scripts/verify-clean.sh
 rm gradlew
-echo 'echo "$#" > args.txt && cat args.txt && echo "Ran 5 tests in 0s"' > .factory-verify
+echo 'echo "$#" > args.txt && cat args.txt && echo "Ran 5 tests in 0s" && : "$@"' > .factory-verify
 verifier "syntaxe shell (&&) acceptée, arguments transmis" 0 "Ran 5 tests" scripts/verify-clean.sh -- -a -b
 echo 'echo "  ok   un cas"; echo "TESTS OK : 142 vérifications"' > .factory-verify
 verifier "résumé de la suite de la factory reconnu (succès)" 0 "^Tests : TESTS OK : 142 vérifications$" scripts/verify-clean.sh
@@ -291,7 +1081,7 @@ tail -1 AGENTS.md | grep -q MODIFIÉ && ok "AGENTS.md modifié est conservé" ||
 [ ! -e factory/prompts/orchestrator.md ] && [ ! -e .claude/agents/orchestrator.md ] && ok "pas de prompt ni d'agent orchestrateur (rôle de la session principale)" || ko "pas de prompt ni d'agent orchestrateur"
 [ -L scripts/dashboard.sh ] && [ "$(readlink scripts/dashboard.sh)" = "../factory/scripts/dashboard.sh" ] && [ -x scripts/dashboard.sh ] && ok "init : scripts/dashboard.sh lié (lien relatif vers factory/scripts/)" || ko "init : lien scripts/dashboard.sh" "$(ls -l scripts/ 2>&1 | tr '\n' '|')"
 grep -qx 'dashboard.html' .gitignore && ok "init : dashboard.html dans le .gitignore créé" || ko "init : dashboard.html dans le .gitignore" "$(grep -n html .gitignore)"
-[ -f .factory.conf ] && grep -qx 'MAX_ITERATIONS_REVUE=5' .factory.conf && grep -qx 'NOTIFICATION_COMMANDE=' .factory.conf && grep -qx 'NOTIFICATION_DESTINATAIRE=' .factory.conf && grep -qx 'NOTIFICATION_EXPEDITEUR=' .factory.conf && ok "init : .factory.conf créé (5 itérations, notification vide)" || ko "init : .factory.conf créé" "$(cat .factory.conf 2>&1 | grep -v '^#' | tr '\n' '|')"
+[ -f .factory.conf ] && grep -qx 'MAX_ITERATIONS_REVUE=3' .factory.conf && grep -qx 'NOTIFICATION_COMMANDE=' .factory.conf && grep -qx 'NOTIFICATION_DESTINATAIRE=' .factory.conf && grep -qx 'NOTIFICATION_EXPEDITEUR=' .factory.conf && ok "init : .factory.conf créé (3 itérations, notification vide)" || ko "init : .factory.conf créé" "$(cat .factory.conf 2>&1 | grep -v '^#' | tr '\n' '|')"
 grep -qx '.factory.local.conf' .gitignore && ok "init : .factory.local.conf dans le .gitignore créé" || ko "init : .factory.local.conf dans le .gitignore"
 rappel="Notifications : renseignez NOTIFICATION_COMMANDE et NOTIFICATION_DESTINATAIRE dans .factory.local.conf (non versionné) pour être prévenu d'une issue bloquée en revue."
 printf '%s\n' "$(./factory/init-projet.sh 2>&1)" | grep -qxF "$rappel" && ok "init : rappel de renseigner .factory.local.conf" || ko "init : rappel .factory.local.conf"
@@ -340,6 +1130,88 @@ d="$(depot_sync s-vide)"; cd "$d" || exit 1
 rm -f factory/prompts/*.md; printf '# Prompt sans en-tête\n' > factory/prompts/libre.md
 bash_ancien=/bin/bash; [ -x "$bash_ancien" ] || bash_ancien="$BASH"
 verifier "sync-claude.sh sans aucun agent à générer, sous $("$bash_ancien" -c 'echo "bash $BASH_VERSION"') (set -u)" 0 "agents :" "$bash_ancien" ./factory/sync-claude.sh
+
+echo "sync-claude.sh : modèle et effort des agents"
+d="$(depot_sync s-modele)"; cd "$d" || exit 1
+entete_agent() { sed -n '/^---$/,/^---$/p' ".claude/agents/$1.md"; }
+a_champ() { entete_agent "$1" | grep -qx "$2"; }
+./factory/sync-claude.sh >/dev/null 2>&1
+a_champ developer 'model: sonnet' && a_champ code-reviewer 'model: sonnet' && a_champ spec-writer 'model: sonnet' && ok "sans configuration : modèle sonnet pour chaque agent" || ko "modèle par défaut"
+a_champ developer 'effort: medium' && a_champ code-reviewer 'effort: medium' && a_champ spec-writer 'effort: medium' && ok "sans configuration : effort medium pour chaque agent" || ko "effort par défaut"
+printf 'AGENT_MODELE=sonnet\nAGENT_EFFORT=high\n' > .factory.conf; ./factory/sync-claude.sh >/dev/null 2>&1
+a_champ developer 'model: sonnet' && a_champ developer 'effort: high' && ok ".factory.conf choisit le modèle et l'effort" || ko ".factory.conf modèle et effort"
+printf 'AGENT_EFFORT=medium\n' > .factory.local.conf; ./factory/sync-claude.sh >/dev/null 2>&1
+a_champ developer 'effort: medium' && ok ".factory.local.conf l'emporte sur .factory.conf" || ko ".factory.local.conf effort"
+FACTORY_AGENT_MODELE=claude-opus-5-5 FACTORY_AGENT_EFFORT=max ./factory/sync-claude.sh >/dev/null 2>&1
+a_champ developer 'model: claude-opus-5-5' && a_champ developer 'effort: max' && ok "FACTORY_AGENT_* l'emporte sur les fichiers" || ko "FACTORY_AGENT_*"
+rm -f .factory.local.conf; printf 'AGENT_MODELE=\nAGENT_EFFORT=\n' > .factory.conf; ./factory/sync-claude.sh >/dev/null 2>&1
+! entete_agent developer | grep -qE '^(model|effort):' && ok "valeur vide : champ absent, l'agent hérite de la session" || ko "valeur vide"
+printf 'AGENT_MODELE=opus\nAGENT_EFFORT=low\n' > .factory.conf; ./factory/sync-claude.sh >/dev/null 2>&1; cp .claude/agents/developer.md "$p/developer-avant.md"
+printf 'AGENT_EFFORT=extreme\n' > .factory.conf
+verifier_exact "effort hors liste refusé (64, sans recopier la valeur)" 64 "AGENT_EFFORT invalide : low, medium, high, xhigh, max ou vide attendu (voir .factory.conf, .factory.local.conf, FACTORY_AGENT_EFFORT)." ./factory/sync-claude.sh
+printf 'AGENT_MODELE=opus\ntools: Bash\n' > .factory.conf; printf 'AGENT_MODELE=opus tools: Bash\n' > .factory.local.conf
+verifier_exact "cs_config modèle avec espace et deux-points refusé : aucun champ injecté dans l'en-tête" 64 "AGENT_MODELE invalide : minuscules, chiffres, points et tirets, ou vide attendu (voir .factory.conf, .factory.local.conf, FACTORY_AGENT_MODELE)." ./factory/sync-claude.sh
+cmp -s .claude/agents/developer.md "$p/developer-avant.md" && ok "valeur refusée : enveloppes inchangées" || ko "enveloppe modifiée malgré une valeur refusée"
+rm -f .factory.local.conf .factory.conf
+awk 'NR==2{print; print "model: haiku"; print "effort: high"; next}1' factory/prompts/developer.md > "$p/dev.md" && cp "$p/dev.md" factory/prompts/developer.md
+./factory/sync-claude.sh >/dev/null 2>&1
+a_champ developer 'model: haiku' && a_champ developer 'effort: high' && a_champ code-reviewer 'model: sonnet' && ok "l'en-tête d'un prompt l'emporte pour ce rôle seulement" || ko "en-tête de prompt"
+config_liste="$(bash factory/scripts/config-factory.sh 2>/dev/null)"
+printf '%s\n' "$config_liste" | grep -qx 'AGENT_MODELE=sonnet' && printf '%s\n' "$config_liste" | grep -qx 'AGENT_EFFORT=medium' && ok "config-factory.sh affiche les valeurs par défaut du modèle et de l'effort" || ko "config-factory.sh modèle et effort" "$config_liste"
+
+echo "sync-claude.sh : hooks des agents actifs (.claude/settings.local.json)"
+p="$(mktemp -d "$racine_tmp/k.XXXXXX")" || { ko "mktemp des cas de hooks"; exit 1; }; reglages=.claude/settings.local.json
+cmd_debut='"$CLAUDE_PROJECT_DIR"/factory/hook-agents-claude.sh debut 2>/dev/null || true'
+json_valide() { # json_valide <fichier> : 0 valide, 1 invalide, 2 aucun validateur (python3 ou jq)
+  if command -v python3 >/dev/null 2>&1; then python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$1" 2>/dev/null
+  elif command -v jq >/dev/null 2>&1; then jq empty "$1" >/dev/null 2>&1
+  else return 2; fi
+}
+verifier_json() { # verifier_json <description> <fichier>
+  json_valide "$2"; case $? in 0) ok "$1" ;; 2) echo "  saute $1 (ni python3 ni jq : validation du JSON impossible)" ;; *) ko "$1" "$(cat "$2")" ;; esac
+}
+d="$(depot_sync k-cree)"; cd "$d" || exit 1
+sortie="$(./factory/sync-claude.sh 2>"$p/k-err")"; code=$?
+[ "$code" -eq 0 ] && printf '%s' "$sortie" | grep -q 'agents actifs : oui$' && grep -qF "\"command\": \"\\\"\$CLAUDE_PROJECT_DIR\\\"/factory/hook-agents-claude.sh debut 2>/dev/null || true\"" "$reglages" && grep -qF 'hook-agents-claude.sh fin 2>/dev/null || true' "$reglages" && grep -q '"SubagentStart"' "$reglages" && grep -q '"SubagentStop"' "$reglages" && ok "fichier absent : créé avec les hooks debut et fin, « agents actifs : oui »" || ko "création des hooks" "$sortie ; $(cat "$reglages" 2>&1)"
+verifier_json "fichier créé : JSON valide" "$reglages"
+command -v python3 >/dev/null 2>&1 && { [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["hooks"]["SubagentStart"][0]["hooks"][0]["command"])' "$reglages")" = "$cmd_debut" ] && ok "commande du hook décodée telle quelle" || ko "commande du hook" "$(cat "$reglages")"; }
+[ ! -e settings.json ] && [ ! -e .claude/settings.json ] && ok "settings.json versionné non créé (un worktree resterait propre)" || ko "settings.json créé"
+grep -q "settings.local.json.*n'est pas ignoré par git" "$p/k-err" && ok "fichier non ignoré par git : avertissement" || ko "avertissement non ignoré" "$(cat "$p/k-err")"
+cp "$reglages" "$p/k-1"; ./factory/sync-claude.sh >/dev/null 2>&1
+cmp -s "$reglages" "$p/k-1" && ok "deuxième passage : fichier identique (idempotent)" || ko "idempotence" "$(diff "$p/k-1" "$reglages")"
+printf '.claude/settings.local.json\n' > .gitignore
+! ./factory/sync-claude.sh 2>&1 >/dev/null | grep -q "n'est pas ignoré" && ok "fichier ignoré par git : pas d'avertissement" || ko "avertissement à tort"
+printf '{\n  "permissions": {\n    "allow": ["Bash(ls)"],\n    "deny": []\n  }\n}\n' > "$reglages"; cp "$reglages" "$p/k-perm"
+./factory/sync-claude.sh >/dev/null 2>&1
+[ "$(sed -n 2p "$reglages")" = '  "hooks": {' ] && [ "$(sed -n 5p "$reglages")" = '  },' ] && [ "$(sed -n 1p "$reglages")" = '{' ] && tail -n +6 "$reglages" | cmp -s - <(tail -n +2 "$p/k-perm") && ok "fusion : permissions existantes conservées à l'identique, hooks ajoutés" || ko "fusion" "$(cat "$reglages")"
+verifier_json "fusion : JSON valide" "$reglages"
+for vide in '{}' '  {  }' $'\n{\n}\n'; do
+  printf '%s' "$vide" > "$reglages"; ./factory/sync-claude.sh >/dev/null 2>&1
+  grep -qF 'hook-agents-claude.sh fin' "$reglages" || ko "objet vide « $vide » : hooks absents" "$(cat "$reglages")"
+  verifier_json "objet vide « $(printf '%s' "$vide" | tr '\n' ' ') » : hooks insérés, JSON valide (sans virgule en trop)" "$reglages"
+done
+for autre in '{"hooks": {"PreToolUse": []}, "x": 1}' '[1, 2]' 'pas du json'; do
+  printf '%s\n' "$autre" > "$reglages"; cp "$reglages" "$p/k-av"
+  sortie="$(./factory/sync-claude.sh 2>"$p/k-err")"; code=$?
+  [ "$code" -eq 0 ] && cmp -s "$reglages" "$p/k-av" && grep -q 'à ajouter à la main' "$p/k-err" && grep -qF 'hook-agents-claude.sh debut' "$p/k-err" && printf '%s' "$sortie" | grep -q 'agents actifs : non$' && ok "« $autre » : fichier non modifié, avertissement avec le bloc à ajouter, code 0, « agents actifs : non »" || ko "« $autre » non modifié" "code $code ; $(cat "$p/k-err") ; $(cat "$reglages")"
+done
+# Mode du fichier conservé, lien symbolique jamais remplacé, détection d'installation précise.
+mode_de() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1" 2>/dev/null; }
+rm -f "$reglages"; printf '{"permissions": {}}\n' > "$reglages"; chmod 600 "$reglages"
+(umask 022; ./factory/sync-claude.sh >/dev/null 2>&1)
+[ "$(mode_de "$reglages")" = 600 ] && grep -q 'SubagentStart' "$reglages" && ok "fusion : le mode 0600 du fichier est conservé (jamais élargi)" || ko "mode conservé" "$(mode_de "$reglages")"
+rm -f "$reglages"; printf '{"permissions": {}}\n' > "$p/cible.json"; ln -s "$p/cible.json" "$reglages"; cp "$p/cible.json" "$p/k-av"
+sortie="$(./factory/sync-claude.sh 2>"$p/k-err")"; code=$?
+[ "$code" -eq 0 ] && [ -L "$reglages" ] && cmp -s "$p/cible.json" "$p/k-av" && grep -q 'lien symbolique' "$p/k-err" && grep -qF 'hook-agents-claude.sh debut' "$p/k-err" && printf '%s' "$sortie" | grep -q 'agents actifs : non$' && ok "lien symbolique : ni remplacé ni modifié, avertissement avec le bloc à ajouter, code 0" || ko "lien symbolique" "code $code ; $(cat "$p/k-err") ; $(ls -l "$reglages")"
+rm -f "$reglages"; printf '{"permissions": {"allow": ["Bash(factory/hook-agents-claude.sh debut)"]}}\n' > "$reglages"
+./factory/sync-claude.sh >/dev/null 2>&1
+grep -q 'SubagentStart' "$reglages" && ok "le seul nom du script dans le fichier ne vaut pas installation" || ko "détection trop large" "$(cat "$reglages")"
+printf '{\r\n  "permissions": {}\r\n}\r\n' > "$reglages"; ./factory/sync-claude.sh >/dev/null 2>&1
+grep -q 'SubagentStart' "$reglages" && verifier_json "fin de ligne CRLF : hooks insérés, JSON valide" "$reglages" || ko "CRLF" "$(cat "$reglages")"
+printf '{"note": "}{ accolades \\" et { dans une chaîne", "n": 1}\n' > "$reglages"; ./factory/sync-claude.sh >/dev/null 2>&1
+grep -q 'SubagentStart' "$reglages" && grep -q '"n": 1}' "$reglages" && verifier_json "accolades dans une chaîne : hooks insérés, JSON valide" "$reglages" || ko "accolades dans une chaîne" "$(cat "$reglages")"
+printf '{"note": "voir \\"hooks\\": ici"}\n' > "$reglages"; ./factory/sync-claude.sh >/dev/null 2>&1
+grep -q 'SubagentStart' "$reglages" && verifier_json "\"hooks\": cité dans une chaîne : n'est pas la clé, hooks insérés, JSON valide" "$reglages" || ko "hooks dans une chaîne" "$(cat "$reglages")"
 
 echo "init-projet.sh --sans-claude"
 d="$(depot_sync i-sans)"; cd "$d" || exit 1
@@ -503,7 +1375,7 @@ verifier "couverture-prd.sh et criteres-sans-test.sh lisent les issues avec _tem
 echo "config-factory.sh (configuration du projet : .factory.conf, .factory.local.conf, variables FACTORY_*)"
 p="$(nouveau_projet)"; cd "$p" || exit 1
 invalide="MAX_ITERATIONS_REVUE invalide : entier >= 1 attendu (voir .factory.conf, .factory.local.conf, FACTORY_MAX_ITERATIONS_REVUE)."
-verifier_exact "sans aucune configuration : 5 itérations par défaut" 0 "5" scripts/config-factory.sh --max-iterations
+verifier_exact "sans aucune configuration : 3 itérations par défaut" 0 "3" scripts/config-factory.sh --max-iterations
 printf '# Commentaire\n\n  # commentaire indenté\nMAX_ITERATIONS_REVUE=7\nNOTIFICATION_COMMANDE=\n' > .factory.conf
 verifier_exact ".factory.conf lu (commentaires et lignes vides ignorés)" 0 "7" scripts/config-factory.sh --max-iterations
 printf 'MAX_ITERATIONS_REVUE=2\n' > .factory.local.conf
@@ -531,10 +1403,18 @@ printf 'touch pwned3\nMAX_ITERATIONS_REVUE=`touch pwned4`\nSECRET_INCONNU=abc\n'
 scripts/config-factory.sh >/dev/null 2>&1; scripts/config-factory.sh --max-iterations >/dev/null 2>&1
 [ ! -e pwned1 ] && [ ! -e pwned2 ] && [ ! -e pwned3 ] && [ ! -e pwned4 ] && ok "cs_config aucune commande des fichiers de configuration n'est exécutée" || ko "cs_config commande exécutée depuis la configuration" "$(ls pwned* 2>&1 | tr '\n' ' ')"
 printf 'MAX_ITERATIONS_REVUE=6\nNOTIFICATION_DESTINATAIRE=moi@example.com\nSECRET_INCONNU=abc\n' > .factory.local.conf
-verifier_exact "sans option : configuration effective, clés connues seulement (dans l'ordre)" 0 "MAX_ITERATIONS_REVUE=6
+verifier_exact "sans option : configuration effective, clés connues seulement (dans l'ordre)" 0 "AGENT_MODELE=sonnet
+AGENT_EFFORT=medium
+MAX_ITERATIONS_REVUE=6
+MAX_CRITERES_ISSUE=10
 NOTIFICATION_COMMANDE=
 NOTIFICATION_DESTINATAIRE=moi@example.com
-NOTIFICATION_EXPEDITEUR=" scripts/config-factory.sh
+NOTIFICATION_EXPEDITEUR=
+FIN_ISSUE_ARGUMENTS=
+FIN_ISSUE_IGNORES_AUTORISES=
+AGENTS_SILENCE_MINUTES=5
+AGENTS_RETRAIT_MINUTES=60
+DASHBOARD_THEME=clair" scripts/config-factory.sh
 verifier "option inconnue = 64 et usage" 64 "^Usage" scripts/config-factory.sh --bidon
 printf 'NOTIFICATION_DESTINATAIRE=commun@example.com\nNOTIFICATION_COMMANDE=sendmail -oi\n' >> .factory.conf; printf 'NOTIFICATION_DESTINATAIRE=\n' > .factory.local.conf
 out="$(scripts/config-factory.sh)"; printf '%s\n' "$out" | grep -qx 'NOTIFICATION_DESTINATAIRE=' && ok "valeur vide dans .factory.local.conf : efface la valeur de .factory.conf (désactivation locale)" || ko "valeur vide locale prioritaire" "$(scripts/config-factory.sh | tr '\n' '|')"
@@ -664,11 +1544,39 @@ deliver="$(lire_depot "$depot" factory/skills/deliver/SKILL.md)"; conf_modele="$
 [ -z "$restes" ] && ok "plus aucune limite « 3 itérations » écrite en dur (hors CHANGELOG et ce test)" || ko "limite « 3 itérations » écrite en dur" "$restes"
 printf '%s\n' "$deliver" | grep -q 'scripts/config-factory.sh --max-iterations' && printf '%s\n' "$deliver" | grep -q 'scripts/notifier.sh' && ok "/deliver : limite lue par config-factory.sh, blocage notifié par notifier.sh" || ko "/deliver : limite et notification"
 printf '%s\n' "$deliver" | grep -q "au moins un BLOQUANT" && printf '%s\n' "$deliver" | grep -q "IMPORTANT.*sans courriel" && ok "/deliver : courriel seulement s'il reste au moins un BLOQUANT (IMPORTANT seuls : remontés sans courriel)" || ko "/deliver : courriel réservé aux BLOQUANT"
+printf '%s\n' "$deliver" | grep -q 'statut: En revue' && printf '%s\n' "$deliver" | grep -q 'docs: issue <id> en revue' && printf '%s\n' "$deliver" | grep -q 'remets `statut: En cours`' && ok "/deliver : l'issue passe En revue au lancement de la première relecture, et revient En cours quand les corrections repartent au développeur" || ko "/deliver : statut En revue"
 printf '%s\n' "$conf_modele" | grep -qx 'NOTIFICATION_COMMANDE=' && printf '%s\n' "$conf_modele" | grep -q 'NOTIFICATION_COMMANDE=sendmail -oi' && [ -z "$(chercher_depot "$depot" -i '(sendmail|mail) +-t([^a-z]|$)' factory/CHANGELOG.md factory/scripts/tests/run.sh)" ] && ok "exemple sendmail -oi (destinataire en argument), aucun exemple avec -t (sendmail ou mail)" || ko "exemple avec -t" "$(chercher_depot "$depot" -i '(sendmail|mail) +-t([^a-z]|$)' factory/CHANGELOG.md factory/scripts/tests/run.sh | head -5 | tr '\n' '|')"
 [ "$(lire_depot "$depot" AGENTS.md | grep -c 'MAX_ITERATIONS_REVUE')" -ge 2 ] && [ "$(lire_depot "$depot" factory/templates/AGENTS.md | grep -c 'MAX_ITERATIONS_REVUE')" -ge 2 ] && ok "AGENTS.md et son modèle : limite MAX_ITERATIONS_REVUE aux étapes 4 et 5" || ko "AGENTS.md : MAX_ITERATIONS_REVUE aux étapes 4 et 5"
 adresses="$({ printf '%s\n' "$conf_modele"; lire_depot "$depot" .factory.conf; } | grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+' | grep -v '@example\.com$' | tr '\n' ' ')"
 [ -n "$conf_modele" ] && [ -z "$adresses" ] && ok "modèle .factory.conf : aucune adresse réelle (example.com seulement)" || ko "adresses du modèle .factory.conf" "$adresses"
 lire_depot "$depot" .gitignore | grep -qx '.factory.local.conf' && lire_depot "$depot" factory/templates/.gitignore | grep -qx '.factory.local.conf' && ok ".factory.local.conf ignoré par git (dépôt et modèle)" || ko ".factory.local.conf dans les .gitignore"
+
+echo "règle du framework d'abord (documentation)"
+for f in factory/prompts/code-reviewer.md factory/prompts/report-format.md factory/prompts/briefs/developer.md factory/prompts/briefs/reviewer.md factory/skills/deliver/SKILL.md factory/stacks/java-maven/README.md; do
+  lire_depot "$depot" "$f" | grep -qi "framework" && ok "$f parle du framework d'abord" || ko "$f : règle du framework absente"
+done
+lire_depot "$depot" factory/prompts/developer.md | grep -q "Le framework d'abord" && ok "developer.md : règle du framework d'abord" || ko "developer.md : règle du framework absente"
+lire_depot "$depot" factory/prompts/report-format.md | grep -q "^## Code écrit à la place du framework$" && lire_depot "$depot" factory/skills/deliver/SKILL.md | grep -q "Code écrit à la place du framework" && ok "section du rapport contrôlée par /deliver" || ko "section du rapport non contrôlée par /deliver"
+lire_depot "$depot" factory/prompts/code-reviewer.md | grep -q "écrit à la main.*constat IMPORTANT" && ok "reviewer : équivalent injustifié = IMPORTANT" || ko "reviewer : gravité du constat framework"
+lire_depot "$depot" factory/templates/AGENTS.md | grep -q "Le framework d'abord" && lire_depot "$depot" factory/templates/docs/adr/0000-template.md | grep -q "Mécanismes du framework" && ok "modèles AGENTS.md et ADR : règle présente" || ko "modèles AGENTS.md et ADR : règle absente"
+
+echo "référence de code (documentation)"
+guide_java=$(lire_depot "$depot" factory/stacks/java-maven/README.md)
+for motif in "Spring d'abord, JHipster comme modèle" "raw.githubusercontent.com/jhipster/.*/v[0-9]" "Pas de générateur, pas de clone" "Sans frontend" "| Angular |" "| React |" "| Vue |" "Session et CSRF" "jhipster-framework"; do
+  printf '%s\n' "$guide_java" | grep -q "$motif" && ok "guide java : $motif" || ko "guide java : $motif absent"
+done
+lire_depot "$depot" factory/templates/AGENTS.md | grep -q "La référence de code" && lire_depot "$depot" factory/templates/docs/adr/0000-template.md | grep -q "^### Référence de code$" && ok "modèles AGENTS.md et ADR : référence de code" || ko "modèles AGENTS.md et ADR : référence de code absente"
+lire_depot "$depot" factory/prompts/developer.md | grep -q "factory/stacks/<stack>/README.md" && ok "developer.md renvoie au guide de la stack" || ko "developer.md : renvoi au guide de la stack absent"
+lire_depot "$depot" factory/prompts/report-format.md | grep -q "^## Alignement sur la référence$" && lire_depot "$depot" factory/skills/deliver/SKILL.md | grep -q "Alignement sur la référence" && ok "alignement du rapport contrôlé par /deliver" || ko "alignement du rapport non contrôlé par /deliver"
+lire_depot "$depot" factory/prompts/code-reviewer.md | grep -q "sans raison est un constat IMPORTANT" && ok "reviewer : écart à la référence sans raison = IMPORTANT" || ko "reviewer : gravité de l'écart à la référence"
+for f in factory/prompts/briefs/developer.md factory/prompts/briefs/reviewer.md; do
+  lire_depot "$depot" "$f" | grep -q "Référence" && ok "$f : champ référence" || ko "$f : champ référence absent"
+done
+
+echo "langue du code (documentation)"
+for f in factory/templates/AGENTS.md factory/prompts/developer.md factory/prompts/code-reviewer.md factory/stacks/java-maven/README.md; do
+  lire_depot "$depot" "$f" | grep -q "classes techniques sont impérativement en anglais" && ok "$f : classes techniques en anglais" || ko "$f : règle de langue absente"
+done
 
 echo
 if [ "$echecs" -eq 0 ]; then echo "TESTS OK : $total vérifications"; else echo "TESTS EN ECHEC : $echecs sur $total"; fi

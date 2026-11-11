@@ -1,0 +1,31 @@
+package ca.gestionchalet.service.dto;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+/** Objet reçu du contrat (PRD, section 7.1) : aucun état de copie (D-66), aucun jeton, aucun chemin ni identifiant technique de fichier. */
+public record RecuDTO(
+        UUID id,
+        int version,
+        ValeursDTO valeurs,
+        Long montantTotalLuCents,
+        List<AlerteDTO> alertes,
+        List<PhotoDTO> photos,
+        Instant valideLe,
+        Instant corrigeLe) {
+
+    public RecuDTO {
+        alertes = List.copyOf(alertes);
+        photos = List.copyOf(photos);
+    }
+
+    /** {@code ecartCents} n'existe que pour {@code ECART_CALCUL} (PRD, section 7.1). */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record AlerteDTO(String code, String message, Long ecartCents) {
+    }
+
+    public record PhotoDTO(int rang, String format, long taille, String lienDrive) {
+    }
+}
