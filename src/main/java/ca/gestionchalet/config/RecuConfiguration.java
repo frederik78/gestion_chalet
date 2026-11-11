@@ -37,7 +37,8 @@ public class RecuConfiguration {
     @Bean
     AlertRules alertRules(ApplicationProperties properties) {
         ApplicationProperties.Alerts alertes = properties.alertes();
-        return new AlertRules(alertes.seuilNumerosInscriptionCents(), alertes.seuilPieceAVerifierCents(), alertes.ecartTolereCents());
+        return new AlertRules(alertes.seuilNumerosInscriptionCents(), alertes.seuilPieceAVerifierCents(), alertes.ecartTolereCents(),
+                alertes.tauxTpsMillipourcent(), alertes.tauxTvqMillipourcent(), alertes.ecartTaxesTolereCents());
     }
 
     @Bean

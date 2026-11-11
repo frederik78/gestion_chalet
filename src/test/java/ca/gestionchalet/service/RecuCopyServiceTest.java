@@ -131,6 +131,36 @@ class RecuCopyServiceTest {
         assertThat(etat(id)).isEqualTo("COPIEE");
     }
 
+    private static ValeursDTO tpsEtTvqInversees(long totalCents) {
+        return new ValeursDTO(LocalDate.of(2026, 6, 16), "Taxes inversées", null, "Fournitures", 11894L, 1187L, 595L, totalCents,
+                "123456789RT0001", "1234567890TQ0001");
+    }
+
+    @Test
+    void ca112_laTpsEtLaTvqInverseesSontCopieesTellesQuellesAvecLesDeuxTextesDansNotes() {
+        UUID id = valider(tpsEtTvqInversees(13676L)).recu().id();
+
+        assertThat(copie.processNext()).isTrue();
+
+        SheetRow ligne = ligne(id);
+        assertThat(ligne.gst()).isEqualByComparingTo("11.87");
+        assertThat(ligne.qst()).isEqualByComparingTo("5.95");
+        assertThat(ligne.notes()).isEqualTo("Rapport TVQ / TPS inhabituel : TVQ 5,95 $ pour une TPS de 11,87 $ ; "
+                + "TPS supérieure à 5 % du montant avant taxes : 11,87 $ pour 118,94 $");
+    }
+
+    @Test
+    void ca112_notesSuitLOrdreDuTableauDesAlertes() {
+        valider(tpsEtTvqInversees(14246L));
+        UUID doublon = valider(tpsEtTvqInversees(14246L)).recu().id();
+
+        assertThat(copie.processNext()).isTrue();
+        assertThat(copie.processNext()).isTrue();
+
+        assertThat(ligne(doublon).notes()).isEqualTo("Écart de calcul : 5,70 $ ; Rapport TVQ / TPS inhabituel : TVQ 5,95 $ pour une TPS de 11,87 $ ; "
+                + "TPS supérieure à 5 % du montant avant taxes : 11,87 $ pour 118,94 $ ; Doublon possible");
+    }
+
     @Test
     void ca31_lAnneeDuRecuChoisitLeFichierEtLOngletDeLaCorrespondanceEtAucunAutre() {
         UUID de2026 = valider(garageIberville()).recu().id();

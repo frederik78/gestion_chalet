@@ -15,7 +15,7 @@ class AlertRulesTest {
     private static final String TVQ = "1234567890TQ0001";
     private static final String TEXTE_PIECE = "Pièce à vérifier : nom de l'acheteur, description, conditions de paiement";
 
-    private final AlertRules rules = new AlertRules(10_000L, 50_000L, 2L);
+    private final AlertRules rules = new AlertRules(10_000L, 50_000L, 2L, 5_000L, 9_975L, 2L);
 
     private static Valeurs valeurs(Long avantTaxes, Long tps, Long tvq, long total, String numeroTps, String numeroTvq) {
         return new Valeurs(LocalDate.of(2026, 10, 11), "Fournisseur", null, "Fournitures", avantTaxes, tps, tvq, total, numeroTps, numeroTvq);
@@ -79,7 +79,7 @@ class AlertRulesTest {
 
     @Test
     void ca26_sansMontantAvantTaxesLEcartNEstPasCalcule() {
-        assertThat(codes(valeurs(null, 500L, 500L, 3_500L, null, null), null)).isEmpty();
+        assertThat(codes(valeurs(null, 500L, 998L, 3_500L, null, null), null)).doesNotContain(AlerteCode.ECART_CALCUL);
     }
 
     @Test
@@ -116,11 +116,99 @@ class AlertRulesTest {
 
     @Test
     void ca21_lesSeuilsViennentDeLaConfiguration() {
-        AlertRules autres = new AlertRules(5_000L, 7_000L, 10L);
+        AlertRules autres = new AlertRules(5_000L, 7_000L, 10L, 5_000L, 9_975L, 2L);
 
         assertThat(autres.evaluate(valeurs(1_000L, null, null, 5_000L, null, null), null, false)).extracting(Alerte::code)
                 .containsExactly(AlerteCode.NUMEROS_INSCRIPTION_MANQUANTS, AlerteCode.ECART_CALCUL);
         assertThat(autres.evaluate(valeurs(6_990L, null, null, 7_000L, TPS, TVQ), null, false)).extracting(Alerte::code)
                 .containsExactly(AlerteCode.PIECE_A_VERIFIER);
+    }
+
+    private List<Alerte> taxes(AlertRules regles, Long avantTaxes, Long tps, Long tvq, long total) {
+        return regles.evaluate(valeurs(avantTaxes, tps, tvq, total, TPS, TVQ), null, false).stream()
+                .filter(a -> a.code() == AlerteCode.RAPPORT_TVQ_TPS || a.code() == AlerteCode.TPS_AU_DELA_DU_TAUX).toList();
+    }
+
+    private List<Alerte> taxes(Long avantTaxes, Long tps, Long tvq, long total) {
+        return taxes(rules, avantTaxes, tps, tvq, total);
+    }
+
+    private static Alerte rapport(String tvq, String tps) {
+        return new Alerte(AlerteCode.RAPPORT_TVQ_TPS, "Rapport TVQ / TPS inhabituel : TVQ " + tvq + " pour une TPS de " + tps, null);
+    }
+
+    private static Alerte auDela(String tps, String avantTaxes) {
+        return new Alerte(AlerteCode.TPS_AU_DELA_DU_TAUX, "TPS supérieure à 5 % du montant avant taxes : " + tps + " pour " + avantTaxes, null);
+    }
+
+    @Test
+    void ca104_lesReceptsCoherentsNOntAucuneAlerteDeTaxes() {
+        assertThat(taxes(11_894L, 595L, 1_187L, 14_246L)).as("Hydro-Québec").isEmpty();
+        assertThat(taxes(61_827L, 3_091L, 6_167L, 71_085L)).as("Garage Iberville").isEmpty();
+    }
+
+    @Test
+    void ca105_laTpsEtLaTvqInverseesLevantLesDeuxAlertes() {
+        assertThat(taxes(11_894L, 1_187L, 595L, 13_676L)).containsExactly(rapport("5,95 $", "11,87 $"), auDela("11,87 $", "118,94 $"));
+    }
+
+    @Test
+    void ca106_uneTvqMalLueLeveLeRapportSeulement() {
+        List<Alerte> alertes = rules.evaluate(valeurs(61_827L, 3_091L, 1_667L, 66_585L, TPS, TVQ), null, false);
+
+        assertThat(alertes).extracting(Alerte::code).containsExactly(AlerteCode.PIECE_A_VERIFIER, AlerteCode.RAPPORT_TVQ_TPS);
+        assertThat(alertes.get(1).message()).isEqualTo("Rapport TVQ / TPS inhabituel : TVQ 16,67 $ pour une TPS de 30,91 $");
+    }
+
+    @Test
+    void ca107_uneTpsA525PourCentLeveSeulementLePlafond() {
+        assertThat(taxes(40_000L, 2_100L, 4_190L, 46_290L)).containsExactly(auDela("21,00 $", "400,00 $"));
+    }
+
+    @Test
+    void ca108_unPanierMixteSousLeTauxNAlertePas() {
+        assertThat(taxes(10_000L, 300L, 599L, 10_899L)).isEmpty();
+    }
+
+    @Test
+    void ca109_uneTaxeVideOuANulleNEstPasControlee() {
+        assertThat(taxes(11_894L, null, 1_187L, 13_081L)).isEmpty();
+        assertThat(taxes(11_894L, 595L, null, 12_489L)).isEmpty();
+        assertThat(taxes(11_894L, 0L, 1_187L, 13_081L)).isEmpty();
+        assertThat(taxes(11_894L, 595L, 0L, 12_489L)).isEmpty();
+        assertThat(taxes(null, null, null, 0L)).isEmpty();
+        assertThat(taxes(null, 1_187L, 595L, 13_676L)).containsExactly(rapport("5,95 $", "11,87 $"));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"1997, false", "1998, true", "1993, false", "1992, true"})
+    void ca110_lEcartDuRapportSeMesureExactementALaTolerance(long tvq, boolean attendue) {
+        assertThat(taxes(null, 1_000L, tvq, 1_000L + tvq).isEmpty()).isEqualTo(!attendue);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"2002, '20,02 $', false", "2003, '20,03 $', true"})
+    void ca110_lePlafondDeTpsSeMesureExactementALaTolerance(long tps, String texte, boolean attendue) {
+        assertThat(taxes(40_000L, tps, null, 40_000L + tps)).isEqualTo(attendue ? List.of(auDela(texte, "400,00 $")) : List.of());
+    }
+
+    @Test
+    void ca113_lesTauxEtLaToleranceViennentDeLaConfiguration() {
+        AlertRules taux = new AlertRules(10_000L, 50_000L, 2L, 6_000L, 9_000L, 2L);
+        assertThat(taxes(taux, 10_000L, 600L, 900L, 11_500L)).isEmpty();
+        assertThat(taxes(10_000L, 600L, 900L, 11_500L)).extracting(Alerte::code)
+                .containsExactly(AlerteCode.RAPPORT_TVQ_TPS, AlerteCode.TPS_AU_DELA_DU_TAUX);
+
+        AlertRules tolerante = new AlertRules(10_000L, 50_000L, 2L, 5_000L, 9_975L, 5L);
+        assertThat(taxes(tolerante, null, 1_000L, 1_998L, 2_998L)).isEmpty();
+        assertThat(taxes(null, 1_000L, 1_998L, 2_998L)).extracting(Alerte::code).containsExactly(AlerteCode.RAPPORT_TVQ_TPS);
+    }
+
+    @Test
+    void ca113_laToleranceDesTaxesDuPlafondDeTpsEstDistincteDeCelleDeLEcartDeCalcul() {
+        AlertRules tolerante = new AlertRules(10_000L, 50_000L, 2L, 5_000L, 9_975L, 5L);
+
+        assertThat(taxes(tolerante, 40_000L, 2_004L, null, 42_004L)).isEmpty();
+        assertThat(taxes(40_000L, 2_004L, null, 42_004L)).containsExactly(auDela("20,04 $", "400,00 $"));
     }
 }

@@ -156,4 +156,27 @@ class RecuAlertsRealServerTest {
 
         assertThat(valider(corps).json()).containsEntry("alertes", List.of());
     }
+
+    private static final Map<String, Object> RAPPORT = Map.of("code", "RAPPORT_TVQ_TPS", "message", "Rapport TVQ / TPS inhabituel : TVQ 5,95 $ pour une TPS de 11,87 $");
+    private static final Map<String, Object> AU_DELA = Map.of("code", "TPS_AU_DELA_DU_TAUX",
+            "message", "TPS supérieure à 5 % du montant avant taxes : 11,87 $ pour 118,94 $");
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void ca111_leControleRendLesDeuxAlertesSansRienEnregistrerPuisLaValidationCreeLeRecuAvecElles() {
+        Map<String, Object> valeurs = saisie("Taxes inversées", 11894L, 1187L, 595L, 13676L, true);
+        Map<String, Object> corpsControle = new LinkedHashMap<>();
+        corpsControle.put("valeurs", valeurs);
+
+        Reponse controle = client.appelAvecJeton("POST", "/api/recus/controles", new tools.jackson.databind.json.JsonMapper().writeValueAsString(corpsControle));
+
+        assertThat(controle.statut()).isEqualTo(200);
+        assertThat(controle.json()).isEqualTo(Map.of("alertes", List.of(RAPPORT, AU_DELA)));
+
+        Reponse validation = valider(RecuRequests.corps(valeurs));
+
+        assertThat(validation.statut()).isEqualTo(201);
+        assertThat(validation.json()).containsEntry("alertes", List.of(RAPPORT, AU_DELA));
+        assertThat(valeursDe(validation)).containsEntry("tpsCents", 1187).containsEntry("tvqCents", 595);
+    }
 }
