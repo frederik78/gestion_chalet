@@ -198,7 +198,7 @@ public class SheetRegenerationService {
     /** Un fichier (R-40) : tout ou rien pour l'onglet généré. */
     private void regenerate(int year, String fileId, List<SheetRow> rows) {
         List<SheetTab> tabs = new ArrayList<>(sheetClient.tabs(fileId));
-        dropLeftoverTemporaryTab(year, fileId, tabs);
+        removeLeftoverTemporaryTab(year, fileId, tabs);
         String title = rules.generatedTab();
         Optional<Integer> known = knownGeneratedTab(year, fileId, tabs);
         Set<Integer> usedIds = new TreeSet<>(tabs.stream().map(SheetTab::id).toList());
@@ -213,12 +213,12 @@ public class SheetRegenerationService {
             sheetClient.replace(fileId, temporaryId, targetId, title, known.isEmpty(), rows.size() + 1);
             updateTab(year, fileId, tab -> tab.memoriser(writtenCells(rows)));
         } finally {
-            dropTemporaryTab(year, fileId, temporaryId);
+            removeTemporaryTab(year, fileId, temporaryId);
         }
     }
 
     /** Un onglet temporaire que la régénération précédente n'a pas pu retirer (CA89) : elle l'avait noté, il est retiré avant tout. */
-    private void dropLeftoverTemporaryTab(int year, String fileId, List<SheetTab> tabs) {
+    private void removeLeftoverTemporaryTab(int year, String fileId, List<SheetTab> tabs) {
         Integer leftover = readTab(year, fileId).map(OngletGenere::getOngletTemporaireId).orElse(null);
         if (leftover == null) {
             return;
@@ -245,7 +245,7 @@ public class SheetRegenerationService {
     }
 
     /** Hors de l'issue de la régénération : une panne du retrait laisse l'onglet noté, et le prochain passage le retire. */
-    private void dropTemporaryTab(int year, String fileId, int temporaryId) {
+    private void removeTemporaryTab(int year, String fileId, int temporaryId) {
         try {
             sheetClient.deleteTab(fileId, temporaryId);
             updateTab(year, fileId, OngletGenere::oublierOngletTemporaire);
