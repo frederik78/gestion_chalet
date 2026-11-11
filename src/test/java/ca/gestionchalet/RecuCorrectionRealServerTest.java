@@ -21,6 +21,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -366,5 +372,43 @@ class RecuCorrectionRealServerTest {
         assertThat(ongletGenere().get(1).get(OBJET)).as("la valeur de la base remplace la modification manuelle").isEqualTo("Ampoules DEL");
         assertThat(google.cellsOf(FICHIER_2026, comptes).get(1)).as("« Comptes 2026 » est intact").containsExactly("5 mars 2026", "Modifié à la main aussi");
         assertThat(ligne(id)).as("la base n'a pas changé").isEqualTo(baseAvant);
+    }
+
+    @Test
+    void cs01_laCorrectionExigeUneSessionEtLeJetonCsrf() {
+        String id = valider(valeurs("Protégé", null, null, null, 3500));
+        Map<String, Object> avant = ligne(id);
+        String corps = JSON.writeValueAsString(Map.of("version", 1, "valeurs", valeurs("Pirate", null, null, null, 3500)));
+        TestClient anonyme = new TestClient(port, "source-" + UUID.randomUUID());
+        TestClient sansJeton = new TestClient(port, "source-" + UUID.randomUUID());
+        assertThat(sansJeton.connecter(TestDoublesConfiguration.MOT_DE_PASSE).statut()).isEqualTo(204);
+
+        assertThat(anonyme.appelAvecJeton("PUT", "/api/recus/" + id, corps).statut()).as("sans session").isEqualTo(401);
+        assertThat(sansJeton.appelSansJeton("PUT", "/api/recus/" + id, corps, null).statut()).as("sans jeton CSRF").isEqualTo(403);
+        assertThat(sansJeton.appelSansJeton("PUT", "/api/recus/" + id, corps, "faux").statut()).as("jeton CSRF faux").isEqualTo(403);
+
+        assertThat(ligne(id)).isEqualTo(avant);
+    }
+
+    @Test
+    void ca61_deuxCorrectionsSimultaneesSurLaMemeVersionNEnAppliquentQuUne() throws InterruptedException, ExecutionException {
+        String id = valider(valeurs("Départ", null, null, null, 3500));
+        CountDownLatch depart = new CountDownLatch(1);
+        ExecutorService fils = Executors.newFixedThreadPool(2);
+        try {
+            List<Future<Integer>> reponses = List.of("Première", "Seconde").stream().map(nom -> {
+                Callable<Integer> appel = () -> {
+                    depart.await();
+                    return corriger(id, 1, valeurs(nom, null, null, null, 3500)).statut();
+                };
+                return fils.submit(appel);
+            }).toList();
+            depart.countDown();
+
+            assertThat(List.of(reponses.get(0).get(), reponses.get(1).get())).containsExactlyInAnyOrder(200, 409);
+            assertThat(ligne(id)).containsEntry("version", 2);
+        } finally {
+            fils.shutdownNow();
+        }
     }
 }
