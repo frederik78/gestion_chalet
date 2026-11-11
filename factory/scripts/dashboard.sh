@@ -4,6 +4,7 @@
 # Tout texte lu dans les fichiers est échappé HTML avant d'être écrit (&, <, >, ", ').
 # Le statut d'une issue est le plus avancé de celui du dossier courant et de celui de sa branche locale (champ « branche » de l'en-tête), avec le dernier commit de la branche sur la carte.
 # Une dépendance ne compte que `Fait` dans le dossier courant : une issue finie sur sa branche, pas encore fusionnée, bloque encore les suivantes.
+# Descriptif des cartes : premier paragraphe de « ## Objectif » (issue), colonne « Décisions » du backlog (besoin) ; rien si vide.
 # Bandeau « Agents actifs » : lu dans <git-common-dir>/factory-agents.log, écrit par les hooks de l'outil d'agents (pour Claude Code :
 # factory/hook-agents-claude.sh, installé par factory/sync-claude.sh). Format, seul contrat, une ligne par événement, champs séparés par une tabulation :
 #   debut<TAB>epoch<TAB>agent_id<TAB>rôle<TAB>chemin du journal de l'agent | description<TAB>epoch<TAB>agent_id<TAB>texte | fin<TAB>epoch<TAB>agent_id
@@ -16,24 +17,29 @@
 # L'âge d'activité d'un worktree ne voit pas la modification d'un fichier existant dans un dossier entièrement non suivi : git status ne le
 # montre que comme « dir/ » (-uall le détaillerait, au prix d'un parcours complet). Git en échec ou sans date de commit : « état Git illisible ».
 #
-# Usage : scripts/dashboard.sh [--sortie <fichier>] [--attente <secondes>] [--boucle <secondes>]
+# Thème (clé DASHBOARD_THEME, option --theme) : clair (défaut), sombre ou auto (suit prefers-color-scheme du navigateur). Deux palettes de variables CSS (clair, sombre) ;
+# Pico suit data-theme (« dark » ou « light » ; absent en auto, où Pico lit prefers-color-scheme). L'impression reste claire dans tous les thèmes.
+#
+# Usage : scripts/dashboard.sh [--sortie <fichier>] [--attente <secondes>] [--boucle <secondes>] [--theme clair|sombre|auto]
 #   --sortie   fichier généré (défaut : dashboard.html à la racine du projet)
 #   --attente  délai de rafraîchissement automatique de la page (défaut : 30)
 #   --boucle   régénère le fichier toutes les <secondes> jusqu'à Ctrl-C (sinon une seule génération)
-# Code de sortie : 0 ; 64 si les arguments sont invalides ou si le dossier de --sortie n'existe pas (il n'est pas créé).
+#   --theme    clair, sombre ou auto (défaut : DASHBOARD_THEME de la configuration, sinon clair)
+# Code de sortie : 0 ; 64 si les arguments ou le thème sont invalides ou si le dossier de --sortie n'existe pas (il n'est pas créé).
 set -uo pipefail
 
 racine="$(cd "$(dirname "$0")/.." && pwd)"
 dossier_scripts="$(cd "$(dirname "$0")" && pwd)"
-usage() { echo "Usage : $0 [--sortie <fichier>] [--attente <secondes>] [--boucle <secondes>]" >&2; exit 64; }
+usage() { echo "Usage : $0 [--sortie <fichier>] [--attente <secondes>] [--boucle <secondes>] [--theme clair|sombre|auto]" >&2; exit 64; }
 
-sortie="dashboard.html"; attente=30; boucle=""
+sortie="dashboard.html"; attente=30; boucle=""; theme=""
 nombre() { case "$1" in ''|*[!0-9]*) return 1 ;; esac; [ "$1" -ge 1 ]; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --sortie) [ $# -ge 2 ] || usage; sortie="$2"; shift ;;
     --attente) [ $# -ge 2 ] && nombre "$2" || usage; attente="$2"; shift ;;
     --boucle) [ $# -ge 2 ] && nombre "$2" || usage; boucle="$2"; shift ;;
+    --theme) [ $# -ge 2 ] || usage; theme="$2"; shift ;;
     *) usage ;;
   esac
   shift
@@ -55,6 +61,13 @@ minutes() { # minutes <clé> <défaut> : valeur de la clé, entier entre 1 et 99
 }
 silence_minutes="$(minutes AGENTS_SILENCE_MINUTES "$AGENTS_SILENCE_MINUTES_DEFAUT")" || exit 64
 retrait_minutes="$(minutes AGENTS_RETRAIT_MINUTES "$AGENTS_RETRAIT_MINUTES_DEFAUT")" || exit 64
+[ -n "$theme" ] || theme="$(config_valeur DASHBOARD_THEME "$DASHBOARD_THEME_DEFAUT")" || exit 64
+case "$theme" in
+  clair) html_theme=' data-theme="light"'; color_scheme="light" ;;
+  sombre) html_theme=' data-theme="dark"'; color_scheme="dark" ;;
+  auto) html_theme=""; color_scheme="light dark" ;;
+  *) echo "DASHBOARD_THEME invalide : clair, sombre ou auto attendu (voir .factory.conf, .factory.local.conf, FACTORY_DASHBOARD_THEME, --theme)." >&2; exit 64 ;;
+esac
 # Dossier git commun (absolu) : journal des agents et liste des worktrees ; vide hors dépôt git.
 git_commun="$(git rev-parse --git-common-dir 2>/dev/null)" && git_commun="$(cd "$git_commun" 2>/dev/null && pwd)" || git_commun=""
 
@@ -80,33 +93,43 @@ parmi() { # parmi <valeur> <liste...> : vrai si la valeur figure dans la liste
   return 1
 }
 
-besoins_backlog() { # lignes « id SEP besoin SEP priorité SEP statut SEP prd » du tableau « Besoins fonctionnels »
+besoins_backlog() { # lignes « id SEP besoin SEP priorité SEP statut SEP prd SEP décisions » du tableau « Besoins fonctionnels »
   [ -f backlog.md ] || return 0
   awk -v FS='|' -v OFS="$sep" '
     /^## / { actif = ($0 ~ /^## Besoins fonctionnels/); next }
     actif && /^\|/ {
       gsub(/\\\|/, "\001")  # « \| » est un « | » littéral dans la cellule, pas un séparateur
-      for (i = 2; i <= 6; i++) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i); gsub(/\001/, "|", $i) }
+      for (i = 2; i <= 7; i++) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $i); gsub(/\001/, "|", $i) }
       if ($2 == "ID" || $2 ~ /^[-: ]+$/ || $2 == "" || $3 == "") next
-      print $2, $3, $4, $5, $6
+      print $2, $3, $4, $5, $6, $7
     }
   ' backlog.md
 }
 
-issues_dossier() { # lignes « id SEP titre SEP statut effectif SEP dépendances SEP besoin (F-xx) SEP dernier commit de la branche SEP statut local SEP branche », dans l'ordre des fichiers
+issue_objectif() { # issue_objectif <fichier> : premier paragraphe de la section « ## Objectif », sur une ligne ; vide si absent
+  awk '
+    NR == 1 && $0 == "---" { entete = 1; next }
+    entete { if ($0 == "---") entete = 0; next }
+    /^## / { if (actif) exit; actif = ($0 ~ /^## Objectif[[:space:]]*$/); next }
+    actif { if ($0 ~ /^[[:space:]]*$/) { if (texte != "") exit; next } gsub(/^[[:space:]]+|[[:space:]]+$/, ""); texte = (texte == "" ? $0 : texte " " $0) }
+    END { print texte }
+  ' "$1"
+}
+issues_dossier() { # lignes « id SEP titre SEP statut effectif SEP dépendances SEP besoin (F-xx) SEP dernier commit de la branche SEP statut local SEP branche SEP objectif », dans l'ordre des fichiers
   local f deps
   while IFS= read -r f; do
     deps="$(issue_liste "$f" depend_de | paste -sd, - | sed 's/,/, /g')"
-    printf '%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n' "$(issue_champ "$f" id)" "$sep" "$(issue_champ "$f" titre)" "$sep" "$(issue_statut_effectif "$f")" "$sep" "$deps" "$sep" "$(issue_champ "$f" besoin)" "$sep" "$(issue_dernier_commit "$f")" "$sep" "$(issue_champ "$f" statut)" "$sep" "$(issue_champ "$f" branche)"
+    printf '%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n' "$(issue_champ "$f" id)" "$sep" "$(issue_champ "$f" titre)" "$sep" "$(issue_statut_effectif "$f")" "$sep" "$deps" "$sep" "$(issue_champ "$f" besoin)" "$sep" "$(issue_dernier_commit "$f")" "$sep" "$(issue_champ "$f" statut)" "$sep" "$(issue_champ "$f" branche)" "$sep" "$(issue_objectif "$f")"
   done < <(issue_fichiers)
 }
 
 carte_besoin() { # carte_besoin <ligne de besoins_backlog>
-  local id libelle priorite statut prd
-  IFS="$sep" read -r id libelle priorite statut prd <<< "$1"
+  local id libelle priorite statut prd decisions
+  IFS="$sep" read -r id libelle priorite statut prd decisions <<< "$1"
   printf '<div class="carte"><strong>%s</strong> <span class="titre">%s</span>' "$(echappe "$id")" "$(echappe "$libelle")"
   [ -z "$priorite" ] || printf '<span class="detail">%s</span>' "$(echappe "$priorite")"
   [ -z "$prd" ] || printf '<span class="detail">PRD : %s</span>' "$(echappe "$prd")"
+  [ -z "$decisions" ] || printf '<span class="detail desc">%s</span>' "$(echappe "$decisions")"
   printf '</div>\n'
 }
 
@@ -128,8 +151,8 @@ bloquee() { # bloquee <statut> <dépendances « a, b »> : vrai si l'issue est �
   return 1
 }
 carte_issue() { # carte_issue <ligne de issues_dossier>
-  local id titre statut deps besoin commit branche signal marques="" etats=""
-  IFS="$sep" read -r id titre statut deps besoin commit _ branche <<< "$1"
+  local id titre statut deps besoin commit branche objectif signal marques="" etats=""
+  IFS="$sep" read -r id titre statut deps besoin commit _ branche objectif <<< "$1"
   if [ -n "$prochaine" ] && [ "$id" = "$prochaine" ]; then
     etats=" prochaine"; marques='<span class="marqueur marqueur-prochaine">prochaine</span>'
   fi
@@ -137,6 +160,7 @@ carte_issue() { # carte_issue <ligne de issues_dossier>
     etats="$etats bloquee"; marques="$marques"'<span class="marqueur marqueur-bloquee">bloquée</span>'
   fi
   printf '<div class="carte%s"><strong>%s</strong> <span class="titre">%s</span>%s' "$etats" "$(echappe "$id")" "$(echappe "$titre")" "$marques"
+  [ -z "$objectif" ] || printf '<span class="detail desc">%s</span>' "$(echappe "$objectif")"
   [ -z "$besoin" ] || printf '<span class="detail">%s</span>' "$(echappe "$besoin")"
   [ -z "$deps" ] || printf '<span class="detail">dépend de : %s</span>' "$(echappe "$deps")"
   [ -z "$commit" ] || printf '<span class="detail">dernier commit : %s</span>' "$(echappe "$commit")"
@@ -299,6 +323,40 @@ encart_autres_travaux() { # encart_autres_travaux <lignes de issues_dossier> : w
   printf '</section>\n'
 }
 
+palette() { # palette <clair|sombre> : variables CSS des couleurs de la page (les règles ne citent que ces variables)
+  case "$1" in
+    clair) cat <<'CSS'
+--fond: #f3f4f6; --texte: #222; --discret: #555; --vide: #9ca3af;
+--bord: #d1d5db; --bord-doux: #e5e7eb; --carte: #fff; --colonne: #f9fafb; --bord-gauche: #9ca3af;
+--ombre-a: .05; --ombre-b: .08; --ombre-c: .04;
+--prochaine: #2563eb; --bloquee: #dc2626; --marqueur-texte: #fff;
+--st-texte: #222; --st-afaire: #e5e7eb; --st-clarification: #fde68a; --st-specifie: #bfdbfe; --st-encours: #fdba74;
+--st-enrevue: #ddd6fe; --st-fait: #bbf7d0; --st-inconnu: #fecaca;
+--agent-actif: #166534; --agent-sans-nouvelles: #92400e;
+CSS
+    ;;
+    sombre) cat <<'CSS'
+--fond: #111827; --texte: #e5e7eb; --discret: #9ca3af; --vide: #6b7280;
+--bord: #374151; --bord-doux: #2d3748; --carte: #1f2937; --colonne: #172033; --bord-gauche: #6b7280;
+--ombre-a: .3; --ombre-b: .4; --ombre-c: .3;
+--prochaine: #2563eb; --bloquee: #dc2626; --marqueur-texte: #fff;
+--st-texte: #f9fafb; --st-afaire: #374151; --st-clarification: #854d0e; --st-specifie: #1e40af; --st-encours: #9a3412;
+--st-enrevue: #5b21b6; --st-fait: #166534; --st-inconnu: #991b1b;
+--agent-actif: #4ade80; --agent-sans-nouvelles: #fbbf24;
+CSS
+    ;;
+  esac
+}
+# Palettes du thème choisi : clair = claire seule ; sombre = sombre seule ; auto = claire, puis sombre sous prefers-color-scheme. L'impression revient toujours à la claire.
+palettes() {
+  case "$theme" in
+    clair) printf ':root {\n'; palette clair; printf '}\n' ;;
+    sombre) printf ':root {\n'; palette sombre; printf '}\n' ;;
+    auto) printf ':root {\n'; palette clair; printf '}\n@media (prefers-color-scheme: dark) {\n:root {\n'; palette sombre; printf '}\n}\n' ;;
+  esac
+  printf '@media print {\n:root {\n'; palette clair; printf '}\n}\n'
+}
+
 generer() { # page complète sur la sortie standard
   local b i id statut_local maintenant
   maintenant="$(date +%s)"
@@ -312,40 +370,43 @@ generer() { # page complète sur la sortie standard
   done <<< "$i"
   cat <<HTML
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr"$html_theme>
 <head>
 <meta charset="utf-8">
 <meta http-equiv="refresh" content="$attente">
-<meta name="color-scheme" content="light">
+<meta name="color-scheme" content="$color_scheme">
 <title>Dashboard</title>
 <style>
 $(cat "$racine/factory/assets/pico.classless.min.css" 2>/dev/null)
 </style>
 <style>
-:root { --pico-font-size: 90%; --pico-background-color: #f3f4f6; }
-body { font-family: system-ui, sans-serif; margin: 0; color: #222; }
+$(palettes)
+:root { --pico-font-size: 90%; }
+body { font-family: system-ui, sans-serif; margin: 0; color: var(--texte); background-color: var(--fond); }
 main { padding-block: 1.5rem; }
-h1 { margin-bottom: .2rem; } h2 { font-size: 1.4rem; margin-top: 2rem; padding-bottom: .3rem; border-bottom: 2px solid #d1d5db; }
-section ul { padding-left: 0; list-style: none; } section li { margin: 0; padding: .4rem .7rem; margin-bottom: .4rem; background: #fff; border: 1px solid #e5e7eb; border-radius: .4rem; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
-.carte { box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-.colonne { box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+h1 { margin-bottom: .2rem; } h2 { font-size: 1.4rem; margin-top: 2rem; padding-bottom: .3rem; border-bottom: 2px solid var(--bord); }
+section ul { padding-left: 0; list-style: none; } section li { margin: 0; padding: .4rem .7rem; margin-bottom: .4rem; background: var(--carte); border: 1px solid var(--bord-doux); border-radius: .4rem; box-shadow: 0 1px 2px rgba(0,0,0,var(--ombre-a)); }
+.carte { box-shadow: 0 1px 3px rgba(0,0,0,var(--ombre-b)); }
+.colonne { box-shadow: 0 1px 2px rgba(0,0,0,var(--ombre-c)); }
 .kanban { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(12rem, 1fr); gap: .8rem; overflow-x: auto; padding-bottom: .5rem; }
-.colonne { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: .4rem; min-width: 0; }
+.colonne { background: var(--colonne); border: 1px solid var(--bord-doux); border-radius: .4rem; min-width: 0; }
 .colonne h3 { margin: 0; padding: .4rem .6rem; font-size: 1rem; border-radius: .4rem .4rem 0 0; }
-.carte { background: #fff; border: 1px solid #d1d5db; border-left: 4px solid #9ca3af; border-radius: .3rem; margin: .5rem; padding: .4rem .5rem; overflow-wrap: anywhere; break-inside: avoid; }
-.carte.prochaine { border-left-color: #2563eb; } .carte.bloquee { border-left-color: #dc2626; }
-.marqueur { display: inline-block; margin-left: .3rem; padding: 0 .4rem; border-radius: .6rem; font-size: .75rem; color: #fff; }
-.marqueur-prochaine { background: #2563eb; } .marqueur-bloquee { background: #dc2626; }
-.detail { display: block; font-size: .85rem; color: #555; }
-.vide { margin: .5rem; text-align: center; color: #9ca3af; }
+.carte { background: var(--carte); border: 1px solid var(--bord); border-left: 4px solid var(--bord-gauche); border-radius: .3rem; margin: .5rem; padding: .4rem .5rem; overflow-wrap: anywhere; break-inside: avoid; }
+.carte.prochaine { border-left-color: var(--prochaine); } .carte.bloquee { border-left-color: var(--bloquee); }
+.marqueur { display: inline-block; margin-left: .3rem; padding: 0 .4rem; border-radius: .6rem; font-size: .75rem; color: var(--marqueur-texte); }
+.marqueur-prochaine { background: var(--prochaine); } .marqueur-bloquee { background: var(--bloquee); }
+.detail.desc { color: var(--texte); margin-top: .2rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; } .detail.desc:hover { -webkit-line-clamp: unset; }
+.detail { display: block; font-size: .85rem; color: var(--discret); }
+.vide { margin: .5rem; text-align: center; color: var(--vide); }
 .etiquette { padding: 0 .4rem; border-radius: .6rem; font-size: .8rem; }
-.statut-afaire { background: #e5e7eb; } .statut-clarification { background: #fde68a; }
-.statut-specifie { background: #bfdbfe; } .statut-encours { background: #fdba74; }
-.statut-enrevue { background: #ddd6fe; } .statut-fait { background: #bbf7d0; }
-.statut-inconnu { background: #fecaca; }
-.agent-actif { color: #166534; } .agent-sans-nouvelles { color: #92400e; font-style: italic; }
+.colonne h3, .etiquette { color: var(--st-texte); }
+.statut-afaire { background: var(--st-afaire); } .statut-clarification { background: var(--st-clarification); }
+.statut-specifie { background: var(--st-specifie); } .statut-encours { background: var(--st-encours); }
+.statut-enrevue { background: var(--st-enrevue); } .statut-fait { background: var(--st-fait); }
+.statut-inconnu { background: var(--st-inconnu); }
+.agent-actif { color: var(--agent-actif); } .agent-sans-nouvelles { color: var(--agent-sans-nouvelles); font-style: italic; }
 @media print {
-  body { margin: 0; } * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; } h1, h2, h3, h4, p, li, strong, small, code, a { color: var(--texte); } * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .kanban { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); overflow: visible; }
 }
 </style>

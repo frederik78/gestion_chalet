@@ -82,6 +82,11 @@
     <Class name="ca.gestionchalet.web.rest.GoogleResource"/>
     <Bug pattern="EI_EXPOSE_REP2"/>
   </Match>
+  <!-- Faux positif démontré : SheetResource garde le service injecté, comme GoogleResource. SpotBugs (MutableClasses.looksLikeASetter) juge « modifiable » toute classe qui a une méthode préfixée remove, add, put, replace…, ici removeTemporaryTab, une méthode privée du service sans effet sur son état exposé. Renommer la méthode pour tromper l'heuristique serait contourner l'alerte : le nom naturel est gardé. -->
+  <Match>
+    <Class name="ca.gestionchalet.web.rest.SheetResource"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
   <!-- Seul est journalisé le résultat de GoogleErrorCodes.loggable : un code de sa liste blanche ou AUTRE, jamais la valeur reçue (ca65_unCodeInconnu, avec retour à la ligne). -->
   <Match>
     <Class name="ca.gestionchalet.web.rest.GoogleResource"/>

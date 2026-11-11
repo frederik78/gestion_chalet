@@ -3,7 +3,7 @@ id: 001-09
 titre: Correction d'un reçu
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: À faire
+statut: Fait
 depend_de: [001-04, 001-12, 001-13]
 criteres: [CA28, CA61, CA62, CA63, CA98, CA138]
 branche: feat/001-09-correction-recu
@@ -32,3 +32,4 @@ Tests rouges puis verts avec un Sheet doublé en mémoire pour la régénératio
 - 2026-11-10 : En pause (D-66) : le Sheet devient une projection régénérée à la demande ; issue à revoir après le nouveau PRD.
 - 2026-11-10 : Redécoupée (D-66, D-67) : CA55 à CA60, retirés, rattachés à 001-08 (abandonnée) ; ajout de CA98 et de CA138 (partie correction de CA111). Dépend de 001-13 (régénération, pour CA62, CA63 et CA98) et de 001-12 (alertes de taxes, pour CA138) ; elle n'a plus de lien avec 001-06 ni 001-07.
 - Vigilance : R-29, R-34, R-08 (une taxe vide reste vide, jamais calculée), R-47 à R-49. Le contrôle de version de CA61 est celui que réutilise l'import (R-58).
+- 2026-11-11 : CA98 livré sans sa partie `recusNonReportes` (1 avant la régénération, 0 après), qui dépend de l'objet état complet de 001-15 : 001-15 ajoute cette assertion à son propre test (revue n° 1).

@@ -4,12 +4,15 @@ import ca.gestionchalet.domain.AlertRules;
 import ca.gestionchalet.domain.IdempotencyKeyConflictException;
 import ca.gestionchalet.domain.Photo;
 import ca.gestionchalet.domain.PhotoFormat;
+import ca.gestionchalet.domain.RecuNotFoundException;
 import ca.gestionchalet.domain.Recu;
 import ca.gestionchalet.domain.Valeurs;
 import ca.gestionchalet.repository.PhotoStorage;
 import ca.gestionchalet.repository.RecuRepository;
 import ca.gestionchalet.service.dto.RecuCheckDTO;
 import ca.gestionchalet.service.dto.RecuCheckResultDTO;
+import ca.gestionchalet.service.dto.RecuCorrectionDTO;
+import ca.gestionchalet.service.dto.RecuDTO;
 import ca.gestionchalet.service.dto.RecuValidationDTO;
 import ca.gestionchalet.service.dto.RecuValidationResult;
 import ca.gestionchalet.service.mapper.RecuMapper;
@@ -62,6 +65,20 @@ public class RecuService {
         Valeurs valeurs = recuMapper.toValeurs(validation.valeurs());
         String fingerprint = ContentFingerprint.of(valeurs, files);
         return transactionTemplate.execute(status -> findOrCreate(validation, valeurs, fingerprint, files, formats));
+    }
+
+    /**
+     * Une correction (R-29) : mêmes contrôles et mêmes alertes qu'à la validation, recalculées sur les valeurs corrigées et sur le total lu enregistré, jamais sur ce que dit le client.
+     * Rien ne part vers Google : le Sheet montre la correction à la régénération suivante.
+     */
+    public RecuDTO correct(UUID id, RecuCorrectionDTO correction) {
+        Valeurs valeurs = recuMapper.toValeurs(correction.valeurs());
+        return transactionTemplate.execute(status -> {
+            Recu recu = recuRepository.findById(id).orElseThrow(RecuNotFoundException::new);
+            recu.appliquerCorrection(correction.version(), valeurs,
+                    alertRules.evaluate(valeurs, recu.getMontantTotalLuCents(), hasPossibleDuplicate(valeurs, id)), clock.instant());
+            return recuMapper.toDto(recuRepository.saveAndFlush(recu));
+        });
     }
 
     /** Les alertes de ces valeurs, sans rien enregistrer. */

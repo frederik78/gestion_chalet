@@ -12,7 +12,7 @@ if [ -n "${FACTORY_TESTS_EN_COURS:-}" ]; then
 fi
 export FACTORY_TESTS_EN_COURS=1
 # Idem pour la configuration de la factory (lue par config-factory.sh et notifier.sh) : une valeur personnelle ne doit pas fausser les cas.
-unset FACTORY_AGENT_MODELE FACTORY_AGENT_EFFORT FACTORY_AGENTS_SILENCE_MINUTES FACTORY_AGENTS_RETRAIT_MINUTES FACTORY_MAX_ITERATIONS_REVUE FACTORY_MAX_CRITERES_ISSUE FACTORY_NOTIFICATION_COMMANDE FACTORY_NOTIFICATION_DESTINATAIRE FACTORY_NOTIFICATION_EXPEDITEUR
+unset FACTORY_AGENT_MODELE FACTORY_AGENT_EFFORT FACTORY_AGENTS_SILENCE_MINUTES FACTORY_AGENTS_RETRAIT_MINUTES FACTORY_DASHBOARD_THEME FACTORY_MAX_ITERATIONS_REVUE FACTORY_MAX_CRITERES_ISSUE FACTORY_NOTIFICATION_COMMANDE FACTORY_NOTIFICATION_DESTINATAIRE FACTORY_NOTIFICATION_EXPEDITEUR
 
 ici="$(cd "$(dirname "$0")" && pwd)"
 factory="$(cd "$ici/../.." && pwd)"
@@ -342,6 +342,15 @@ grep -q '<h3 class="statut-fait">Fait (1)</h3>' dashboard.html && grep -q '<h3 c
 carte 001-02 | grep -q 'class="carte prochaine".*<span class="marqueur marqueur-prochaine">prochaine</span>' && ! carte 001-02 | grep -q 'bloquée' && ok "marqueur « prochaine » sur l'issue de etat-issues.sh --prochaine (dépendance Fait : pas bloquée)" || ko "marqueur prochaine" "$(carte 001-02)"
 carte 001-03 | grep -q 'class="carte bloquee".*<span class="marqueur marqueur-bloquee">bloquée</span>' && ! carte 001-03 | grep -q '>prochaine<' && ok "marqueur « bloquée » sur une issue À faire dont une dépendance n'est pas Fait" || ko "marqueur bloquée" "$(carte 001-03)"
 [ "$(carte 001-01)" = '<div class="carte"><strong>001-01</strong> <span class="titre">T001-01</span></div>' ] && ok "carte d'issue Fait sans besoin ni dépendance : ni marqueur ni ligne vide" || ko "carte d'issue minimale" "$(carte 001-01)"
+# Descriptifs : « Objectif » de l'issue et « Décisions » du besoin, en un détail discret ; rien si absent (cartes ci-dessus inchangées).
+sed -i.bak 's/^| F-02 | Import des données | P2 | En cours | | |/| F-02 | Import des données | P2 | En cours | | Pourquoi : <b>reprise<\/b> des anciens fichiers |/' backlog.md; rm -f backlog.md.bak
+printf -- '---\nid: 001-09\ntitre: T001-09\nstatut: À faire\ndepend_de: []\nbranche:\n---\n\n## Objectif\nPermettre l'"'"'import <i>CSV</i>\nsur deux lignes.\n\nSecond paragraphe ignoré.\n\n## Périmètre\n- Dans : x\n' > docs/issues/001-09-x.md
+scripts/dashboard.sh >/dev/null
+carte F-02 | grep -qF '<span class="detail desc">Pourquoi : &lt;b&gt;reprise&lt;/b&gt; des anciens fichiers</span>' && ok "cartes : la décision du besoin est affichée (échappée)" || ko "descriptif de besoin" "$(carte F-02)"
+carte 001-09 | grep -qF '<span class="detail desc">Permettre l&#39;import &lt;i&gt;CSV&lt;/i&gt; sur deux lignes.</span>' && ! carte 001-09 | grep -q 'Second paragraphe' && ok "cartes : l'objectif de l'issue (premier paragraphe, échappé) est affiché" || ko "descriptif d'issue" "$(carte 001-09)"
+grep '^\.detail\.desc {' dashboard.html | grep -q 'color: var(--texte)' && ok "cartes : le descriptif suit la palette (lisible en thème sombre)" || ko "couleur du descriptif" "$(grep '^\.detail\.desc' dashboard.html)"
+scripts/dashboard.sh --theme sombre >/dev/null; ! grep '^\.detail\.desc {' dashboard.html | grep -q '#[0-9a-f]\{3,6\}' && ok "thème sombre : aucune couleur en dur sur le descriptif" || ko "couleur en dur du descriptif"
+rm -f docs/issues/001-09-x.md; scripts/dashboard.sh >/dev/null
 awk '/<section id="issues"/ { s = 1 } s && /<h3[^>]*>En cours \(0\)<\/h3>/ { getline; print; exit }' dashboard.html | grep -qx '<p class="vide">—</p>' && ok "colonne vide : « — » discret" || ko "colonne vide" "$(grep -n -A1 'En cours (0)' dashboard.html | head -4)"
 awk '/<section id="issues"/ { s = 1 } s && /class="carte/ { sub(/.*<strong>/, ""); sub(/<\/strong>.*/, ""); printf "%s ", $0 }' dashboard.html | grep -qx '001-02 001-03 001-01 ' && ok "cartes dans l'ordre des fichiers, par colonne" || ko "ordre des cartes" "$(grep -n 'class="carte' dashboard.html)"
 grep -A2 '<section id="en-cours">' dashboard.html | grep -q 'Aucune issue en cours.' && [ "$(grep -n '<section id="en-cours">' dashboard.html | cut -d: -f1)" -lt "$(grep -n '<section id="besoins">' dashboard.html | cut -d: -f1)" ] && ok "encart En cours en haut de page : « Aucune issue en cours. »" || ko "encart sans issue en cours" "$(grep -n -A3 'en-cours' dashboard.html)"
@@ -357,6 +366,31 @@ scripts/dashboard.sh --attente 5 >/dev/null
 grep -q 'content="5"' dashboard.html && ok "--attente change le rafraîchissement" || ko "--attente"
 verifier "--attente non numérique = 64" 64 "Usage" scripts/dashboard.sh --attente abc
 verifier "argument inconnu = 64" 64 "Usage" scripts/dashboard.sh --bad
+# Thème : clair (défaut, rendu inchangé), sombre, auto (prefers-color-scheme). Pas de JavaScript ni de ressource externe, quel que soit le thème.
+sans_horodatage() { grep -v 'Généré le' "$1"; }
+scripts/dashboard.sh --sortie defaut.html >/dev/null; scripts/dashboard.sh --sortie clair.html --theme clair >/dev/null
+scripts/dashboard.sh --sortie sombre.html --theme sombre >/dev/null; scripts/dashboard.sh --sortie auto.html --theme auto >/dev/null
+[ "$(sans_horodatage defaut.html)" = "$(sans_horodatage clair.html)" ] && ok "thème : le défaut est « clair »" || ko "thème par défaut = clair"
+grep -q '<html lang="fr" data-theme="light">' clair.html && grep -q '<meta name="color-scheme" content="light">' clair.html && grep -q -- '--fond: #f3f4f6;' clair.html && grep -q -- '--carte: #fff;' clair.html && ! grep -q 'prefers-color-scheme: dark' clair.html && ok "thème clair : data-theme=light, color-scheme light, palette claire d'origine, pas de palette sombre" || ko "thème clair" "$(grep -n 'data-theme\|color-scheme\|--fond' clair.html | head -5)"
+grep -q '<html lang="fr" data-theme="dark">' sombre.html && grep -q '<meta name="color-scheme" content="dark">' sombre.html && grep -q -- '--fond: #111827;' sombre.html && ! grep -q 'prefers-color-scheme: dark' sombre.html && ok "thème sombre : data-theme=dark, color-scheme dark, palette sombre" || ko "thème sombre" "$(grep -n 'data-theme\|color-scheme\|--fond' sombre.html | head -5)"
+grep -q '<html lang="fr">' auto.html && grep -q '<meta name="color-scheme" content="light dark">' auto.html && grep -q -- '--fond: #f3f4f6;' auto.html && grep -q '@media (prefers-color-scheme: dark)' auto.html && grep -q -- '--fond: #111827;' auto.html && ok "thème auto : sans data-theme, palette claire puis sombre sous prefers-color-scheme" || ko "thème auto" "$(grep -n 'data-theme\|color-scheme\|--fond' auto.html | head -5)"
+for t in clair sombre auto; do
+  ! grep -Eqi '<script|<link|<img|<iframe|@import|url\(|https?://' "$t.html" && grep -q -- '@media print' "$t.html" && ok "thème $t : aucune ressource externe ni JavaScript, impression prévue" || ko "thème $t : ressource externe ou impression" "$(grep -Eni '<script|<link|<img|<iframe|@import|url\(|https?://' "$t.html" | head -3)"
+done
+# L'impression redevient claire : la palette claire est réécrite après la palette sombre.
+[ "$(awk '/@media print/ { p = 1 } p && /--fond: #f3f4f6;/ { n++ } END { print n + 0 }' sombre.html)" = 1 ] && ok "thème sombre : impression en palette claire" || ko "impression claire du thème sombre"
+verifier "--theme invalide = 64" 64 "DASHBOARD_THEME invalide : clair, sombre ou auto attendu" scripts/dashboard.sh --theme violet
+verifier "--theme sans valeur = 64" 64 "Usage" scripts/dashboard.sh --theme
+printf 'DASHBOARD_THEME=sombre\n' > .factory.conf; scripts/dashboard.sh --sortie conf.html >/dev/null
+grep -q 'data-theme="dark"' conf.html && ok "DASHBOARD_THEME lu dans .factory.conf" || ko "DASHBOARD_THEME dans .factory.conf"
+FACTORY_DASHBOARD_THEME=auto scripts/dashboard.sh --sortie env.html >/dev/null
+! grep -q 'data-theme' env.html && grep -q 'prefers-color-scheme: dark' env.html && ok "FACTORY_DASHBOARD_THEME l'emporte sur .factory.conf" || ko "FACTORY_DASHBOARD_THEME"
+scripts/dashboard.sh --sortie opt.html --theme clair >/dev/null
+grep -q 'data-theme="light"' opt.html && ok "--theme l'emporte sur la configuration" || ko "--theme prioritaire"
+printf 'DASHBOARD_THEME=violet\n' > .factory.conf
+verifier "DASHBOARD_THEME invalide en configuration = 64" 64 "DASHBOARD_THEME invalide" scripts/dashboard.sh
+rm -f .factory.conf defaut.html clair.html sombre.html auto.html conf.html env.html opt.html
+verifier "config-factory.sh : DASHBOARD_THEME=clair par défaut" 0 "^DASHBOARD_THEME=clair$" scripts/config-factory.sh
 rm -f dashboard.html
 { perl -e 'alarm 4; exec @ARGV' scripts/dashboard.sh --boucle 1 >/dev/null 2>&1; } 2>/dev/null; code=$?
 [ -f dashboard.html ] && [ "$code" -ne 0 ] && ok "--boucle régénère en continu (arrêté par signal)" || ko "--boucle" "code $code"
@@ -602,7 +636,8 @@ autres "$sortie_a" | grep -qF '<p>Aucun autre travail.</p>' && ! autres "$sortie
 for f in factory/scripts/dashboard.sh factory/README.md factory/CHANGELOG.md; do
   lire_depot "$depot" "$f" | grep -q "Autres travaux" && ok "$f : encart « Autres travaux » documenté" || ko "$f : encart « Autres travaux » non documenté"
 done
-lire_depot "$depot" factory/CHANGELOG.md | grep -q '^## 1.16.0$' && [ "$(lire_depot "$depot" factory/VERSION)" = "1.16.0" ] && ok "version 1.16.0 (VERSION et CHANGELOG)" || ko "version 1.16.0 absente"
+version_courante="$(lire_depot "$depot" factory/VERSION | head -n1)"; titre_tete="$(lire_depot "$depot" factory/CHANGELOG.md | sed -n 's/^## //p' | head -n1)"
+[ -n "$version_courante" ] && [ "$titre_tete" = "$version_courante" ] && ok "version $version_courante : VERSION et en-tête du CHANGELOG concordent" || ko "VERSION ($version_courante) et première section du CHANGELOG ($titre_tete) divergent"
 
 
 echo "hook-agents-claude.sh (journal des agents, propre à Claude Code)"
@@ -1378,7 +1413,8 @@ NOTIFICATION_EXPEDITEUR=
 FIN_ISSUE_ARGUMENTS=
 FIN_ISSUE_IGNORES_AUTORISES=
 AGENTS_SILENCE_MINUTES=5
-AGENTS_RETRAIT_MINUTES=60" scripts/config-factory.sh
+AGENTS_RETRAIT_MINUTES=60
+DASHBOARD_THEME=clair" scripts/config-factory.sh
 verifier "option inconnue = 64 et usage" 64 "^Usage" scripts/config-factory.sh --bidon
 printf 'NOTIFICATION_DESTINATAIRE=commun@example.com\nNOTIFICATION_COMMANDE=sendmail -oi\n' >> .factory.conf; printf 'NOTIFICATION_DESTINATAIRE=\n' > .factory.local.conf
 out="$(scripts/config-factory.sh)"; printf '%s\n' "$out" | grep -qx 'NOTIFICATION_DESTINATAIRE=' && ok "valeur vide dans .factory.local.conf : efface la valeur de .factory.conf (désactivation locale)" || ko "valeur vide locale prioritaire" "$(scripts/config-factory.sh | tr '\n' '|')"

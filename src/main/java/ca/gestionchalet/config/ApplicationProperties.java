@@ -86,9 +86,12 @@ public record ApplicationProperties(@Valid @NotNull Security securite, @Valid @N
      * @param adresseDrive adresse de l'API de Drive
      * @param adresseSheets adresse de l'API de Sheets
      * @param adresseLienFichier adresse d'un fichier Drive, où {@code {id}} est l'identifiant renvoyé par Drive
+     * @param ongletGenere titre de l'onglet que la régénération crée et réécrit dans le fichier de chaque année (D-68)
+     * @param suffixeOngletTemporaire suffixe du titre de l'onglet temporaire de la régénération (R-40)
      */
     public record Copy(boolean automatique, @NotNull Duration intervalle, @NotNull Duration repriseInitiale, @NotNull Duration repriseMaximale, @NotNull Duration delaiAppel, @NotBlank String dossierDrive,
-            Map<Integer, YearSheet> annees, @NotBlank String adresseDrive, @NotBlank String adresseSheets, @NotBlank String adresseLienFichier) {
+            Map<Integer, YearSheet> annees, @NotBlank String adresseDrive, @NotBlank String adresseSheets, @NotBlank String adresseLienFichier,
+            @NotBlank String ongletGenere, @NotBlank String suffixeOngletTemporaire) {
 
         public Copy {
             annees = annees == null ? Map.of() : Map.copyOf(annees);

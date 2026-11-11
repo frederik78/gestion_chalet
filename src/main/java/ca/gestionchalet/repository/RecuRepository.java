@@ -19,6 +19,8 @@ public interface RecuRepository extends Repository<Recu, UUID> {
 
     Optional<Recu> findByCleIdempotence(UUID cleIdempotence);
 
+    List<Recu> findAll();
+
     /** Les reçus dont au moins une photo n'est pas déposée : la file du dépôt (D-66). */
     @Query("select distinct r from Recu r join r.photos p where p.driveFileId is null")
     List<Recu> findWithPhotosToDeposit();

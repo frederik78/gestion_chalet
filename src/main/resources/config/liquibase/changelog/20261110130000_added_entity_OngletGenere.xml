@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- L'onglet généré de chaque fichier d'année : son identité, et ce que la dernière régénération y a écrit (PRD, section 6, R-53). -->
+    <changeSet id="20261110130000-1" author="gestion-chalet">
+        <createTable tableName="onglet_genere">
+            <column name="annee" type="int"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="fichier" type="varchar(255)"><constraints nullable="false"/></column>
+            <column name="onglet_id" type="int"/>
+            <column name="onglet_temporaire_id" type="int"/>
+            <column name="etat_contenu" type="varchar(10)"><constraints nullable="false"/></column>
+        </createTable>
+        <createTable tableName="onglet_genere_cellule">
+            <column name="annee" type="int">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="pk_onglet_genere_cellule" foreignKeyName="fk_onglet_genere_cellule_annee" references="onglet_genere(annee)"/>
+            </column>
+            <column name="recu_id" type="char(36)"><constraints nullable="false" primaryKey="true" primaryKeyName="pk_onglet_genere_cellule"/></column>
+            <column name="colonne" type="int"><constraints nullable="false" primaryKey="true" primaryKeyName="pk_onglet_genere_cellule"/></column>
+            <column name="contenu" type="varchar(4000)"/>
+        </createTable>
+    </changeSet>
+</databaseChangeLog>
