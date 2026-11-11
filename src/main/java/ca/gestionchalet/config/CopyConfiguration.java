@@ -5,6 +5,7 @@ import ca.gestionchalet.client.GoogleDriveClient;
 import ca.gestionchalet.client.GoogleSheetClient;
 import ca.gestionchalet.client.SheetClient;
 import ca.gestionchalet.domain.CopyRules;
+import ca.gestionchalet.domain.RegenerationRules;
 import ca.gestionchalet.domain.SheetTarget;
 import ca.gestionchalet.service.GoogleTokenService;
 import java.net.http.HttpClient;
@@ -34,6 +35,14 @@ public class CopyConfiguration {
     CopyRules copyRules() {
         return new CopyRules(copy.annees().entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> new SheetTarget(entry.getValue().fichier(), entry.getValue().onglet()))));
+    }
+
+    @Bean
+    RegenerationRules regenerationRules() {
+        return new RegenerationRules(
+                copy.annees().entrySet().stream().filter(entry -> entry.getValue().fichier() != null)
+                        .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().fichier())),
+                copy.ongletGenere(), copy.suffixeOngletTemporaire());
     }
 
     @Bean

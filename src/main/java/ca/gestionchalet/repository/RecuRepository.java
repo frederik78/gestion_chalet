@@ -20,6 +20,8 @@ public interface RecuRepository extends Repository<Recu, UUID> {
 
     Optional<Recu> findByCleIdempotence(UUID cleIdempotence);
 
+    List<Recu> findAll();
+
     List<Recu> findByEtatCopie(EtatCopie etatCopie);
 
     List<Recu> findByEtatCopieAndMotifBlocage(EtatCopie etatCopie, MotifBlocage motifBlocage);

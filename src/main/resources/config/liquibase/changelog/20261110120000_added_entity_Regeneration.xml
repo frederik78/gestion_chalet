@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- L'état de la régénération du Sheet : une seule ligne (PRD, section 6). -->
+    <changeSet id="20261110120000-1" author="gestion-chalet">
+        <createTable tableName="regeneration">
+            <column name="id" type="int"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="etat" type="varchar(20)"><constraints nullable="false"/></column>
+            <column name="motif" type="varchar(30)"/>
+            <column name="annee_en_cause" type="int"/>
+            <column name="demandee_le" type="varchar(40)"/>
+            <column name="derniere_reussite_le" type="varchar(40)"/>
+            <column name="dernier_echec_le" type="varchar(40)"/>
+            <column name="recus_ecrits" type="int"/>
+        </createTable>
+        <createTable tableName="regeneration_annee_non_configuree">
+            <column name="regeneration_id" type="int">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="pk_regeneration_annee" foreignKeyName="fk_regeneration_annee_regeneration_id" references="regeneration(id)"/>
+            </column>
+            <column name="annee" type="int"><constraints nullable="false" primaryKey="true" primaryKeyName="pk_regeneration_annee"/></column>
+        </createTable>
+    </changeSet>
+</databaseChangeLog>

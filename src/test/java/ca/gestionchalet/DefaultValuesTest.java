@@ -42,6 +42,8 @@ class DefaultValuesTest {
         "recus.alertes.taux-tvq-millipourcent, 9975",
         "recus.alertes.ecart-taxes-tolere-cents, 2",
         "recus.modele, claude-haiku-5-5",
+        "recus.copie.onglet-genere, Reçus générés",
+        "recus.copie.suffixe-onglet-temporaire, ' (temporaire)'",
         "recus.lecture.delai, 60s",
         "recus.lecture.lectures-par-heure, 60",
         "recus.lecture.cote-max-pixels, 1568",

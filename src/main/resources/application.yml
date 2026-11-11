@@ -160,6 +160,10 @@ recus:
     adresse-drive: https://www.googleapis.com
     adresse-sheets: https://sheets.googleapis.com
     adresse-lien-fichier: https://drive.google.com/file/d/{id}/view
+    # La régénération (D-66, D-68) écrit dans le fichier de chaque année un onglet que l'application crée et réécrit en entier, sous ce nom : jamais celui d'un onglet de l'utilisateur
+    # (« Comptes 2026 »), qu'elle refuse de toucher (R-41). Le nouveau contenu s'écrit d'abord dans un onglet temporaire, ce nom suivi de ce suffixe (R-40).
+    onglet-genere: Reçus générés
+    suffixe-onglet-temporaire: " (temporaire)"
     # Le fichier et l'onglet de chaque année de la date d'un reçu (D-18) : aucune entrée par défaut, aucune copie ne part (D-62). Une année absente : le reçu est conservé, ses photos sont
     # déposées, la ligne attend l'ajout de l'année (ANNEE_NON_CONFIGUREE). Une entrée sans fichier ou sans onglet est ignorée. Se renseigne par l'environnement, une année à la fois :
     #   RECUS_COPIE_ANNEES_2026_FICHIER=<identifiant du fichier>   RECUS_COPIE_ANNEES_2026_ONGLET=Comptes 2026
