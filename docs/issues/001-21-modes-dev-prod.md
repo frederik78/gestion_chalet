@@ -1,9 +1,9 @@
 ---
-id: 001-20
+id: 001-21
 titre: Modes dev et prod
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: En revue
+statut: Fait
 depend_de: [001-01]
 criteres: [CS37]
 branche: fix/modes-dev-prod
@@ -27,4 +27,4 @@ Tests `cs29_…` rouges puis verts, `scripts/verify-clean.sh` à `VERIFY OK`.
 
 ## Notes
 - 2026-11-10 : Issue créée sur décision de l'utilisateur pour que CS37 soit couvert par exactement une issue non `Fait`. Tests : `cs37_modeProd_sansProfilLesCookiesPortentSecure`, `cs37_modeDev_leProfilDevRetireSecureDesCookies`, `cs37_modeDev_leDemarrageJournaliseUnAvertissementSansValeurSecrete`, `cs37_modeDev_sansRandomUUIDLeBoutonContinuerFonctionneEtLaCleEstUnUuidV4` (Chrome).
-- Le passage à `Fait` revient à l'utilisateur après sa fusion et `scripts/fin-issue.sh 001-20`.
+- Le passage à `Fait` revient à l'utilisateur après sa fusion et `scripts/fin-issue.sh 001-21`.
