@@ -164,6 +164,40 @@ class RecuCopyServiceTest {
     }
 
     @Test
+    void r29_uneFoisLaPremierePhotoDeposeeSeuleLaSecondeEstRepriseApresSaPanne() {
+        UUID id = valider(simple("F"), photo(4), photo(5)).recu().id();
+        List<UUID> photos = photosDe(id);
+        google.failDepositOf(photos.get(1), new TransientGoogleException("HTTP_503"));
+
+        copie.processPending();
+        assertThat(fichierDe(photos.get(0))).isNotNull();
+        assertThat(fichierDe(photos.get(1))).isNull();
+        String premierFichier = fichierDe(photos.get(0));
+
+        passerApres(Duration.ofSeconds(60));
+
+        assertThat(google.journal()).containsExactly("drive:" + photos.get(0), "drive:" + photos.get(1), "drive:" + photos.get(1));
+        assertThat(fichierDe(photos.get(0))).isEqualTo(premierFichier);
+        assertThat(fichierDe(photos.get(1))).isNotNull();
+    }
+
+    @Test
+    void r20_unRefusDeDriveFaitAttendreLaPhotoUneHeureEtNonUnPassagePeriodique() {
+        UUID id = validerUnePhoto();
+        google.failNextDeposit(new BlockedGoogleException(MotifBlocage.FICHIER_INACCESSIBLE));
+        copie.processPending();
+        assertThat(google.depositCalls()).isEqualTo(1);
+
+        passerApres(Duration.ofMinutes(1));
+        passerApres(Duration.ofMinutes(58));
+        assertThat(google.depositCalls()).as("rien avant 59 min").isEqualTo(1);
+        passerApres(Duration.ofMinutes(1));
+
+        assertThat(google.depositCalls()).as("un essai à 60 min").isEqualTo(2);
+        assertThat(fichierDe(photosDe(id).getFirst())).isNotNull();
+    }
+
+    @Test
     void ca46_unDepotEnPanneLaisseLeRecuEnregistreSansLienEtProgrammeUnEssaiSansAppelerLeSheet(CapturedOutput journaux) {
         UUID id = valider(simple("Fournisseur-temoin-journal"), photo(4)).recu().id();
         google.failNextDeposit(new TransientGoogleException("PANNE"));
