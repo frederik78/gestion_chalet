@@ -17,7 +17,9 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
@@ -90,9 +92,11 @@ public class SheetRegenerationService {
             written += rows.size();
         }
         int total = written;
+        Set<Integer> yearsWithoutFile = new TreeSet<>(rowsByYear.keySet());
+        yearsWithoutFile.removeAll(rules.files().keySet());
         transactionTemplate.executeWithoutResult(status -> {
             Regeneration regeneration = regenerationRepository.findById(Regeneration.UNIQUE_ID).orElseThrow();
-            regeneration.reussir(clock.instant(), total, List.of());
+            regeneration.reussir(clock.instant(), total, yearsWithoutFile);
             regenerationRepository.save(regeneration);
         });
     }

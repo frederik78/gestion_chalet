@@ -166,4 +166,68 @@ class SheetRegenerationRealServerTest {
         assertThat(ligne.get(10)).as("l'identifiant du reçu, en texte").isEqualTo(reponse.json().get("id"));
         assertThat(ligne).as("aucune formule").noneMatch(InMemoryGoogle.Formula.class::isInstance);
     }
+
+    private static final int COMPTES = 7;
+    private static final int BUDGET = 3;
+
+    /** Les onglets de l'utilisateur : des lignes manuelles, des formules, un total, et une formule d'un autre onglet qui lit l'onglet généré. */
+    private void semerLesOngletsDeLUtilisateur(String fichier) {
+        google.seedTab(fichier, COMPTES, "Comptes 2026", List.of(
+                List.of("DATE", "BOUTIQUE", "MONTANT TOTAL"),
+                List.of("mars", "", ""),
+                List.of("5 mars 2026", "Saisi à la main", new BigDecimal("12.00")),
+                List.of("", "TOTAL", new InMemoryGoogle.Formula("=SUM(C3:C3)"))));
+        google.seedTab(fichier, BUDGET, "Budget", List.of(List.of("Dépenses", new InMemoryGoogle.Formula("='Reçus générés'!H2"))));
+    }
+
+    @Test
+    void ca31_seulLOngletGenereDuFichierDeLAnneeRecoitDesEcrituresEtAucunAutreFichierNEstOuvert() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        semerLesOngletsDeLUtilisateur(FICHIER_2026);
+        google.seedFile(FICHIER_2025);
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+        valider("2025-03-05", "Fournisseur 2025", "Autre année");
+
+        assertThat(regenerer().etat()).isEqualTo("REUSSIE");
+
+        assertThat(google.requests()).extracting(InMemoryGoogle.Request::fileId).as("aucun autre fichier n'est ouvert").containsOnly(FICHIER_2026);
+        List<InMemoryGoogle.Request> ecritures = google.requests().stream().filter(requete -> !requete.operation().equals("tabs")).toList();
+        assertThat(ecritures).isNotEmpty();
+        assertThat(ecritures).flatExtracting(InMemoryGoogle.Request::sheetIds).as("ni « Comptes 2026 » ni « Budget » ne reçoivent d'écriture").doesNotContain(COMPTES, BUDGET);
+        assertThat(google.tabsOf(FICHIER_2026)).extracting(SheetTab::title).containsExactlyInAnyOrder("Comptes 2026", "Budget", ONGLET_GENERE);
+    }
+
+    @Test
+    void ca87_leContenuDesOngletsDeLUtilisateurEstIdentiqueAvantEtApresLaRegeneration() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        semerLesOngletsDeLUtilisateur(FICHIER_2026);
+        List<List<Object>> comptesAvant = google.cellsOf(FICHIER_2026, COMPTES);
+        List<List<Object>> budgetAvant = google.cellsOf(FICHIER_2026, BUDGET);
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+
+        regenerer();
+
+        assertThat(google.cellsOf(FICHIER_2026, COMPTES)).isEqualTo(comptesAvant);
+        assertThat(google.cellsOf(FICHIER_2026, BUDGET)).isEqualTo(budgetAvant);
+        assertThat(google.requests().stream().filter(requete -> !requete.operation().equals("tabs"))).flatExtracting(InMemoryGoogle.Request::sheetIds)
+                .doesNotContain(COMPTES, BUDGET);
+    }
+
+    @Test
+    void ca32_uneAnneeSansFichierEstSignaleeSansEchecEtLesAutresAnneesSontEcrites() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+        String recu2024 = valider("2024-05-02", "Fournisseur 2024", "Sans fichier");
+
+        RegenerationStateDTO etat = regenerer();
+
+        assertThat(etat.etat()).as("pas d'échec").isEqualTo("REUSSIE");
+        assertThat(etat.motif()).isNull();
+        assertThat(etat.anneesNonConfigurees()).containsExactly(2024);
+        assertThat(etat.recusEcrits()).isEqualTo(1);
+        assertThat(colonne(ongletGenere(FICHIER_2026), 10)).doesNotContain(recu2024);
+        assertThat(google.requests()).extracting(InMemoryGoogle.Request::fileId).containsOnly(FICHIER_2026);
+        assertThat(google.depositCalls()).as("une régénération ne dépose aucune photo (R-45)").isZero();
+    }
 }
