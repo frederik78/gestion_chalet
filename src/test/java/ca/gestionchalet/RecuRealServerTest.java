@@ -451,7 +451,7 @@ class RecuRealServerTest {
 
         Reponse reponse = client.appelAvecJeton("PUT", "/api/recus/" + id, "{\"etatCopie\":\"COPIEE\",\"alertes\":[],\"motifBlocage\":\"FORMULE_PRESENTE\"}");
 
-        assertThat(reponse.statut()).isEqualTo(404);
+        assertThat(reponse.statut()).as("la route de correction existe depuis 001-09 : sans version ni valeurs, le corps est refusé").isEqualTo(400);
         assertThat(base.queryForObject("select etat_copie from recu where id = ?", String.class, id)).isEqualTo("BLOQUEE");
     }
 
