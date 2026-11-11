@@ -19,7 +19,6 @@ import ca.gestionchalet.repository.RecuRepository;
 import ca.gestionchalet.repository.RegenerationRepository;
 import ca.gestionchalet.service.dto.RegenerationStateDTO;
 import ca.gestionchalet.service.mapper.RegenerationMapper;
-import jakarta.annotation.PreDestroy;
 import java.time.Clock;
 import java.security.SecureRandom;
 import java.time.Instant;
@@ -32,11 +31,12 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -87,14 +87,11 @@ public class SheetRegenerationService {
     private final RegenerationRules rules;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
-    private final ExecutorService worker = Executors.newSingleThreadExecutor(task -> {
-        Thread thread = new Thread(task, "regeneration-sheet");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private final TaskExecutor worker;
 
     public SheetRegenerationService(RecuRepository recuRepository, RegenerationRepository regenerationRepository, OngletGenereRepository ongletGenereRepository,
-            RegenerationMapper mapper, SheetClient sheetClient, RegenerationRules rules, TransactionTemplate transactionTemplate, Clock clock) {
+            RegenerationMapper mapper, SheetClient sheetClient, RegenerationRules rules, TransactionTemplate transactionTemplate, Clock clock,
+            @Qualifier("regenerationExecutor") TaskExecutor worker) {
         this.recuRepository = recuRepository;
         this.regenerationRepository = regenerationRepository;
         this.ongletGenereRepository = ongletGenereRepository;
@@ -103,28 +100,50 @@ public class SheetRegenerationService {
         this.rules = rules;
         this.transactionTemplate = transactionTemplate;
         this.clock = clock;
+        this.worker = worker;
     }
 
-    @PreDestroy
-    void stop() {
-        worker.shutdownNow();
-    }
-
-    /** Le bouton : l'état passe à {@code EN_COURS}, puis le fil unique écrit le Sheet. */
+    /**
+     * Le bouton : l'état passe à {@code EN_COURS}, puis le fil unique écrit le Sheet. Une tâche que l'exécuteur rejette (arrêté ou plein) ne laisse pas l'état en cours : il passe à
+     * {@code ECHEC}, et la demande échoue.
+     */
     public void request() {
         transactionTemplate.executeWithoutResult(status -> {
             Regeneration regeneration = regenerationRepository.findById(Regeneration.UNIQUE_ID).orElseGet(Regeneration::jamais);
             regeneration.demander(clock.instant());
             regenerationRepository.save(regeneration);
         });
-        worker.execute(this::run);
+        try {
+            worker.execute(this::run);
+        } catch (TaskRejectedException e) {
+            LOG.error("Régénération : tâche rejetée ({})", e.getClass().getSimpleName());
+            fail(MotifEchec.GOOGLE_INDISPONIBLE, null, Set.of());
+            throw e;
+        }
     }
 
     public RegenerationStateDTO state() {
         return transactionTemplate.execute(status -> mapper.toDto(regenerationRepository.findById(Regeneration.UNIQUE_ID).orElseGet(Regeneration::jamais)));
     }
 
+    /**
+     * La tâche du fil unique : ce qui lui échappe est journalisé par son nom de classe seulement (jamais le message ni la pile : ils peuvent citer un reçu), et l'état ne reste pas
+     * {@code EN_COURS} si la base répond. Si la base ne répond pas non plus, l'état reste tel quel : un arrêt pendant l'écriture relève de la reprise au redémarrage.
+     */
     private void run() {
+        try {
+            write();
+        } catch (RuntimeException e) {
+            LOG.error("Régénération interrompue : {}", e.getClass().getName());
+            try {
+                fail(MotifEchec.GOOGLE_INDISPONIBLE, null, Set.of());
+            } catch (RuntimeException second) {
+                LOG.error("Régénération : état non mis à jour ({})", second.getClass().getName());
+            }
+        }
+    }
+
+    private void write() {
         Set<Integer> yearsWithoutFile = new TreeSet<>();
         Progress progress = new Progress();
         try {
