@@ -6,6 +6,7 @@ import ca.gestionchalet.domain.SheetTarget;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +35,8 @@ public class GoogleSheetClient implements SheetClient {
     private static final String METADATA_KEY = "recuId";
     private static final long DAYS_FROM_SHEETS_EPOCH_TO_UNIX_EPOCH = 25569;
     private static final String PHOTO_SEPARATOR = ", ";
+    private static final Map<String, Object> GREY_BACKGROUND = Map.of("red", 0.85, "green", 0.85, "blue", 0.85);
+    private static final Map<String, Object> GREY_TEXT = Map.of("red", 0.6, "green", 0.6, "blue", 0.6);
 
     private final RestClient restClient;
     private final GoogleCalls calls;
@@ -85,6 +88,132 @@ public class GoogleSheetClient implements SheetClient {
         }
         calls.call(() -> restClient.post().uri("/v4/spreadsheets/{id}:batchUpdate", fileId).header(HttpHeaders.AUTHORIZATION, authorization)
                 .contentType(MediaType.APPLICATION_JSON).body(Map.of("requests", requests)).retrieve().toBodilessEntity());
+    }
+
+    @Override
+    public List<SheetTab> tabs(String fileId) {
+        String authorization = calls.bearer();
+        JsonNode file = calls.call(() -> restClient.get()
+                .uri(uri -> uri.path("/v4/spreadsheets/{id}").queryParam("fields", "sheets.properties(sheetId,title)").build(fileId))
+                .header(HttpHeaders.AUTHORIZATION, authorization).retrieve().body(JsonNode.class));
+        if (file == null || !file.path("sheets").isArray()) {
+            throw new TransientGoogleException("REPONSE_ILLISIBLE");
+        }
+        List<SheetTab> tabs = new ArrayList<>();
+        for (JsonNode sheet : file.get("sheets")) {
+            JsonNode properties = sheet.path("properties");
+            if (!properties.path("sheetId").isNumber() || !properties.path("title").isString()) {
+                throw new TransientGoogleException("REPONSE_ILLISIBLE");
+            }
+            tabs.add(new SheetTab(properties.get("sheetId").asInt(), properties.get("title").asString()));
+        }
+        return tabs;
+    }
+
+    @Override
+    public void addTab(String fileId, int sheetId, String title) {
+        batch(fileId, List.of(Map.of("addSheet", Map.of("properties", Map.of("sheetId", sheetId, "title", title)))));
+    }
+
+    /**
+     * Un seul lot : l'onglet prend sa taille, puis reçoit les en-têtes et les lignes, avec leur mise en forme (le format de la date, celui des montants, les en-têtes en gras et la
+     * colonne ID grisée, fond et texte : seule mise en forme de l'onglet généré, section 7.4). Chaque valeur est écrite par {@code stringValue} ou {@code numberValue}, jamais par
+     * {@code formulaValue} (D-19, CS16) : l'identifiant du reçu aussi.
+     */
+    @Override
+    public void fill(String fileId, int sheetId, List<SheetRow> rows) {
+        List<Map<String, Object>> lines = new ArrayList<>();
+        lines.add(Map.of("values", Arrays.stream(GeneratedColumn.values()).map(GoogleSheetClient::headerCell).toList()));
+        for (SheetRow row : rows) {
+            lines.add(Map.of("values", Arrays.stream(GeneratedColumn.values()).map(column -> generatedCell(column, row)).toList()));
+        }
+        batch(fileId, List.of(
+                Map.of("updateSheetProperties", Map.of(
+                        "properties", Map.of("sheetId", sheetId, "gridProperties", gridSize(lines.size())),
+                        "fields", "gridProperties(rowCount,columnCount)")),
+                Map.of("updateCells", Map.of(
+                        "start", Map.of("sheetId", sheetId, "rowIndex", 0, "columnIndex", 0),
+                        "rows", lines,
+                        "fields", "userEnteredValue,userEnteredFormat,textFormatRuns"))));
+    }
+
+    /**
+     * Un seul lot, donc tout ou rien (Google applique toutes les demandes d'un lot ou aucune) : la cible est créée si elle manque, reprend son titre et la taille de la source, est
+     * vidée de ses cellules (valeurs et mise en forme), puis reçoit celles de la source. Ni suppression ni recréation : l'identité de l'onglet cible est conservée (R-40).
+     */
+    @Override
+    public void replace(String fileId, int sourceSheetId, int targetSheetId, String targetTitle, boolean createTarget, int rowCount) {
+        List<Map<String, Object>> requests = new ArrayList<>();
+        if (createTarget) {
+            requests.add(Map.of("addSheet", Map.of("properties", Map.of("sheetId", targetSheetId, "title", targetTitle))));
+        }
+        requests.add(Map.of("updateSheetProperties", Map.of(
+                "properties", Map.of("sheetId", targetSheetId, "title", targetTitle, "gridProperties", gridSize(rowCount)),
+                "fields", "title,gridProperties(rowCount,columnCount)")));
+        requests.add(Map.of("updateCells", Map.of("range", Map.of("sheetId", targetSheetId), "fields", "*")));
+        requests.add(Map.of("copyPaste", Map.of("source", generatedRange(sourceSheetId, rowCount), "destination", generatedRange(targetSheetId, rowCount),
+                "pasteType", "PASTE_NORMAL", "pasteOrientation", "NORMAL")));
+        batch(fileId, requests);
+    }
+
+    @Override
+    public void deleteTab(String fileId, int sheetId) {
+        batch(fileId, List.of(Map.of("deleteSheet", Map.of("sheetId", sheetId))));
+    }
+
+    private void batch(String fileId, List<Map<String, Object>> requests) {
+        String authorization = calls.bearer();
+        calls.call(() -> restClient.post().uri("/v4/spreadsheets/{id}:batchUpdate", fileId).header(HttpHeaders.AUTHORIZATION, authorization)
+                .contentType(MediaType.APPLICATION_JSON).body(Map.of("requests", requests)).retrieve().toBodilessEntity());
+    }
+
+    private static Map<String, Object> gridSize(int rowCount) {
+        return Map.of("rowCount", rowCount, "columnCount", GeneratedColumn.values().length);
+    }
+
+    private static Map<String, Object> generatedRange(int sheetId, int rowCount) {
+        return Map.of("sheetId", sheetId, "startRowIndex", 0, "endRowIndex", rowCount, "startColumnIndex", 0, "endColumnIndex", GeneratedColumn.values().length);
+    }
+
+    private static Map<String, Object> headerCell(GeneratedColumn column) {
+        Map<String, Object> textFormat = new LinkedHashMap<>();
+        textFormat.put("bold", true);
+        Map<String, Object> format = new LinkedHashMap<>();
+        if (column == GeneratedColumn.ID) {
+            format.put("backgroundColor", GREY_BACKGROUND);
+            textFormat.put("foregroundColor", GREY_TEXT);
+        }
+        format.put("textFormat", textFormat);
+        return Map.of("userEnteredValue", Map.of("stringValue", column.header()), "userEnteredFormat", format);
+    }
+
+    /** Une valeur absente donne une cellule vide (R-08) ; la mise en forme ne dépend que de la colonne. */
+    private Map<String, Object> generatedCell(GeneratedColumn column, SheetRow row) {
+        Map<String, Object> cell = switch (column) {
+            case DATE -> number(row.date() == null ? null : BigDecimal.valueOf(row.date().toEpochDay() + DAYS_FROM_SHEETS_EPOCH_TO_UNIX_EPOCH));
+            case SUPPLIER -> text(row.supplier());
+            case OBJECT -> text(row.object());
+            case EXPENSE_TYPE -> text(row.expenseType());
+            case AMOUNT_BEFORE_TAX -> number(row.amountBeforeTax());
+            case GST -> number(row.gst());
+            case QST -> number(row.qst());
+            case TOTAL -> number(row.total());
+            case NOTES -> text(row.notes());
+            case PHOTO -> photos(row.photos());
+            case ID -> text(row.rowId());
+        };
+        Map<String, Object> format = switch (column) {
+            case DATE -> Map.of("numberFormat", Map.of("type", "DATE", "pattern", "d mmmm yyyy"));
+            case AMOUNT_BEFORE_TAX, GST, QST, TOTAL -> Map.of("numberFormat", Map.of("type", "NUMBER", "pattern", "#,##0.00"));
+            case ID -> Map.of("backgroundColor", GREY_BACKGROUND, "textFormat", Map.of("foregroundColor", GREY_TEXT));
+            default -> Map.of();
+        };
+        if (format.isEmpty()) {
+            return cell;
+        }
+        Map<String, Object> formatted = new LinkedHashMap<>(cell);
+        formatted.put("userEnteredFormat", format);
+        return formatted;
     }
 
     /** L'onglet de la configuration, par son titre exact : absent, il est refusé comme un fichier inaccessible (section 8 du PRD). */
