@@ -60,15 +60,6 @@ public class CopyConfiguration {
                 .awaitTerminationPeriod(Duration.ofSeconds(SHUTDOWN_WAIT_SECONDS)).build();
     }
 
-    /**
-     * Un bean {@code Executor} de plus fait disparaître celui que Spring Boot crée de lui-même (condition sur le type) : il est redéclaré ici, tel que Spring Boot le construit, pour que
-     * ni Spring MVC ni les tâches asynchrones ne changent d'exécuteur.
-     */
-    @Bean(name = {"applicationTaskExecutor", "taskExecutor"})
-    ThreadPoolTaskExecutor applicationTaskExecutor(ThreadPoolTaskExecutorBuilder builder) {
-        return builder.build();
-    }
-
     @Bean
     DriveClient driveClient(GoogleTokenService tokens) {
         return new GoogleDriveClient(restClient(copy.adresseDrive()), tokens::accessToken, copy.dossierDrive());

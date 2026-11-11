@@ -25,6 +25,10 @@ spring:
         model: ${recus.modele}
         # Borne la réponse, donnée non fiable ; une réponse coupée n'est plus du JSON et donne ECHEC.
         max-tokens: 1024
+  # Garde l'exécuteur de Spring Boot malgré le bean regenerationExecutor (sans quoi tout bean Executor le fait disparaître).
+  task:
+    execution:
+      mode: force
   # Un montant est un entier en cents (PRD, section 11.4) : ni décimal, ni texte, que Jackson convertirait sinon.
   jackson:
     deserialization:
