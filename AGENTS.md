@@ -54,7 +54,7 @@ Structure en services, inspirée de JHipster, sans générateur : `config`, `dom
 - Rien n'est enregistré avant la validation par l'utilisateur. Une taxe absente d'un reçu reste vide : elle n'est jamais calculée ni mise à 0.
 - La base fait référence, le Google Sheet en est une copie ; un envoi échoué est réessayé sans perdre le reçu.
 - Modèle, seuils d'alerte, types de dépense, fichiers et onglets par année : en configuration (`recus.*`), jamais en constantes.
-- **Deux modes** : prod (sans profil Spring, par défaut) a des cookies `Secure` ; dev (profil `dev` demandé explicitement, HTTP sur le poste ou le réseau local) les retire et journalise un avertissement au démarrage (CS20). **INTERDIT** : activer `dev` en production.
+- **Deux modes** : prod (sans profil Spring, par défaut) a des cookies `Secure` ; dev (profil `dev` demandé explicitement, HTTP sur le poste ou le réseau local) les retire et journalise un avertissement au démarrage (CS29). **INTERDIT** : activer `dev` en production.
 - **INTERDIT** : écrire le contenu d'un reçu dans les journaux, ou verser des photos réelles au dépôt.
 
 ## Tests (TDD obligatoire)

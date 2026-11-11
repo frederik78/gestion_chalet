@@ -20,7 +20,7 @@ import org.springframework.test.context.TestPropertySource;
 class DevelopmentModeWarningTest {
 
     @Test
-    void cs20_modeDev_leDemarrageJournaliseUnAvertissementSansValeurSecrete(CapturedOutput sortie) {
+    void cs29_modeDev_leDemarrageJournaliseUnAvertissementSansValeurSecrete(CapturedOutput sortie) {
         assertThat(sortie.getAll())
                 .contains("WARN")
                 .contains("MODE DEV ACTIF : cookies non sécurisés (HTTP accepté). Ne jamais l'utiliser en production.")

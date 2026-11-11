@@ -352,7 +352,7 @@ class RecuScreensChromeTest {
 
     /** En HTTP sur une adresse du réseau local (mode dev, téléphone), le contexte n'est pas sécurisé : {@code crypto.randomUUID} n'existe pas. */
     @Test
-    void cs20_modeDev_sansRandomUUIDLeBoutonContinuerFonctionneEtLaCleEstUnUuidV4() throws InterruptedException {
+    void cs29_modeDev_sansRandomUUIDLeBoutonContinuerFonctionneEtLaCleEstUnUuidV4() throws InterruptedException {
         chrome.eval("delete Crypto.prototype.randomUUID; typeof crypto.randomUUID === 'undefined'");
         chrome.eval(ENREGISTRER_LES_ENVOIS);
         allerALaValidationAvecDeuxPhotos();
