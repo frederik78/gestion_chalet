@@ -25,7 +25,8 @@ spring:
         model: ${recus.modele}
         # Borne la réponse, donnée non fiable ; une réponse coupée n'est plus du JSON et donne ECHEC.
         max-tokens: 1024
-  # Garde l'exécuteur de Spring Boot malgré le bean regenerationExecutor (sans quoi tout bean Executor le fait disparaître).
+  # Garde l'exécuteur de Spring Boot (taskExecutor) malgré le bean regenerationExecutor, que tout bean Executor ferait disparaître.
+  # Aucun code ne s'en sert aujourd'hui ; sans lui, un futur @Async s'exécuterait sur le fil unique de la régénération (Q-47).
   task:
     execution:
       mode: force
