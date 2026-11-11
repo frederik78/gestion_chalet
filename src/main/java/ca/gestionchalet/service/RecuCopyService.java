@@ -5,7 +5,6 @@ import ca.gestionchalet.client.DriveClient;
 import ca.gestionchalet.client.DriveClient.DrivePhoto;
 import ca.gestionchalet.client.SheetClient;
 import ca.gestionchalet.client.SheetClient.PhotoLink;
-import ca.gestionchalet.client.SheetClient.SheetRow;
 import ca.gestionchalet.client.TransientGoogleException;
 import ca.gestionchalet.domain.Alerte;
 import ca.gestionchalet.domain.CopyRules;
@@ -18,7 +17,6 @@ import ca.gestionchalet.domain.Valeurs;
 import ca.gestionchalet.repository.PhotoStorage;
 import ca.gestionchalet.repository.RecuRepository;
 import java.io.UncheckedIOException;
-import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -29,7 +27,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -57,7 +54,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class RecuCopyService {
 
     private static final Logger LOG = LoggerFactory.getLogger(RecuCopyService.class);
-    private static final String NOTES_SEPARATOR = " ; ";
 
     private final RecuRepository recuRepository;
     private final GoogleAuthorizationService googleAuthorizationService;
@@ -210,7 +206,7 @@ public class RecuCopyService {
             if (target.isEmpty()) {
                 return new Outcome(deposited, Optional.of(MotifBlocage.ANNEE_NON_CONFIGUREE), false);
             }
-            sheetClient.write(target.get(), row(job, links));
+            sheetClient.write(target.get(), SheetRows.of(job.recuId(), job.valeurs(), job.alertes(), links));
             return new Outcome(deposited, Optional.empty(), true);
         } catch (BlockedGoogleException e) {
             return new Outcome(deposited, Optional.of(e.motif()), false);
@@ -223,20 +219,6 @@ public class RecuCopyService {
     /** Le nom d'un fichier de Drive est généré par le serveur, jamais repris du client (R-36, CS12). */
     private static String driveName(Valeurs valeurs, Photo photo) {
         return valeurs.date() + "_" + photo.getId() + "." + photo.getFormat().extension();
-    }
-
-    /** Les numéros d'inscription n'y figurent pas (R-25) ; NOTES porte les textes des alertes dans l'ordre du tableau du PRD (R-26). */
-    private static SheetRow row(Job job, List<PhotoLink> links) {
-        Valeurs valeurs = job.valeurs();
-        String notes = job.alertes().stream().sorted(Comparator.comparing(alerte -> alerte.code().ordinal())).map(Alerte::message)
-                .collect(Collectors.joining(NOTES_SEPARATOR));
-        return new SheetRow(job.recuId().toString(), valeurs.date(), valeurs.fournisseur(), valeurs.objet(), valeurs.typeDepense(),
-                dollars(valeurs.montantAvantTaxesCents()), dollars(valeurs.tpsCents()), dollars(valeurs.tvqCents()), dollars(valeurs.montantTotalCents()), notes, links);
-    }
-
-    /** Des cents entiers aux dollars, sans flottant ; une taxe absente reste absente (R-08). */
-    private static BigDecimal dollars(Long cents) {
-        return cents == null ? null : BigDecimal.valueOf(cents, 2);
     }
 
     /** Troisième temps : les fichiers déposés sont gardés quelle que soit l'issue, et l'état change seulement si le reçu est toujours à copier. */

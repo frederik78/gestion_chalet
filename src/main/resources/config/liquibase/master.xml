@@ -7,4 +7,6 @@
     <include file="config/liquibase/changelog/20261103120000_added_entity_AutorisationGoogle.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261104120000_added_entity_RecuAlerte.xml" relativeToChangelogFile="false"/>
     <include file="config/liquibase/changelog/20261105120000_added_field_Photo_driveFileId.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261110120000_added_entity_Regeneration.xml" relativeToChangelogFile="false"/>
+    <include file="config/liquibase/changelog/20261110130000_added_entity_OngletGenere.xml" relativeToChangelogFile="false"/>
 </databaseChangeLog>

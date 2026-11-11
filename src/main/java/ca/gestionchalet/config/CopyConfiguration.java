@@ -5,16 +5,20 @@ import ca.gestionchalet.client.GoogleDriveClient;
 import ca.gestionchalet.client.GoogleSheetClient;
 import ca.gestionchalet.client.SheetClient;
 import ca.gestionchalet.domain.CopyRules;
+import ca.gestionchalet.domain.RegenerationRules;
 import ca.gestionchalet.domain.SheetTarget;
 import ca.gestionchalet.service.GoogleTokenService;
 import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.task.ThreadPoolTaskExecutorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -23,6 +27,8 @@ import org.springframework.web.client.RestClient;
  */
 @Configuration
 public class CopyConfiguration {
+
+    private static final int SHUTDOWN_WAIT_SECONDS = 30;
 
     private final ApplicationProperties.Copy copy;
 
@@ -34,6 +40,24 @@ public class CopyConfiguration {
     CopyRules copyRules() {
         return new CopyRules(copy.annees().entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> new SheetTarget(entry.getValue().fichier(), entry.getValue().onglet()))));
+    }
+
+    @Bean
+    RegenerationRules regenerationRules() {
+        return new RegenerationRules(
+                copy.annees().entrySet().stream().filter(entry -> entry.getValue().fichier() != null)
+                        .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().fichier())),
+                copy.ongletGenere(), copy.suffixeOngletTemporaire());
+    }
+
+    /**
+     * Le fil unique de la régénération (R-43) : un exécuteur de Spring, dont l'arrêt est géré par le contexte, qui attend la fin d'une écriture en cours avant d'interrompre. La file tient une
+     * demande de plus que celle qui s'exécute : l'état {@code EN_COURS} en refuse déjà toute autre, et une demande rejetée n'est jamais laissée en cours.
+     */
+    @Bean
+    ThreadPoolTaskExecutor regenerationExecutor(ThreadPoolTaskExecutorBuilder builder) {
+        return builder.corePoolSize(1).maxPoolSize(1).queueCapacity(1).threadNamePrefix("regeneration-sheet-").awaitTermination(true)
+                .awaitTerminationPeriod(Duration.ofSeconds(SHUTDOWN_WAIT_SECONDS)).build();
     }
 
     @Bean
