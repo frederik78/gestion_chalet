@@ -5,7 +5,7 @@ import ca.gestionchalet.client.GoogleDriveClient;
 import ca.gestionchalet.client.GoogleSheetClient;
 import ca.gestionchalet.client.SheetClient;
 import ca.gestionchalet.domain.CopyRules;
-import ca.gestionchalet.domain.DepositRetryRules;
+import ca.gestionchalet.service.DepositRetryRules;
 import ca.gestionchalet.domain.SheetTarget;
 import ca.gestionchalet.service.GoogleTokenService;
 import java.net.http.HttpClient;

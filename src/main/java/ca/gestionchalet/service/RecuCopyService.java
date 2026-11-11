@@ -4,7 +4,6 @@ import ca.gestionchalet.client.BlockedGoogleException;
 import ca.gestionchalet.client.DriveClient;
 import ca.gestionchalet.client.DriveClient.DrivePhoto;
 import ca.gestionchalet.client.TransientGoogleException;
-import ca.gestionchalet.domain.DepositRetryRules;
 import ca.gestionchalet.domain.MotifBlocage;
 import ca.gestionchalet.domain.Photo;
 import ca.gestionchalet.domain.Recu;
