@@ -66,7 +66,7 @@ class RecuPhotoNameRealServerTest {
         assertThat(fichiersSous(racine.getParent())).noneSatisfy(fichier -> assertThat(fichier.getFileName().toString()).containsIgnoringCase("secret"));
         assertThat(fichiersSous(racine)).allSatisfy(fichier -> assertThat(fichier.getFileName().toString()).matches("[0-9a-f-]{36}\\.(png|jpg)"));
 
-        assertThat(copie.processNext()).isTrue();
+        copie.processPending();
 
         assertThat(google.fileOf(photo).name()).doesNotContain("secret").doesNotContain("..").endsWith(photo + ".png");
         for (String chemin : List.of("/secret.jpg", "/photos/secret.jpg", "/" + photo + ".png", "/photos/" + photo + ".png")) {

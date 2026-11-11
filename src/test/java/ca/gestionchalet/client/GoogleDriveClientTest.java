@@ -195,6 +195,23 @@ class GoogleDriveClientTest {
         assertThatThrownBy(() -> client().deposit(photo())).isInstanceOf(TransientGoogleException.class);
     }
 
+    @Test
+    void ca53_unQuota429AvecRetryAfterDe120SecondesEstRapporteAuCycleDeCopie() {
+        drive.answer(requete -> Response.status(429).withHeader("Retry-After", "120"));
+
+        assertThatThrownBy(() -> client().deposit(photo())).isInstanceOfSatisfying(TransientGoogleException.class,
+                e -> assertThat(e.retryAfter()).contains(java.time.Duration.ofSeconds(120)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "abc", "-5", "99999999999999999999", "Wed, 21 Oct 2015 07:28:00 GMT"})
+    void ca53_unRetryAfterAbsentIllisibleOuNegatifNEstPasRetenu(String valeur) {
+        drive.answer(requete -> valeur.isEmpty() ? Response.status(503) : Response.status(503).withHeader("Retry-After", valeur));
+
+        assertThatThrownBy(() -> client().deposit(photo())).isInstanceOfSatisfying(TransientGoogleException.class,
+                e -> assertThat(e.retryAfter()).isEmpty());
+    }
+
     @ParameterizedTest
     @ValueSource(ints = {403, 404})
     void r20_unRefusOuUnDossierIntrouvableBloqueLaCopie(int statut) {

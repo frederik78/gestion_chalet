@@ -31,8 +31,8 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.web.util.UriComponentsBuilder;
 
 /**
- * La copie en tâche de fond, sur serveur réel : un fil, réveillé par la validation et par l'autorisation. Drive et le Sheet sont en mémoire, Google (les jetons)
- * est un serveur local. Le passage périodique est repoussé à une heure : seuls les réveils agissent.
+ * Le dépôt en tâche de fond, sur serveur réel : un fil, réveillé par la validation, par l'autorisation et par l'heure d'un nouvel essai. Drive et le Sheet sont en mémoire,
+ * Google (les jetons) est un serveur local. Le passage périodique est repoussé à une heure : seuls les réveils agissent.
  */
 @RealServerTest
 @TestPropertySource(properties = {"recus.copie.automatique=true", "recus.copie.intervalle=1h"})
@@ -92,8 +92,9 @@ class RecuCopyAutomaticRealServerTest {
         return reponse;
     }
 
-    private String etat(Object id) {
-        return base.queryForObject("select etat_copie from recu where id = ?", String.class, id);
+    /** Une photo est déposée quand son identifiant Drive est connu (D-66 : plus d'état de copie). */
+    private boolean deposee(Object recuId) {
+        return base.queryForObject("select count(*) from photo where recu_id = ? and drive_file_id is not null", Long.class, recuId) == 1;
     }
 
     /** Le fil de la copie est un autre fil que le test : on attend ce qu'il doit finir. */
@@ -123,7 +124,7 @@ class RecuCopyAutomaticRealServerTest {
     }
 
     @Test
-    void ca45_laReponseDeValidationNAPasAttenduLaCopieQuiSeFaitEnTacheDeFond() throws Exception {
+    void ca45_laReponseDeValidationNAPasAttenduLeDepotQuiSeFaitEnTacheDeFondSansAppelAuSheet() throws Exception {
         autorisationDirecte();
         CountDownLatch depotCommence = new CountDownLatch(1);
         CountDownLatch liberation = new CountDownLatch(1);
@@ -138,81 +139,65 @@ class RecuCopyAutomaticRealServerTest {
 
         Reponse reponse = valider();
 
-        assertThat(liberation.getCount()).as("la copie n'est pas finie quand la validation répond").isEqualTo(1);
-        assertThat(reponse.json()).containsEntry("etatCopie", "A_COPIER");
-        assertThat(depotCommence.await(10, TimeUnit.SECONDS)).as("la validation réveille le fil de la copie").isTrue();
-        assertThat(etat(reponse.json().get("id"))).isEqualTo("A_COPIER");
+        assertThat(liberation.getCount()).as("le dépôt n'est pas fini quand la validation répond").isEqualTo(1);
+        assertThat(reponse.json()).doesNotContainKeys("etatCopie", "motifBlocage", "prochaineTentative");
+        assertThat(depotCommence.await(10, TimeUnit.SECONDS)).as("la validation réveille le fil de dépôt").isTrue();
+        assertThat(deposee(reponse.json().get("id"))).isFalse();
         liberation.countDown();
-        attendre("reçu copié", () -> "COPIEE".equals(etat(reponse.json().get("id"))));
-        assertThat(google.journal()).hasSize(2);
-        assertThat(google.journal().getLast()).isEqualTo("sheet:" + reponse.json().get("id"));
+        attendre("photo déposée", () -> deposee(reponse.json().get("id")));
+        assertThat(google.journal()).containsExactly("drive:" + base.queryForObject("select id from photo", String.class));
+        assertThat(google.writeCalls()).isZero();
     }
 
     @Test
-    void ca65_uneNouvelleAutorisationRelanceAussitotLesCopiesBloqueesEtLesSuivantesNeDemandentRien() throws Exception {
-        Object bloque = valider().json().get("id");
-        assertThat(etat(bloque)).isEqualTo("BLOQUEE");
-
-        autoriser();
-
-        attendre("reçu repris et copié", () -> "COPIEE".equals(etat(bloque)));
-        assertThat(google.rows()).extracting(row -> row.rowId()).containsExactly(bloque.toString());
-        Object suivant = valider().json().get("id");
-        attendre("reçu suivant copié", () -> "COPIEE".equals(etat(suivant)));
-        assertThat(google.rows()).hasSize(2);
-    }
-
-    @Test
-    void ca45_laValidationDUnAutreRecuNeRetenteJamaisUnRecuEnPanneAvantLePassagePeriodique() throws Exception {
-        autorisationDirecte();
-        google.failNextWrite(new TransientGoogleException("PANNE"));
-        Object enPanne = valider().json().get("id");
-        attendre("ligne tentée et en panne", () -> google.writeCalls() == 1);
-
-        Object suivant = valider().json().get("id");
-
-        attendre("reçu suivant copié", () -> "COPIEE".equals(etat(suivant)));
-        assertThat(etat(enPanne)).isEqualTo("A_COPIER");
-        assertThat(google.writeCalls()).isEqualTo(2);
-    }
-
-    @Test
-    void ca65_uneNouvelleAutorisationRetenteAussitotUnRecuEnPanneSansAttendreLePassagePeriodique() throws Exception {
-        GOOGLE.repondreJeton(1, GoogleStub.SHEETS + " " + GoogleStub.DRIVE_FILE, GoogleStub.JETON_RENOUVELLEMENT);
-        autoriser();
-        google.failNextWrite(new TransientGoogleException("PANNE"));
-        Object enPanne = valider().json().get("id");
-        attendre("ligne tentée et en panne", () -> google.writeCalls() == 1);
-        assertThat(etat(enPanne)).isEqualTo("A_COPIER");
-
-        autoriser();
-
-        attendre("reçu retenté et copié", () -> "COPIEE".equals(etat(enPanne)));
-        assertThat(google.writeCalls()).isEqualTo(2);
-    }
-
-    @Test
-    void ca66_apresUneNouvelleAutorisationLesRecusSontCopiesSansDoublonNiFichierNiLigne() throws Exception {
-        GOOGLE.repondreJeton(1, GoogleStub.SHEETS + " " + GoogleStub.DRIVE_FILE, GoogleStub.JETON_RENOUVELLEMENT);
-        autoriser();
-        google.failNextWrite(new TransientGoogleException("PANNE"));
+    void ca65_uneNouvelleAutorisationReprendAussitotLesDepotsEnAttenteEtLesSuivantsNeDemandentRien() throws Exception {
         Object enAttente = valider().json().get("id");
-        attendre("photo déposée, ligne en panne", () -> base.queryForObject("select count(drive_file_id) from photo where recu_id = ?", Long.class, enAttente) == 1);
-        assertThat(etat(enAttente)).isEqualTo("A_COPIER");
+        assertThat(deposee(enAttente)).isFalse();
+
+        autoriser();
+
+        attendre("photo reprise et déposée", () -> deposee(enAttente));
+        Object suivant = valider().json().get("id");
+        attendre("photo suivante déposée", () -> deposee(suivant));
+        assertThat(google.files()).hasSize(2);
+        assertThat(google.writeCalls()).isZero();
+    }
+
+    @Test
+    void ca65_uneNouvelleAutorisationRetenteAussitotUnePhotoEnPanneSansAttendreLEssaiProgramme() throws Exception {
+        GOOGLE.repondreJeton(1, GoogleStub.SHEETS + " " + GoogleStub.DRIVE_FILE, GoogleStub.JETON_RENOUVELLEMENT);
+        autoriser();
+        google.failNextDeposit(new TransientGoogleException("PANNE"));
+        Object enPanne = valider().json().get("id");
+        attendre("dépôt tenté et en panne", () -> google.depositCalls() == 1);
+        assertThat(deposee(enPanne)).isFalse();
+
+        autoriser();
+
+        attendre("photo retentée et déposée", () -> deposee(enPanne));
+        assertThat(google.depositCalls()).isEqualTo(2);
+    }
+
+    @Test
+    void ca66_apresUneNouvelleAutorisationLesPhotosSontDeposeesSansDoublon() throws Exception {
+        GOOGLE.repondreJeton(1, GoogleStub.SHEETS + " " + GoogleStub.DRIVE_FILE, GoogleStub.JETON_RENOUVELLEMENT);
+        autoriser();
+        google.failNextDeposit(new TransientGoogleException("PANNE"));
+        Object enAttente = valider().json().get("id");
+        attendre("dépôt tenté et en panne", () -> google.depositCalls() == 1);
         GOOGLE.repondre(400, "{\"error\":\"invalid_grant\"}");
 
         assertThat(jetons.accessToken()).isEmpty();
 
-        assertThat(etat(enAttente)).isEqualTo("BLOQUEE");
+        assertThat(client.get("/api/google/etat").corps()).isEqualTo("{\"etat\":\"A_RENOUVELER\"}");
         Object pendant = valider().json().get("id");
-        assertThat(etat(pendant)).isEqualTo("BLOQUEE");
+        assertThat(deposee(enAttente) || deposee(pendant)).isFalse();
         GOOGLE.reinitialiser();
         autoriser();
 
-        attendre("reçus copiés", () -> "COPIEE".equals(etat(enAttente)) && "COPIEE".equals(etat(pendant)));
+        attendre("photos déposées", () -> deposee(enAttente) && deposee(pendant));
         assertThat(google.files()).hasSize(2);
-        assertThat(google.rows()).extracting(row -> row.rowId()).containsExactlyInAnyOrder(enAttente.toString(), pendant.toString());
-        assertThat(google.depositCalls()).isEqualTo(2);
-        assertThat(google.writeCalls()).isEqualTo(3);
+        assertThat(google.depositCalls()).isEqualTo(3);
+        assertThat(google.writeCalls()).isZero();
     }
 }

@@ -7,6 +7,7 @@ import ca.gestionchalet.client.SheetClient;
 import ca.gestionchalet.domain.CopyRules;
 import ca.gestionchalet.domain.RegenerationRules;
 import ca.gestionchalet.domain.SheetTarget;
+import ca.gestionchalet.service.DepositRetryRules;
 import ca.gestionchalet.service.GoogleTokenService;
 import java.net.http.HttpClient;
 import java.time.Duration;
@@ -40,6 +41,11 @@ public class CopyConfiguration {
     CopyRules copyRules() {
         return new CopyRules(copy.annees().entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> new SheetTarget(entry.getValue().fichier(), entry.getValue().onglet()))));
+    }
+
+    @Bean
+    DepositRetryRules depositRetryRules() {
+        return new DepositRetryRules(copy.repriseInitiale(), copy.repriseMaximale());
     }
 
     @Bean

@@ -35,6 +35,7 @@ public final class InMemoryGoogle implements DriveClient, SheetClient {
     private final AtomicInteger writeCalls = new AtomicInteger();
     private volatile RuntimeException depositFailure;
     private volatile RuntimeException writeFailure;
+    private final Map<UUID, RuntimeException> failuresByPhoto = new java.util.concurrent.ConcurrentHashMap<>();
     private volatile boolean loseDepositResponse;
     private volatile boolean loseWriteResponse;
     private volatile Runnable beforeDeposit = () -> { };
@@ -85,6 +86,11 @@ public final class InMemoryGoogle implements DriveClient, SheetClient {
         writeFailure = failure;
     }
 
+    /** Le prochain dépôt de cette photo échoue avec cette panne ; les dépôts des autres photos réussissent. */
+    public void failDepositOf(UUID photoId, RuntimeException failure) {
+        failuresByPhoto.put(photoId, failure);
+    }
+
     /** Le prochain dépôt crée bien le fichier, mais sa réponse est perdue : l'appelant ne reçoit qu'une panne passagère (CA49). */
     public void loseNextDepositResponse() {
         loseDepositResponse = true;
@@ -112,6 +118,7 @@ public final class InMemoryGoogle implements DriveClient, SheetClient {
         depositCalls.set(0);
         writeCalls.set(0);
         depositFailure = null;
+        failuresByPhoto.clear();
         writeFailure = null;
         loseDepositResponse = false;
         loseWriteResponse = false;
@@ -133,6 +140,10 @@ public final class InMemoryGoogle implements DriveClient, SheetClient {
         if (failure != null) {
             depositFailure = null;
             throw failure;
+        }
+        RuntimeException photoFailure = failuresByPhoto.remove(photo.photoId());
+        if (photoFailure != null) {
+            throw photoFailure;
         }
         DriveFile file;
         synchronized (this) {

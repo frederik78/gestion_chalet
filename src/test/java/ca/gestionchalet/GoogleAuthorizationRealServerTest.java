@@ -104,9 +104,8 @@ class GoogleAuthorizationRealServerTest {
         Reponse reponse = valider();
 
         assertThat(reponse.statut()).isEqualTo(201);
-        assertThat(reponse.json()).containsEntry("etatCopie", "BLOQUEE").containsEntry("motifBlocage", "AUTORISATION_GOOGLE");
-        assertThat(base.queryForObject("select motif_blocage from recu where id = ?", String.class, reponse.json().get("id")))
-                .isEqualTo("AUTORISATION_GOOGLE");
+        assertThat(reponse.json()).doesNotContainKeys("etatCopie", "motifBlocage", "prochaineTentative");
+        assertThat(photoADeposer(reponse.json().get("id"))).isTrue();
         Reponse etat = client.get("/api/google/etat");
         assertThat(etat.statut()).isEqualTo(200);
         assertThat(etat.corps()).isEqualTo("{\"etat\":\"ABSENTE\"}");
@@ -151,8 +150,9 @@ class GoogleAuthorizationRealServerTest {
         return (String) client.get("/api/google/etat").json().get("etat");
     }
 
-    private String etatCopie(Object id) {
-        return base.queryForObject("select etat_copie from recu where id = ?", String.class, id);
+    /** D-66 : plus d'état de copie ; une photo est « à déposer » tant que son identifiant Drive est inconnu. */
+    private boolean photoADeposer(Object recuId) {
+        return base.queryForObject("select count(*) from photo where recu_id = ? and drive_file_id is null", Long.class, recuId) > 0;
     }
 
     /** Suit la demande d'autorisation et revient par le rappel, comme le navigateur après le consentement ; rend la dernière redirection. */
@@ -182,8 +182,7 @@ class GoogleAuthorizationRealServerTest {
         assertThat(fin.statut()).isEqualTo(302);
         assertThat(fin.enTete("Location")).isEqualTo("/");
         assertThat(etat()).isEqualTo("VALIDE");
-        assertThat(etatCopie(bloque)).isEqualTo("A_COPIER");
-        assertThat(base.queryForObject("select motif_blocage from recu where id = ?", String.class, bloque)).isNull();
+        assertThat(photoADeposer(bloque)).isTrue();
         GoogleStub.Requete echange = GOOGLE.requetes().getFirst();
         assertThat(GOOGLE.requetes()).hasSize(1);
         assertThat(echange.chemin()).isEqualTo("/jeton");
@@ -191,7 +190,7 @@ class GoogleAuthorizationRealServerTest {
         String preuve = Base64.getUrlEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256")
                 .digest(echange.parametres().get("code_verifier").getBytes(StandardCharsets.US_ASCII)));
         assertThat(preuve).isEqualTo(parametres.get("code_challenge"));
-        assertThat(valider().json()).containsEntry("etatCopie", "A_COPIER").containsEntry("motifBlocage", null);
+        assertThat(valider().json()).doesNotContainKeys("etatCopie", "motifBlocage");
     }
 
     private List<GoogleStub.Requete> renouvellements() {
@@ -231,26 +230,25 @@ class GoogleAuthorizationRealServerTest {
         GOOGLE.repondreJeton(1, GoogleStub.SHEETS + " " + GoogleStub.DRIVE_FILE, GoogleStub.JETON_RENOUVELLEMENT);
         autoriser();
         Object enAttente = valider().json().get("id");
-        assertThat(etatCopie(enAttente)).isEqualTo("A_COPIER");
+        assertThat(photoADeposer(enAttente)).isTrue();
         GOOGLE.repondre(400, "{\"error\":\"invalid_grant\"}");
 
         assertThat(jetons.accessToken()).isEmpty();
 
         assertThat(etat()).isEqualTo("A_RENOUVELER");
-        assertThat(etatCopie(enAttente)).isEqualTo("BLOQUEE");
-        assertThat(base.queryForObject("select motif_blocage from recu where id = ?", String.class, enAttente)).isEqualTo("AUTORISATION_GOOGLE");
+        assertThat(photoADeposer(enAttente)).isTrue();
         assertThat(ligneAutorisation()).containsEntry("jeton_renouvellement_chiffre", null).containsEntry("jeton_acces_chiffre", null);
         assertThat(jetons.accessToken()).isEmpty();
         Reponse pendant = valider();
         assertThat(pendant.statut()).isEqualTo(201);
-        assertThat(pendant.json()).containsEntry("etatCopie", "BLOQUEE").containsEntry("motifBlocage", "AUTORISATION_GOOGLE");
+        assertThat(pendant.json()).doesNotContainKeys("etatCopie", "motifBlocage");
 
         GOOGLE.reinitialiser();
         autoriser();
 
         assertThat(etat()).isEqualTo("VALIDE");
-        assertThat(etatCopie(enAttente)).isEqualTo("A_COPIER");
-        assertThat(etatCopie(pendant.json().get("id"))).isEqualTo("A_COPIER");
+        assertThat(photoADeposer(enAttente)).isTrue();
+        assertThat(photoADeposer(pendant.json().get("id"))).isTrue();
         assertThat(base.queryForObject("select count(*) from recu", Long.class)).isEqualTo(2);
     }
 
@@ -264,7 +262,7 @@ class GoogleAuthorizationRealServerTest {
         assertThatThrownBy(() -> jetons.accessToken()).isInstanceOf(OAuth2AuthorizationException.class);
 
         assertThat(etat()).isEqualTo("VALIDE");
-        assertThat(etatCopie(enAttente)).isEqualTo("A_COPIER");
+        assertThat(photoADeposer(enAttente)).isTrue();
     }
 
     @Test
@@ -288,7 +286,7 @@ class GoogleAuthorizationRealServerTest {
         assertThat(jetons.accessToken()).isEmpty();
 
         assertThat(etat()).isEqualTo("A_RENOUVELER");
-        assertThat(etatCopie(enAttente)).isEqualTo("BLOQUEE");
+        assertThat(photoADeposer(enAttente)).isTrue();
     }
 
     @Test
@@ -300,7 +298,7 @@ class GoogleAuthorizationRealServerTest {
 
         assertThat(fin.enTete("Location")).isEqualTo("/");
         assertThat(etat()).isEqualTo("A_RENOUVELER");
-        assertThat(etatCopie(bloque)).isEqualTo("BLOQUEE");
+        assertThat(photoADeposer(bloque)).isTrue();
         assertThat(ligneAutorisation()).containsEntry("jeton_renouvellement_chiffre", null).containsEntry("jeton_acces_chiffre", null);
         assertThat(jetons.accessToken()).isEmpty();
     }
@@ -537,7 +535,7 @@ class GoogleAuthorizationRealServerTest {
         assertThat(jetons.accessToken()).isEmpty();
 
         assertThat(etat()).isEqualTo("A_RENOUVELER");
-        assertThat(etatCopie(enAttente)).isEqualTo("BLOQUEE");
+        assertThat(photoADeposer(enAttente)).isTrue();
     }
 
     private Object autoriserPuisValiderUnRecu() {
@@ -562,7 +560,7 @@ class GoogleAuthorizationRealServerTest {
         assertThat(jetons.accessToken()).isEmpty();
 
         assertThat(client.get("/api/google/etat").corps()).isEqualTo("{\"etat\":\"A_RENOUVELER\"}");
-        assertThat(etatCopie(enAttente)).isEqualTo("BLOQUEE");
+        assertThat(photoADeposer(enAttente)).isTrue();
         assertThat(ligneAutorisation().get("jeton_renouvellement_chiffre")).isEqualTo(avant.get("jeton_renouvellement_chiffre")).isNotNull();
         assertThat(ligneAutorisation().values().toString()).doesNotContain(GoogleStub.JETON_RENOUVELLEMENT);
         assertThat(journal.getOut()).contains("ERROR").contains("Renouvellement Google refusé : " + code)
@@ -586,7 +584,7 @@ class GoogleAuthorizationRealServerTest {
         assertThat(renouvellements()).hasSize(3).allSatisfy(requete ->
                 assertThat(requete.parametres()).containsEntry("refresh_token", GoogleStub.JETON_RENOUVELLEMENT));
         assertThat(etat()).isEqualTo("VALIDE");
-        assertThat(etatCopie(enAttente)).isEqualTo("A_COPIER");
+        assertThat(photoADeposer(enAttente)).isTrue();
     }
 
     @ParameterizedTest
@@ -598,7 +596,7 @@ class GoogleAuthorizationRealServerTest {
         assertThat(jetons.accessToken()).isEmpty();
 
         assertThat(etat()).isEqualTo("A_RENOUVELER");
-        assertThat(etatCopie(enAttente)).isEqualTo("BLOQUEE");
+        assertThat(photoADeposer(enAttente)).isTrue();
         assertThat(ligneAutorisation()).containsEntry("jeton_renouvellement_chiffre", null).containsEntry("jeton_acces_chiffre", null);
         assertThat(journal.getOut()).doesNotContain("Renouvellement Google refusé");
     }
@@ -639,7 +637,7 @@ class GoogleAuthorizationRealServerTest {
         assertThatThrownBy(() -> jetons.accessToken()).isInstanceOf(OAuth2AuthorizationException.class);
 
         assertThat(etat()).isEqualTo("VALIDE");
-        assertThat(etatCopie(enAttente)).isEqualTo("A_COPIER");
+        assertThat(photoADeposer(enAttente)).isTrue();
         assertThat(ligneAutorisation()).isEqualTo(avant);
     }
 
@@ -688,7 +686,7 @@ class GoogleAuthorizationRealServerTest {
         }
 
         assertThat(etat()).isEqualTo("VALIDE");
-        assertThat(etatCopie(enAttente)).isEqualTo("A_COPIER");
+        assertThat(photoADeposer(enAttente)).isTrue();
         assertThat(ligneAutorisation()).isEqualTo(avant);
     }
 
@@ -703,7 +701,7 @@ class GoogleAuthorizationRealServerTest {
         assertThat(jetons.accessToken()).isEmpty();
 
         assertThat(etat()).isEqualTo("A_RENOUVELER");
-        assertThat(etatCopie(enAttente)).isEqualTo("BLOQUEE");
+        assertThat(photoADeposer(enAttente)).isTrue();
         assertThat(ligneAutorisation().get("jeton_renouvellement_chiffre")).isEqualTo(avant.get("jeton_renouvellement_chiffre")).isNotNull();
         assertThat(journal.getOut()).contains("ERROR").contains("Renouvellement Google refusé : invalid_token_response").doesNotContain("proxy");
     }
@@ -717,11 +715,11 @@ class GoogleAuthorizationRealServerTest {
         Reponse reponse = RecuRequests.valider(client, RecuRequests.corps(valeurs), RecuRequests.png());
 
         assertThat(reponse.statut()).isEqualTo(201);
-        assertThat(reponse.json()).containsEntry("etatCopie", "BLOQUEE").containsEntry("motifBlocage", "AUTORISATION_GOOGLE");
+        assertThat(reponse.json()).doesNotContainKeys("etatCopie", "motifBlocage");
         assertThat((List<?>) reponse.json().get("alertes")).isNotEmpty();
         assertThat(base.queryForObject("select count(*) from recu_alerte", Long.class)).isEqualTo(((List<?>) reponse.json().get("alertes")).size());
         autoriser();
-        assertThat(etatCopie(reponse.json().get("id"))).isEqualTo("A_COPIER");
+        assertThat(photoADeposer(reponse.json().get("id"))).isTrue();
         assertThat(base.queryForObject("select count(*) from recu_alerte", Long.class)).isEqualTo(((List<?>) reponse.json().get("alertes")).size());
     }
 }

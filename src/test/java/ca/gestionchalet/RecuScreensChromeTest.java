@@ -313,37 +313,11 @@ class RecuScreensChromeTest {
         assertThat(nombre(NOMBRE_DE_PHOTOS_AU_DEPART)).isZero();
     }
 
-    /** Le serveur dit une autre raison de blocage que le Sheet non configuré : la page revient à son message simple. */
-    private static final String AUTRE_MOTIF_DE_BLOCAGE = """
-            window.fetchAvantMotif = window.fetch;
-            window.fetch = async (chemin, options) => {
-              const reponse = await window.fetchAvantMotif(chemin, options);
-              if (String(chemin) !== '/api/recus') {
-                return reponse;
-              }
-              const recu = await reponse.json();
-              recu.motifBlocage = 'AUTORISATION_GOOGLE';
-              return new Response(JSON.stringify(recu), { status: reponse.status, headers: { 'Content-Type': 'application/json' } });
-            };
-            true""";
-
+    /** D-66 : la validation ne dit rien de la copie ni du Sheet, configuré ou non ; les photos se déposent ensuite sans que l'écran l'attende (CA45). */
     @Test
-    void d62_unSheetNonConfigureLEcranDitQueLaCopieAttend() throws InterruptedException {
+    void ca45_laValidationAfficheLeMessageSimpleSansRienDireDeLaCopieVersGoogle() throws InterruptedException {
         allerALaValidationAvecDeuxPhotos();
         saisirLesValeurs("Fournisseur sans Sheet");
-        cliquer("valider");
-        chrome.waitUntil("document.getElementById('message-succes').textContent !== ''");
-
-        assertThat(chrome.eval("document.getElementById('message-succes').textContent").asString())
-                .isEqualTo("Reçu enregistré. Copie vers Google en attente : fichier ou onglet du Sheet non configuré.");
-        assertThat(base.queryForObject("select motif_blocage from recu where fournisseur = 'Fournisseur sans Sheet'", String.class)).isEqualTo("FICHIER_INACCESSIBLE");
-    }
-
-    @Test
-    void d62_unAutreMotifDeBlocageGardeLeMessageSimple() throws InterruptedException {
-        chrome.eval(AUTRE_MOTIF_DE_BLOCAGE);
-        allerALaValidationAvecDeuxPhotos();
-        saisirLesValeurs("Fournisseur autre motif");
         cliquer("valider");
         chrome.waitUntil("document.getElementById('message-succes').textContent !== ''");
 

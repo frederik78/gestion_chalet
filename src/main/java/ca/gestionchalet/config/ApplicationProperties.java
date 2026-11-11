@@ -76,8 +76,10 @@ public record ApplicationProperties(@Valid @NotNull Security securite, @Valid @N
     }
 
     /**
-     * @param automatique vrai : un fil copie les reçus validés, dès qu'ils le sont puis à chaque passage périodique ; faux : seul un appel direct copie
+     * @param automatique vrai : un fil dépose les photos des reçus validés, dès qu'ils le sont puis à chaque passage périodique ; faux : seul un appel direct dépose
      * @param intervalle attente entre deux passages périodiques
+     * @param repriseInitiale attente avant le deuxième essai d'un dépôt de photo en panne passagère ; elle double à chaque échec (R-20)
+     * @param repriseMaximale plafond de cette attente, et attente d'un dépôt refusé par Drive (R-20)
      * @param delaiAppel délai maximal d'un appel à Drive ou à Sheets
      * @param dossierDrive nom du dossier que l'application crée dans Drive (R-28)
      * @param annees le fichier et l'onglet du Sheet de chaque année, clés = année de la date du reçu (D-18) ; sans entrée, ou avec une entrée dont le fichier ou l'onglet est vide, aucune copie ne part
@@ -87,7 +89,7 @@ public record ApplicationProperties(@Valid @NotNull Security securite, @Valid @N
      * @param ongletGenere titre de l'onglet que la régénération crée et réécrit dans le fichier de chaque année (D-68)
      * @param suffixeOngletTemporaire suffixe du titre de l'onglet temporaire de la régénération (R-40)
      */
-    public record Copy(boolean automatique, @NotNull Duration intervalle, @NotNull Duration delaiAppel, @NotBlank String dossierDrive,
+    public record Copy(boolean automatique, @NotNull Duration intervalle, @NotNull Duration repriseInitiale, @NotNull Duration repriseMaximale, @NotNull Duration delaiAppel, @NotBlank String dossierDrive,
             Map<Integer, YearSheet> annees, @NotBlank String adresseDrive, @NotBlank String adresseSheets, @NotBlank String adresseLienFichier,
             @NotBlank String ongletGenere, @NotBlank String suffixeOngletTemporaire) {
 
