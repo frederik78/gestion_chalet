@@ -3,7 +3,7 @@ id: 001-09
 titre: Correction d'un reçu
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: En revue
+statut: Fait
 depend_de: [001-04, 001-12, 001-13]
 criteres: [CA28, CA61, CA62, CA63, CA98, CA138]
 branche: feat/001-09-correction-recu
