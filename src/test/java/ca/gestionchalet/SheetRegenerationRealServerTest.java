@@ -144,6 +144,19 @@ class SheetRegenerationRealServerTest {
     }
 
     @Test
+    void ca85_deuxRecusDeMemeDateSontEnOrdreDeValidationEtNonDInsertionEnBase() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        String insereEnPremier = valider("2026-03-05", "Inséré en premier", "A");
+        horloge.avancer(Duration.ofMinutes(-30));
+        String insereEnSecond = valider("2026-03-05", "Inséré en second, validé plus tôt", "B");
+
+        regenerer();
+
+        assertThat(colonne(ongletGenere(FICHIER_2026), 10)).as("l'ordre de validation, pas celui de l'insertion").containsExactly("ID", insereEnSecond, insereEnPremier);
+    }
+
+    @Test
     void ca86_lOngletGenereAEnTetesFixesValeursTypeesEtIdentifiantEnTexte() {
         doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
         google.seedFile(FICHIER_2026);
