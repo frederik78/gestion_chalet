@@ -263,12 +263,12 @@ public class SheetRegenerationService {
         return exists ? Optional.of(remembered) : Optional.empty();
     }
 
-    /** Hors de l'issue de la régénération : une panne du retrait laisse l'onglet noté, et le prochain passage le retire. */
+    /** Hors de l'issue de la régénération, dans un finally : toute panne du retrait, de Google ou de la base, est journalisée sans masquer l'exception d'origine ; l'onglet reste noté, et le prochain passage le retire. */
     private void removeTemporaryTab(int year, String fileId, int temporaryId) {
         try {
             sheetClient.deleteTab(fileId, temporaryId);
             updateTab(year, fileId, OngletGenere::oublierOngletTemporaire);
-        } catch (BlockedGoogleException | TransientGoogleException e) {
+        } catch (RuntimeException e) {
             LOG.warn("Régénération : onglet temporaire non retiré ({})", e.getClass().getSimpleName());
         }
     }

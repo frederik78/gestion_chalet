@@ -329,6 +329,20 @@ class SheetRegenerationRealServerTest {
     }
 
     @Test
+    void ca89_uneErreurImprevueDuRetraitDeLOngletTemporaireNeMasquePasLEchecDOrigine() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+        google.failNext("fill", new BlockedGoogleException(MotifBlocage.AUTORISATION_GOOGLE));
+        google.failNext("deleteTab", new IllegalStateException("base indisponible"));
+
+        RegenerationStateDTO etat = regenerer();
+
+        assertThat(etat.etat()).isEqualTo("ECHEC");
+        assertThat(etat.motif()).as("le motif d'origine, non celui de l'erreur du retrait").isEqualTo("AUTORISATION_GOOGLE");
+    }
+
+    @Test
     void ca89_unOngletTemporaireQuiNePeutPasEtreRetireLeEstAuDebutDeLaRegenerationSuivante() {
         doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
         google.seedFile(FICHIER_2026);
