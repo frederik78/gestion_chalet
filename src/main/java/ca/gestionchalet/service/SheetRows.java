@@ -24,6 +24,24 @@ final class SheetRows {
                 dollars(valeurs.montantAvantTaxesCents()), dollars(valeurs.tpsCents()), dollars(valeurs.tvqCents()), dollars(valeurs.montantTotalCents()), notes, links);
     }
 
+    /**
+     * Ce que l'application écrit dans les cellules DATE à PHOTO de la ligne, tel qu'elle l'écrit, pour la mémoriser (R-53) : la date en {@code AAAA-MM-JJ}, un montant en dollars, un texte
+     * tel quel, les liens de photos par leur texte ; {@code null} pour une cellule vide. L'identifiant du reçu n'en fait pas partie : il identifie la ligne.
+     */
+    static List<String> writtenCells(SheetRow row) {
+        return java.util.Arrays.asList(row.date().toString(), row.supplier(), emptyToNull(row.object()), row.expenseType(), amount(row.amountBeforeTax()), amount(row.gst()),
+                amount(row.qst()), amount(row.total()), emptyToNull(row.notes()),
+                row.photos().isEmpty() ? null : row.photos().stream().map(PhotoLink::label).collect(Collectors.joining(", ")));
+    }
+
+    private static String amount(BigDecimal value) {
+        return value == null ? null : value.toPlainString();
+    }
+
+    private static String emptyToNull(String text) {
+        return text == null || text.isEmpty() ? null : text;
+    }
+
     /** Des cents entiers aux dollars, sans flottant ; une taxe absente reste absente (R-08). */
     private static BigDecimal dollars(Long cents) {
         return cents == null ? null : BigDecimal.valueOf(cents, 2);

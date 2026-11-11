@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 import static org.mockito.Mockito.doReturn;
 
+import ca.gestionchalet.client.BlockedGoogleException;
 import ca.gestionchalet.client.SheetTab;
+import ca.gestionchalet.client.TransientGoogleException;
+import ca.gestionchalet.domain.MotifBlocage;
 import ca.gestionchalet.domain.RegenerationRules;
 import ca.gestionchalet.service.SheetRegenerationService;
 import ca.gestionchalet.service.dto.RegenerationStateDTO;
@@ -61,6 +64,8 @@ class SheetRegenerationRealServerTest {
 
     @BeforeEach
     void repartirDeZero() {
+        base.update("delete from onglet_genere_cellule");
+        base.update("delete from onglet_genere");
         base.update("delete from regeneration_annee_non_configuree");
         base.update("delete from regeneration");
         base.update("delete from recu_alerte");
@@ -229,5 +234,228 @@ class SheetRegenerationRealServerTest {
         assertThat(colonne(ongletGenere(FICHIER_2026), 10)).doesNotContain(recu2024);
         assertThat(google.requests()).extracting(InMemoryGoogle.Request::fileId).containsOnly(FICHIER_2026);
         assertThat(google.depositCalls()).as("une régénération ne dépose aucune photo (R-45)").isZero();
+    }
+
+    /** Les demandes d'écriture reçues pour ce fichier, dans l'ordre : opération et onglets visés. */
+    private List<String> ecritures(String fichier) {
+        return google.requests().stream().filter(requete -> requete.fileId().equals(fichier) && !requete.operation().equals("tabs"))
+                .map(requete -> requete.operation() + requete.sheetIds()).toList();
+    }
+
+    @Test
+    void ca88_unOngletTemporaireEstCreeEtRempliEnEntierAvantToutChangementDeLOngletGenereEtIlNExistePlusALaFin() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+        regenerer();
+        int genere = identifiantDe(FICHIER_2026, ONGLET_GENERE);
+        List<List<Object>> avant = google.cellsOf(FICHIER_2026, genere);
+        valider("2026-03-06", "Quincaillerie B", "Vis");
+        google.reset();
+        google.seedTab(FICHIER_2026, genere, ONGLET_GENERE, avant);
+        List<List<List<Object>>> instantanes = new java.util.concurrent.CopyOnWriteArrayList<>();
+        List<String> titresALEcritureTemporaire = new java.util.concurrent.CopyOnWriteArrayList<>();
+        google.beforeEachSheetRequest(() -> {
+            String operation = google.requests().getLast().operation();
+            if (operation.equals("fill")) {
+                titresALEcritureTemporaire.addAll(google.tabsOf(FICHIER_2026).stream().map(SheetTab::title).toList());
+            }
+            if (!operation.equals("replace") && !operation.equals("deleteTab")) {
+                instantanes.add(google.cellsOf(FICHIER_2026, genere));
+            }
+        });
+
+        regenerer();
+
+        List<String> ordre = google.requests().stream().map(InMemoryGoogle.Request::operation).toList();
+        assertThat(ordre).containsExactly("tabs", "addTab", "fill", "replace", "deleteTab");
+        assertThat(titresALEcritureTemporaire).as("l'onglet temporaire existe, sous le titre configuré, quand il est rempli").contains(ONGLET_GENERE + " (temporaire)");
+        assertThat(instantanes).as("avant le remplacement, l'onglet généré est celui d'avant").hasSize(3).allSatisfy(instantane -> assertThat(instantane).isEqualTo(avant));
+        assertThat(google.tabsOf(FICHIER_2026)).extracting(SheetTab::title).as("l'onglet temporaire n'existe plus").containsExactly(ONGLET_GENERE);
+        assertThat(ongletGenere(FICHIER_2026)).hasSize(3);
+    }
+
+    @Test
+    void ca89_unePanneAuMilieuDeLEcritureTemporaireLaisseLOngletGenereIntactEtRetireLOngletTemporaire() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+        RegenerationStateDTO reussie = regenerer();
+        List<List<Object>> avant = ongletGenere(FICHIER_2026);
+        valider("2026-03-06", "Quincaillerie B", "Vis");
+        horloge.avancer(Duration.ofHours(1));
+        google.failNext("fill", new TransientGoogleException("HTTP_503"));
+
+        RegenerationStateDTO etat = regenerer();
+
+        assertThat(etat.etat()).isEqualTo("ECHEC");
+        assertThat(etat.motif()).isEqualTo("GOOGLE_INDISPONIBLE");
+        assertThat(etat.derniereReussiteLe()).as("la dernière réussite est inchangée").isEqualTo(reussie.derniereReussiteLe());
+        assertThat(etat.dernierEchecLe()).isAfter(reussie.derniereReussiteLe());
+        assertThat(ongletGenere(FICHIER_2026)).isEqualTo(avant);
+        assertThat(google.tabsOf(FICHIER_2026)).extracting(SheetTab::title).containsExactly(ONGLET_GENERE);
+    }
+
+    @Test
+    void ca89_unePanneAuMomentDuRemplacementLaisseLOngletGenereIntactEtRetireLOngletTemporaire() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+        RegenerationStateDTO reussie = regenerer();
+        List<List<Object>> avant = ongletGenere(FICHIER_2026);
+        valider("2026-03-06", "Quincaillerie B", "Vis");
+        google.failNext("replace", new TransientGoogleException("HTTP_429"));
+
+        RegenerationStateDTO etat = regenerer();
+
+        assertThat(etat.etat()).isEqualTo("ECHEC");
+        assertThat(etat.motif()).isEqualTo("GOOGLE_INDISPONIBLE");
+        assertThat(etat.derniereReussiteLe()).isEqualTo(reussie.derniereReussiteLe());
+        assertThat(ongletGenere(FICHIER_2026)).isEqualTo(avant);
+        assertThat(google.tabsOf(FICHIER_2026)).extracting(SheetTab::title).containsExactly(ONGLET_GENERE);
+    }
+
+    @Test
+    void ca89_unOngletTemporaireQuiNePeutPasEtreRetireLeEstAuDebutDeLaRegenerationSuivante() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+        google.failNext("fill", new TransientGoogleException("HTTP_503"));
+        google.failNext("deleteTab", new TransientGoogleException("HTTP_503"));
+
+        assertThat(regenerer().etat()).isEqualTo("ECHEC");
+
+        assertThat(google.tabsOf(FICHIER_2026)).extracting(SheetTab::title).containsExactly(ONGLET_GENERE + " (temporaire)");
+
+        assertThat(regenerer().etat()).isEqualTo("REUSSIE");
+
+        assertThat(google.tabsOf(FICHIER_2026)).extracting(SheetTab::title).containsExactly(ONGLET_GENERE);
+        assertThat(ongletGenere(FICHIER_2026)).hasSize(2);
+    }
+
+    @Test
+    void ca90_lOngletGenereGardeLaMemeIdentiteDUneRegenerationALAutre() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+        regenerer();
+        int identifiant = identifiantDe(FICHIER_2026, ONGLET_GENERE);
+        valider("2026-03-06", "Quincaillerie B", "Vis");
+
+        assertThat(regenerer().etat()).isEqualTo("REUSSIE");
+
+        assertThat(identifiantDe(FICHIER_2026, ONGLET_GENERE)).as("ni supprimé ni recréé").isEqualTo(identifiant);
+        assertThat(ongletGenere(FICHIER_2026)).hasSize(3);
+        assertThat(google.requests()).filteredOn(requete -> requete.operation().equals("deleteTab")).flatExtracting(InMemoryGoogle.Request::sheetIds)
+                .doesNotContain(identifiant);
+    }
+
+    @Test
+    void ca96_unOngletGenereModifieALaMainEstReecritEnEntierSansToucherLaBase() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+        valider("2026-03-06", "Quincaillerie B", "Vis");
+        regenerer();
+        int identifiant = identifiantDe(FICHIER_2026, ONGLET_GENERE);
+        List<List<Object>> attendu = google.cellsOf(FICHIER_2026, identifiant);
+        List<Map<String, Object>> baseAvant = base.queryForList("select * from recu order by id");
+        google.editCell(FICHIER_2026, identifiant, 1, 1, "Modifié à la main");
+        google.editCell(FICHIER_2026, identifiant, 5, 1, "Ligne ajoutée à la main");
+        google.editCell(FICHIER_2026, identifiant, 0, 12, "Colonne ajoutée à la main");
+        google.editCell(FICHIER_2026, identifiant, 2, 5, new InMemoryGoogle.Formula("=1+1"));
+
+        assertThat(regenerer().etat()).isEqualTo("REUSSIE");
+
+        assertThat(google.cellsOf(FICHIER_2026, identifiant)).isEqualTo(attendu);
+        assertThat(base.queryForList("select * from recu order by id")).isEqualTo(baseAvant);
+    }
+
+    @Test
+    void ca96_unOngletGenereSupprimeEstRecree() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+        regenerer();
+        List<List<Object>> attendu = ongletGenere(FICHIER_2026);
+        google.removeTab(FICHIER_2026, identifiantDe(FICHIER_2026, ONGLET_GENERE));
+
+        assertThat(regenerer().etat()).isEqualTo("REUSSIE");
+
+        assertThat(ongletGenere(FICHIER_2026)).isEqualTo(attendu);
+        assertThat(google.tabsOf(FICHIER_2026)).hasSize(1);
+    }
+
+    @Test
+    void ca96_unOngletGenereRenommeReprendSonNomConfigure() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+        regenerer();
+        int identifiant = identifiantDe(FICHIER_2026, ONGLET_GENERE);
+        google.renameTab(FICHIER_2026, identifiant, "Mon nom à moi");
+
+        assertThat(regenerer().etat()).isEqualTo("REUSSIE");
+
+        assertThat(google.tabsOf(FICHIER_2026)).containsExactly(new SheetTab(identifiant, ONGLET_GENERE));
+    }
+
+    @Test
+    void ca32_uneAnneeAjouteeALaConfigurationLeRecuApparaitDansLOngletDeCetteAnneeALaRegenerationSuivante() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        google.seedFile("fichier-essai-2024");
+        String recu2024 = valider("2024-05-02", "Fournisseur 2024", "Sans fichier");
+        regenerer();
+
+        doReturn(Map.of(2026, FICHIER_2026, 2024, "fichier-essai-2024")).when(rules).files();
+        RegenerationStateDTO apres = regenerer();
+
+        assertThat(apres.anneesNonConfigurees()).isEmpty();
+        assertThat(colonne(ongletGenere("fichier-essai-2024"), 10)).containsExactly("ID", recu2024);
+    }
+
+    @Test
+    void r41_unOngletDuNomDeLOngletGenereCreeParLUtilisateurNEstJamaisToucheEtLaRegenerationEchoue() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedTab(FICHIER_2026, COMPTES, ONGLET_GENERE, List.of(List.of("à moi", "pas à l'application")));
+        List<List<Object>> avant = google.cellsOf(FICHIER_2026, COMPTES);
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+
+        RegenerationStateDTO etat = regenerer();
+
+        assertThat(etat.etat()).isEqualTo("ECHEC");
+        assertThat(etat.motif()).isEqualTo("ONGLET_NON_RECONNU");
+        assertThat(etat.anneeEnCause()).isEqualTo(2026);
+        assertThat(google.cellsOf(FICHIER_2026, COMPTES)).isEqualTo(avant);
+        assertThat(ecritures(FICHIER_2026)).as("aucune écriture").isEmpty();
+    }
+
+    @Test
+    void r46_lEchecDUnFichierArreteLaRegenerationEtLesOngletsDejaRemplacesRestentRemplaces() {
+        doReturn(Map.of(2025, FICHIER_2025, 2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2025);
+        String recu2025 = valider("2025-05-02", "Fournisseur 2025", "Avant");
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+
+        RegenerationStateDTO etat = regenerer();
+
+        assertThat(etat.etat()).isEqualTo("ECHEC");
+        assertThat(etat.motif()).as("le fichier de 2026 est absent du Sheet").isEqualTo("FICHIER_INACCESSIBLE");
+        assertThat(etat.anneeEnCause()).isEqualTo(2026);
+        assertThat(colonne(ongletGenere(FICHIER_2025), 10)).containsExactly("ID", recu2025);
+    }
+
+    @Test
+    void r42_uneAutorisationAbsenteDonneLeMotifAutorisationGoogleSansAnneeEnCause() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        google.failNext("tabs:any", new BlockedGoogleException(MotifBlocage.AUTORISATION_GOOGLE));
+
+        RegenerationStateDTO etat = regenerer();
+
+        assertThat(etat.etat()).isEqualTo("ECHEC");
+        assertThat(etat.motif()).isEqualTo("AUTORISATION_GOOGLE");
+        assertThat(etat.anneeEnCause()).isNull();
     }
 }
