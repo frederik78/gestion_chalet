@@ -3,6 +3,8 @@
 Le déploiement lui-même est reporté (backlog, NF-03). Ce fichier liste ce que l'application attend déjà.
 
 ## Environnement
+`.env.example` (versionné, placeholders seulement) sert de modèle : le copier en `.env`, non versionné.
+
 | Variable | Rôle | Défaut |
 |---|---|---|
 | `RECUS_SECURITE_CONDENSE_MOT_DE_PASSE` | Condensé bcrypt du mot de passe du compte local, de coût 10 à 31 | aucun : l'application refuse de démarrer |
