@@ -1,0 +1,6 @@
+# Mode dev, à activer explicitement (SPRING_PROFILES_ACTIVE=dev) : HTTP sur le poste ou une adresse du réseau local, par exemple depuis un téléphone.
+# Jamais en production. Sans profil, l'application reste en mode prod, sécurisé (application.yml).
+recus:
+  securite:
+    # Un navigateur rejette un cookie Secure reçu en HTTP hors localhost : la connexion échouerait.
+    cookie-securise: false

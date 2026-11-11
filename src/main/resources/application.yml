@@ -175,5 +175,5 @@ recus:
     duree-blocage: 15m
     sources-suivies-max: 10000
     corps-requete-max: 64KB
-    # Vrai partout, sauf sur le poste local en HTTP (RECUS_SECURITE_COOKIE_SECURISE=false).
+    # Vrai par défaut (mode prod) ; seul le profil dev (application-dev.yml) le met à faux. RECUS_SECURITE_COOKIE_SECURISE reste une surcharge.
     cookie-securise: true
