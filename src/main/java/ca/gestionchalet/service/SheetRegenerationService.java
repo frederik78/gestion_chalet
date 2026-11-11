@@ -21,6 +21,7 @@ import ca.gestionchalet.service.dto.RegenerationStateDTO;
 import ca.gestionchalet.service.mapper.RegenerationMapper;
 import jakarta.annotation.PreDestroy;
 import java.time.Clock;
+import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -33,7 +34,6 @@ import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,6 +54,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class SheetRegenerationService {
 
     private static final Logger LOG = LoggerFactory.getLogger(SheetRegenerationService.class);
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     /** Ce que la régénération lit d'un reçu au début : tout ce qu'il lui faut, hors de la transaction. */
     private record Line(int year, Instant validatedAt, SheetRow row) {
@@ -143,7 +144,7 @@ public class SheetRegenerationService {
         } catch (BlockedGoogleException e) {
             fail(motifOf(e.motif()), e.motif() == MotifBlocage.FICHIER_INACCESSIBLE ? progress.year : null, yearsWithoutFile);
         } catch (TransientGoogleException e) {
-            LOG.warn("Régénération : panne de Google ({})", e.getMessage());
+            LOG.warn("Régénération : panne de Google ({})", e.getClass().getSimpleName());
             fail(MotifEchec.GOOGLE_INDISPONIBLE, null, yearsWithoutFile);
         } catch (RuntimeException e) {
             // Jamais le message : il peut citer une valeur de reçu.
@@ -197,7 +198,7 @@ public class SheetRegenerationService {
     /** Un fichier (R-40) : tout ou rien pour l'onglet généré. */
     private void regenerate(int year, String fileId, List<SheetRow> rows) {
         List<SheetTab> tabs = new ArrayList<>(sheetClient.tabs(fileId));
-        removeLeftoverTemporaryTab(year, fileId, tabs);
+        dropLeftoverTemporaryTab(year, fileId, tabs);
         String title = rules.generatedTab();
         Optional<Integer> known = knownGeneratedTab(year, fileId, tabs);
         Set<Integer> usedIds = new TreeSet<>(tabs.stream().map(SheetTab::id).toList());
@@ -210,16 +211,14 @@ public class SheetRegenerationService {
             sheetClient.fill(fileId, temporaryId, rows);
             updateTab(year, fileId, tab -> tab.annoncerRemplacement(targetId));
             sheetClient.replace(fileId, temporaryId, targetId, title, known.isEmpty(), rows.size() + 1);
-        } catch (RuntimeException e) {
-            removeTemporaryTab(year, fileId, temporaryId);
-            throw e;
+            updateTab(year, fileId, tab -> tab.memoriser(writtenCells(rows)));
+        } finally {
+            dropTemporaryTab(year, fileId, temporaryId);
         }
-        updateTab(year, fileId, tab -> tab.memoriser(writtenCells(rows)));
-        removeTemporaryTab(year, fileId, temporaryId);
     }
 
     /** Un onglet temporaire que la régénération précédente n'a pas pu retirer (CA89) : elle l'avait noté, il est retiré avant tout. */
-    private void removeLeftoverTemporaryTab(int year, String fileId, List<SheetTab> tabs) {
+    private void dropLeftoverTemporaryTab(int year, String fileId, List<SheetTab> tabs) {
         Integer leftover = readTab(year, fileId).map(OngletGenere::getOngletTemporaireId).orElse(null);
         if (leftover == null) {
             return;
@@ -246,12 +245,12 @@ public class SheetRegenerationService {
     }
 
     /** Hors de l'issue de la régénération : une panne du retrait laisse l'onglet noté, et le prochain passage le retire. */
-    private void removeTemporaryTab(int year, String fileId, int temporaryId) {
+    private void dropTemporaryTab(int year, String fileId, int temporaryId) {
         try {
             sheetClient.deleteTab(fileId, temporaryId);
             updateTab(year, fileId, OngletGenere::oublierOngletTemporaire);
         } catch (BlockedGoogleException | TransientGoogleException e) {
-            LOG.warn("Régénération : onglet temporaire non retiré ({})", e.getMessage());
+            LOG.warn("Régénération : onglet temporaire non retiré ({})", e.getClass().getSimpleName());
         }
     }
 
@@ -285,7 +284,7 @@ public class SheetRegenerationService {
     private static int freshId(Set<Integer> used) {
         int id;
         do {
-            id = ThreadLocalRandom.current().nextInt(1, Integer.MAX_VALUE);
+            id = RANDOM.nextInt(1, Integer.MAX_VALUE);
         } while (used.contains(id));
         return id;
     }
