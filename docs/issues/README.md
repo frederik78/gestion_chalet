@@ -5,7 +5,7 @@ Une issue = un fichier `docs/issues/<prd>-<nn>-<slug>.md` : une tranche vertical
 (statut, dépendances, branche, commits, revue). Modèle : `_template.md`. La skill `deliver` lit et met à jour ces fichiers.
 
 ## Format
-En-tête YAML : `id`, `titre`, `prd`, `besoin`, `statut` (`À faire` -> `En cours` -> `En revue` -> `Fait`), `depend_de` (ids d'issues qui doivent être
+En-tête YAML : `id`, `titre`, `prd`, `besoin`, `statut` (`À faire` -> `En cours` -> `En revue` -> `Fait` ; `Abandonnée` hors cycle, pour une issue devenue sans objet : jamais livrée, jamais prête, motif en Notes), `depend_de` (ids d'issues qui doivent être
 `Fait`), `criteres` (CA-xx / CS-xx du PRD), `branche` (`feat/<prd>-<nn>-<slug>`), `commits`, `revue` (`docs/reviews/<id>.md`).
 Corps : Objectif, Périmètre (dans / hors), Critères d'acceptation (renvoi au PRD, sans les recopier), Notes (décisions et écarts datés).
 
@@ -13,7 +13,7 @@ Corps : Objectif, Périmètre (dans / hors), Critères d'acceptation (renvoi au 
 - `Fait` seulement si la définition de fini de la skill `deliver` est remplie (build vert en copie propre, critères couverts par des tests nommés,
   revue `APPROUVÉ`, commits atomiques).
 - Les identifiants CA/CS restent ceux du PRD (source de vérité) ; un numéro n'est jamais réutilisé.
-- Le statut d'un besoin du backlog passe `Fait` seulement quand TOUTES ses issues le sont.
+- Le statut d'un besoin du backlog passe `Fait` seulement quand TOUTES ses issues le sont (une issue `Abandonnée` n'est pas comptée).
 - Une issue ne décrit pas la structure des packages (c'est `AGENTS.md` et les ADR).
 
 ## État
