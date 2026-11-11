@@ -93,8 +93,4 @@ public class OngletGenere {
     public Integer getOngletTemporaireId() {
         return ongletTemporaireId;
     }
-
-    public EtatContenu getEtatContenu() {
-        return etatContenu;
-    }
 }

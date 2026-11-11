@@ -28,6 +28,9 @@ import tools.jackson.databind.JsonNode;
  * bloque la copie avant toute écriture. Le nom de l'onglet et l'identifiant du fichier, venus de la configuration, sont encodés dans les adresses, et les guillemets simples d'une
  * plage doublés. Ce que le Sheet contient (en-têtes, titres) est une entrée externe : comparé, jamais réécrit ni journalisé.
  *
+ * <p>L'onglet généré de la régénération (D-66) se lit et s'écrit par {@link #tabs}, {@link #addTab}, {@link #fill}, {@link #replace} et {@link #deleteTab} : un lot par opération, donc tout ou
+ * rien. Le remplacement copie l'onglet temporaire sur l'onglet cible dans un seul lot ; que la copie garde un texte à signe de formule en texte reste à confirmer à l'essai réel (section 13 du PRD).
+ *
  * <p><b>Limite, jusqu'au placement par la date (001-07) :</b> la ligne se place à la fin de la section du mois, sans tenir compte de sa date, et un mois sans section bloque la copie.
  */
 public class GoogleSheetClient implements SheetClient {

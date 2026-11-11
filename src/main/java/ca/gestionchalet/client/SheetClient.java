@@ -5,7 +5,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
-/** Frontière de Google Sheets (ADR 0001) : la ligne d'un reçu dans l'onglet de la copie. */
+/**
+ * Frontière de Google Sheets (ADR 0001) : la ligne d'un reçu dans l'onglet de la copie (ancien cycle, retiré par 001-17), et l'onglet généré que la régénération écrit (D-66) : lire les onglets
+ * d'un fichier, en créer un, l'écrire en entier, remplacer le contenu d'un autre, en retirer un. Chaque opération vise un onglet que l'appelant nomme ; aucune ne lit le contenu d'un onglet.
+ */
 public interface SheetClient {
 
     /**
