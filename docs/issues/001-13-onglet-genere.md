@@ -3,7 +3,7 @@ id: 001-13
 titre: Onglet généré du Sheet
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: À faire
+statut: En cours
 depend_de: [001-11]
 criteres: [CA31, CA32, CA85, CA86, CA87, CA88, CA89, CA90, CA96, CS16]
 branche: feat/001-13-onglet-genere
