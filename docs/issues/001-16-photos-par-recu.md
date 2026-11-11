@@ -3,7 +3,7 @@ id: 001-16
 titre: Dépôt des photos par reçu
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: En revue
+statut: En cours
 depend_de: [001-06]
 criteres: [CA45, CA46, CA47, CA49, CA50, CA53, CA64, CA65, CA66, CA99]
 branche: feat/001-16-photos-par-recu
