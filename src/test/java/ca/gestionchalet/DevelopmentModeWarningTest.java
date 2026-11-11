@@ -3,6 +3,7 @@ package ca.gestionchalet;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.gestionchalet.support.RealServerTest;
+import ca.gestionchalet.support.TestDoublesConfiguration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -19,10 +20,10 @@ import org.springframework.test.context.TestPropertySource;
 class DevelopmentModeWarningTest {
 
     @Test
-    void mode_dev_ledemarrageJournaliseUnAvertissementSansValeurSecrete(CapturedOutput sortie) {
+    void cs20_modeDev_leDemarrageJournaliseUnAvertissementSansValeurSecrete(CapturedOutput sortie) {
         assertThat(sortie.getAll())
                 .contains("WARN")
                 .contains("MODE DEV ACTIF : cookies non sécurisés (HTTP accepté). Ne jamais l'utiliser en production.")
-                .doesNotContain(ca.gestionchalet.support.TestDoublesConfiguration.CONDENSE);
+                .doesNotContain(TestDoublesConfiguration.CONDENSE);
     }
 }

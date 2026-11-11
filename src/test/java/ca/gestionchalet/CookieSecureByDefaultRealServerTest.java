@@ -17,7 +17,7 @@ class CookieSecureByDefaultRealServerTest {
     int port;
 
     @Test
-    void mode_prod_sansProfilLesCookiesPortentSecure() {
+    void cs20_modeProd_sansProfilLesCookiesPortentSecure() {
         TestClient client = new TestClient(port, "source-mode-prod");
 
         Reponse reponse = client.connecter(TestDoublesConfiguration.MOT_DE_PASSE);

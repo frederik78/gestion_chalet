@@ -19,7 +19,7 @@ class CookieOnLocalWorkstationTest {
     int port;
 
     @Test
-    void mode_dev_leProfilDevRetireSecureDesCookies() {
+    void cs20_modeDev_leProfilDevRetireSecureDesCookies() {
         TestClient client = new TestClient(port, "source-poste-local");
 
         Reponse reponse = client.connecter(TestDoublesConfiguration.MOT_DE_PASSE);
