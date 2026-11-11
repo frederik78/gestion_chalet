@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.oauth2.core.OAuth2AuthorizationException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
@@ -56,7 +57,8 @@ final class GoogleCalls {
 
     /** {@code Retry-After} en secondes entières, la forme de Google ; une date HTTP, une valeur négative ou illisible est ignorée : le rythme des essais s'applique alors seul. */
     private static Optional<Duration> retryAfter(RestClientResponseException e) {
-        String value = e.getResponseHeaders() == null ? null : e.getResponseHeaders().getFirst("Retry-After");
+        HttpHeaders headers = e.getResponseHeaders();
+        String value = headers == null ? null : headers.getFirst("Retry-After");
         if (value == null || !value.matches("\\d{1,9}")) {
             return Optional.empty();
         }
