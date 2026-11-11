@@ -3,7 +3,7 @@ id: 001-21
 titre: Modes dev et prod
 prd: docs/prd/001-recus.md
 besoin: F-01
-statut: En revue
+statut: Fait
 depend_de: [001-01]
 criteres: [CS37]
 branche: fix/modes-dev-prod
