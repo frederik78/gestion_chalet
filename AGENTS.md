@@ -1,6 +1,6 @@
 # Gestion de chalet
 
-Application de gestion d'un chalet loué au Québec, pour son propriétaire, construite module par module. Premier module : reporter en base et dans le Google Sheet les valeurs et la photo des reçus, pour la déclaration de la TPS et de la TVQ.
+Application de gestion d'un chalet loué au Québec, pour son propriétaire, construite module par module. Premier module : reporter en base, puis dans le Google Sheet, les valeurs et la photo des reçus, ainsi que les dépenses sans reçu saisies dans le Sheet, pour la déclaration de la TPS et de la TVQ.
 
 Ce fichier (standard ouvert AGENTS.md) est la source de vérité pour tout agent de code (Claude Code, Codex, Cursor, Copilot, etc.).
 Il ne contient rien de propre à un outil. `CLAUDE.md` l'importe et n'ajoute que des directives propres à Claude Code.
@@ -52,7 +52,7 @@ Structure en services, inspirée de JHipster, sans générateur : `config`, `dom
 - **Langue du code** : les classes techniques sont impérativement en anglais.
 - Montants en cents entiers, en dollars canadiens, jamais en flottants.
 - Rien n'est enregistré avant la validation par l'utilisateur. Une taxe absente d'un reçu reste vide : elle n'est jamais calculée ni mise à 0.
-- La base fait référence, le Google Sheet en est une copie ; un envoi échoué est réessayé sans perdre le reçu.
+- La base fait référence. Le Google Sheet en est une projection, régénérée à la demande ; il n'alimente la base que par l'import, chaque ajout ou modification étant accepté explicitement par l'utilisateur. Un dépôt de photo échoué est réessayé sans perdre le reçu.
 - Modèle, seuils d'alerte, types de dépense, fichiers et onglets par année : en configuration (`recus.*`), jamais en constantes.
 - **Deux modes** : prod (sans profil Spring, par défaut) a des cookies `Secure` ; dev (profil `dev` demandé explicitement, HTTP sur le poste ou le réseau local) les retire et journalise un avertissement au démarrage (CS37). **INTERDIT** : activer `dev` en production.
 - **INTERDIT** : écrire le contenu d'un reçu dans les journaux, ou verser des photos réelles au dépôt.
