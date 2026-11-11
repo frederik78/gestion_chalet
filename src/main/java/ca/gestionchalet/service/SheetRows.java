@@ -5,6 +5,7 @@ import ca.gestionchalet.client.SheetClient.SheetRow;
 import ca.gestionchalet.domain.Alerte;
 import ca.gestionchalet.domain.Valeurs;
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
@@ -29,7 +30,7 @@ final class SheetRows {
      * tel quel, les liens de photos par leur texte ; {@code null} pour une cellule vide. L'identifiant du reçu n'en fait pas partie : il identifie la ligne.
      */
     static List<String> writtenCells(SheetRow row) {
-        return java.util.Arrays.asList(row.date().toString(), row.supplier(), emptyToNull(row.object()), row.expenseType(), amount(row.amountBeforeTax()), amount(row.gst()),
+        return Arrays.asList(row.date().toString(), row.supplier(), emptyToNull(row.object()), row.expenseType(), amount(row.amountBeforeTax()), amount(row.gst()),
                 amount(row.qst()), amount(row.total()), emptyToNull(row.notes()),
                 row.photos().isEmpty() ? null : row.photos().stream().map(PhotoLink::label).collect(Collectors.joining(", ")));
     }
