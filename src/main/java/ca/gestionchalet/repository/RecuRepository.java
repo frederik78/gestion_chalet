@@ -1,7 +1,5 @@
 package ca.gestionchalet.repository;
 
-import ca.gestionchalet.domain.EtatCopie;
-import ca.gestionchalet.domain.MotifBlocage;
 import ca.gestionchalet.domain.Recu;
 import java.time.LocalDate;
 import java.util.List;
@@ -24,8 +22,4 @@ public interface RecuRepository extends Repository<Recu, UUID> {
     /** Les reçus dont au moins une photo n'est pas déposée : la file du dépôt (D-66). */
     @Query("select distinct r from Recu r join r.photos p where p.driveFileId is null")
     List<Recu> findWithPhotosToDeposit();
-
-    List<Recu> findByEtatCopie(EtatCopie etatCopie);
-
-    List<Recu> findByEtatCopieAndMotifBlocage(EtatCopie etatCopie, MotifBlocage motifBlocage);
 }
