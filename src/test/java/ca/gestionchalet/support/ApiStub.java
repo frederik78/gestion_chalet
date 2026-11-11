@@ -32,7 +32,18 @@ public final class ApiStub implements AutoCloseable {
     }
 
     /** Une réponse JSON, sauf indication contraire. */
-    public record Response(int status, String body, String type) {
+    public record Response(int status, String body, String type, Map<String, String> headers) {
+
+        public Response(int status, String body, String type) {
+            this(status, body, type, Map.of());
+        }
+
+        /** La même réponse avec un en-tête de plus, tel {@code Retry-After}. */
+        public Response withHeader(String name, String value) {
+            Map<String, String> all = new java.util.LinkedHashMap<>(headers);
+            all.put(name, value);
+            return new Response(status, body, type, all);
+        }
 
         public static Response json(String body) {
             return new Response(200, body, "application/json");
@@ -92,6 +103,7 @@ public final class ApiStub implements AutoCloseable {
             Response response = handler.apply(request);
             byte[] body = response.body().getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", response.type());
+            response.headers().forEach((name, value) -> exchange.getResponseHeaders().add(name, value));
             exchange.sendResponseHeaders(response.status(), body.length);
             exchange.getResponseBody().write(body);
         }
