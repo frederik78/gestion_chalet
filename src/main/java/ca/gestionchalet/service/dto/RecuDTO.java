@@ -5,16 +5,13 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-/** Objet reçu du contrat (PRD, section 7.1) : aucun jeton, aucun chemin ni identifiant technique de fichier. */
+/** Objet reçu du contrat (PRD, section 7.1) : aucun état de copie (D-66), aucun jeton, aucun chemin ni identifiant technique de fichier. */
 public record RecuDTO(
         UUID id,
         int version,
         ValeursDTO valeurs,
         Long montantTotalLuCents,
         List<AlerteDTO> alertes,
-        String etatCopie,
-        String motifBlocage,
-        Instant prochaineTentative,
         List<PhotoDTO> photos,
         Instant valideLe,
         Instant corrigeLe) {

@@ -11,11 +11,10 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
 
-/** Les champs ignorés ne seront renseignés qu'avec les issues qui les calculent : copie et correction. */
+/** Les champs ignorés ne seront renseignés qu'avec les issues qui les calculent : lien Drive et correction. */
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.ERROR)
 public interface RecuMapper {
 
-    @Mapping(target = "prochaineTentative", ignore = true)
     @Mapping(target = "corrigeLe", ignore = true)
     RecuDTO toDto(Recu recu);
 

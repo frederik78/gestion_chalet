@@ -151,9 +151,12 @@ recus:
       - https://www.googleapis.com/auth/spreadsheets
       - https://www.googleapis.com/auth/drive.file
   copie:
-    # Un seul fil copie les reçus validés : réveillé après chaque validation, puis à chaque passage périodique (D-60, R-19, R-20). Faux : seul un appel direct copie (tests).
+    # Un seul fil dépose les photos des reçus validés : réveillé après chaque validation, à chaque autorisation et à l'heure de chaque nouvel essai, puis à chaque passage périodique (D-60, D-66, R-20). Faux : seul un appel direct dépose (tests).
     automatique: true
     intervalle: 1m
+    # Un dépôt de photo en panne passagère est réessayé après 1 minute, puis à intervalle doublé jusqu'à 1 heure, sans limite de tentatives (R-20).
+    reprise-initiale: 1m
+    reprise-maximale: 1h
     delai-appel: 60s
     # Créé par l'application au premier dépôt (R-28).
     dossier-drive: Reçus du chalet

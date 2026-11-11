@@ -126,7 +126,7 @@ class GoogleAuthorizationRestartTest {
             assertThat(client.get("/api/google/etat").corps()).isEqualTo("{\"etat\":\"ABSENTE\"}");
             TestClient.Reponse recu = valider(client);
             assertThat(recu.statut()).isEqualTo(201);
-            assertThat(recu.json()).containsEntry("etatCopie", "BLOQUEE").containsEntry("motifBlocage", "AUTORISATION_GOOGLE");
+            assertThat(recu.json()).doesNotContainKeys("etatCopie", "motifBlocage", "prochaineTentative");
 
             TestClient.Reponse demande = client.get("/api/google/autorisation");
             assertThat(demande.statut()).isEqualTo(503);
@@ -169,7 +169,7 @@ class GoogleAuthorizationRestartTest {
 
     /** D-42 : comme CA66, sans perte, sans réutiliser le jeton illisible, sans détail du chiffrement au journal. */
     @Test
-    void ca66_uneCleChangeePasseARenouvelerEtBloqueLesRecusEnAttente(@TempDir Path base, CapturedOutput journal) throws Exception {
+    void ca66_uneCleChangeePasseARenouvelerEtLaissePhotosEnAttenteLesDepotsAFaire(@TempDir Path base, CapturedOutput journal) throws Exception {
         try (GoogleStub google = new GoogleStub()) {
             String recu;
             try (ConfigurableApplicationContext application = demarrer(base, google)) {
@@ -187,8 +187,7 @@ class GoogleAuthorizationRestartTest {
 
                 assertThat(client.get("/api/google/etat").corps()).isEqualTo("{\"etat\":\"A_RENOUVELER\"}");
                 JdbcTemplate lignes = application.getBean(JdbcTemplate.class);
-                assertThat(lignes.queryForMap("select etat_copie, motif_blocage from recu where id = ?", recu))
-                        .containsEntry("etat_copie", "BLOQUEE").containsEntry("motif_blocage", "AUTORISATION_GOOGLE");
+                assertThat(lignes.queryForList("select drive_file_id from photo where recu_id = ?", String.class, recu)).containsOnlyNulls().hasSize(1);
                 assertThat(lignes.queryForMap("select * from autorisation_google"))
                         .containsEntry("jeton_acces_chiffre", null).containsEntry("jeton_renouvellement_chiffre", null);
                 assertThat(valider(client).statut()).isEqualTo(201);

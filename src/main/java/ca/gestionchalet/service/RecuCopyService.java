@@ -3,33 +3,23 @@ package ca.gestionchalet.service;
 import ca.gestionchalet.client.BlockedGoogleException;
 import ca.gestionchalet.client.DriveClient;
 import ca.gestionchalet.client.DriveClient.DrivePhoto;
-import ca.gestionchalet.client.SheetClient;
-import ca.gestionchalet.client.SheetClient.PhotoLink;
-import ca.gestionchalet.client.SheetClient.SheetRow;
 import ca.gestionchalet.client.TransientGoogleException;
-import ca.gestionchalet.domain.Alerte;
-import ca.gestionchalet.domain.CopyRules;
-import ca.gestionchalet.domain.EtatCopie;
+import ca.gestionchalet.domain.DepositRetryRules;
 import ca.gestionchalet.domain.MotifBlocage;
 import ca.gestionchalet.domain.Photo;
 import ca.gestionchalet.domain.Recu;
-import ca.gestionchalet.domain.SheetTarget;
-import ca.gestionchalet.domain.Valeurs;
 import ca.gestionchalet.repository.PhotoStorage;
 import ca.gestionchalet.repository.RecuRepository;
-import java.io.UncheckedIOException;
-import java.math.BigDecimal;
 import java.time.Clock;
-import java.util.ArrayList;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -44,224 +34,144 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Le cycle de la copie d'un reçu validé vers Drive et le Sheet (D-60) : les appelants signalent des faits (un reçu validé, une autorisation accordée ou perdue),
- * et ce module décide de l'ordre, des pannes et des essais. Seul ce module change l'état de la copie d'un reçu (règle d'architecture).
+ * Le dépôt des photos des reçus validés dans Drive (D-60, D-66) : les appelants signalent des faits (un reçu validé, une autorisation accordée), et ce module décide de l'ordre,
+ * des pannes et des essais. Il n'écrit jamais dans le Sheet : celui-ci n'est écrit que par une régénération demandée (R-44).
  *
- * <p>Une copie se fait en trois temps, et <b>aucune transaction ne reste ouverte pendant un appel à Google</b> : le lien unique vers la base (R-19 : un seul fil copie)
- * serait tenu pendant le réseau. (1) Une transaction courte lit le reçu et en tire ce qu'il faut. (2) Hors transaction, les photos sont déposées une à une dans Drive, puis,
- * toutes déposées (R-18), la ligne est écrite. (3) Une transaction courte garde les fichiers déposés et change l'état. La base sert de file : les reçus {@code A_COPIER}, par
- * ordre de validation (R-19) ; un seul fil les prend, réveillé après chaque validation et périodiquement. Une panne passagère laisse le reçu {@code A_COPIER}, repris au
- * prochain passage périodique, jamais à un réveil ; le rythme des essais (R-20) et la reprise des reçus bloqués viennent avec 001-08.
+ * <p>La base sert de file : une photo sans identifiant Drive est « à déposer », une photo déposée ne l'est jamais deux fois (R-29). Un seul fil dépose, réveillé après chaque
+ * validation, à chaque autorisation accordée, à l'heure du nouvel essai d'une photo en panne, puis périodiquement ; il reprend ainsi, après un redémarrage, toute photo à
+ * déposer (R-20). <b>Aucune transaction ne reste ouverte pendant un appel à Google</b> : une transaction courte lit les photos à déposer, une autre garde l'identifiant Drive reçu.
+ *
+ * <p>Sans autorisation valide, aucun appel ne part, pas même celui d'un jeton : les photos attendent la nouvelle autorisation, qui les reprend aussitôt. Une panne passagère
+ * reporte la photo à l'heure que donne {@link DepositRetryRules} (1, 2, 4 minutes… jusqu'à 1 heure, ou le {@code Retry-After} de Google) ; cette heure est en mémoire seulement, car un
+ * redémarrage vaut un nouvel essai de toute photo.
  */
 @Service
 public class RecuCopyService {
 
     private static final Logger LOG = LoggerFactory.getLogger(RecuCopyService.class);
-    private static final String NOTES_SEPARATOR = " ; ";
 
     private final RecuRepository recuRepository;
     private final GoogleAuthorizationService googleAuthorizationService;
     private final DriveClient driveClient;
-    private final SheetClient sheetClient;
     private final PhotoStorage photoStorage;
     private final TransactionTemplate transactionTemplate;
     private final ObjectProvider<TaskScheduler> scheduler;
     private final Clock clock;
-    private final CopyRules rules;
-    /** Les reçus en panne passagère depuis le dernier passage périodique : en mémoire, car un redémarrage vaut un passage périodique. */
-    private final Set<UUID> waitingAfterFailure = ConcurrentHashMap.newKeySet();
+    private final DepositRetryRules retryRules;
+    /** Les photos en panne : le nombre d'échecs et l'heure du prochain essai. */
+    private final Map<UUID, Retry> retries = new ConcurrentHashMap<>();
 
-    public RecuCopyService(RecuRepository recuRepository, GoogleAuthorizationService googleAuthorizationService, DriveClient driveClient, SheetClient sheetClient,
-            PhotoStorage photoStorage, TransactionTemplate transactionTemplate, ObjectProvider<TaskScheduler> scheduler, Clock clock,
-            CopyRules rules) {
+    public RecuCopyService(RecuRepository recuRepository, GoogleAuthorizationService googleAuthorizationService, DriveClient driveClient, PhotoStorage photoStorage,
+            TransactionTemplate transactionTemplate, ObjectProvider<TaskScheduler> scheduler, Clock clock, DepositRetryRules retryRules) {
         this.recuRepository = recuRepository;
         this.googleAuthorizationService = googleAuthorizationService;
         this.driveClient = driveClient;
-        this.sheetClient = sheetClient;
         this.photoStorage = photoStorage;
         this.transactionTemplate = transactionTemplate;
         this.scheduler = scheduler;
         this.clock = clock;
-        this.rules = rules;
+        this.retryRules = retryRules;
     }
 
-    /** Ce qu'une copie lit du reçu au premier temps : tout ce qu'il lui faut, hors de la transaction. */
-    private record Job(UUID recuId, int version, Valeurs valeurs, List<Alerte> alertes, List<Photo> photos) {
+    /** Une photo à déposer, lue du reçu au premier temps ; le nom Drive vient de la date du reçu. */
+    private record Pending(UUID recuId, LocalDate date, Photo photo) {
     }
 
-    /** Ce que le deuxième temps rend : les fichiers déposés, même si la suite a échoué, et l'issue. */
-    private record Outcome(Map<UUID, String> deposited, Optional<MotifBlocage> blocked, boolean copied) {
+    private record Retry(int failures, Instant at) {
     }
 
-    /**
-     * Un reçu vient d'être validé, dans la transaction de la validation : sans fichier ou onglet du Sheet configuré (D-62), il est bloqué sans qu'aucun appel à Google ne
-     * parte, pas même celui d'un jeton ; sans autorisation Google, il attend (CA64) ; sinon, la copie est réveillée une fois la validation enregistrée.
-     */
+    /** Un reçu vient d'être validé, dans la transaction de la validation : le dépôt est réveillé une fois la validation enregistrée, sans que la réponse l'attende (CA45). */
     @Transactional(propagation = Propagation.MANDATORY)
-    public void receiptValidated(Recu recu) {
-        if (!rules.anySheetConfigured()) {
-            recu.bloquer(MotifBlocage.FICHIER_INACCESSIBLE);
-        } else if (googleAuthorizationService.isValid()) {
-            wakeAfterCommit();
-        } else {
-            recu.bloquer(MotifBlocage.AUTORISATION_GOOGLE);
-        }
+    public void receiptValidated() {
+        wakeAfterCommit(clock.instant());
     }
 
-    /** Une nouvelle autorisation reprend les reçus bloqués pour ce motif, et la copie est réveillée aussitôt (CA65, section 7.6) ; la panne qui attendait le passage périodique est oubliée. */
+    /** Une nouvelle autorisation reprend aussitôt les dépôts en attente, y compris ceux dont l'essai était programmé plus tard (CA65). */
     @EventListener
     @Transactional(propagation = Propagation.MANDATORY)
     public void on(GoogleAuthorizationGranted event) {
-        waitingAfterFailure.clear();
-        recuRepository.findByEtatCopieAndMotifBlocage(EtatCopie.BLOQUEE, MotifBlocage.AUTORISATION_GOOGLE).forEach(Recu::reprendre);
-        wakeAfterCommit();
-    }
-
-    /** Une autorisation perdue bloque les reçus en attente (CA66). */
-    @EventListener
-    @Transactional(propagation = Propagation.MANDATORY)
-    public void on(GoogleAuthorizationLost event) {
-        recuRepository.findByEtatCopie(EtatCopie.A_COPIER).forEach(recu -> recu.bloquer(MotifBlocage.AUTORISATION_GOOGLE));
-    }
-
-    /** Le passage périodique : chaque reçu à copier, une fois, dans l'ordre de validation. Il reprend aussi les reçus laissés en attente par une panne (D-60). */
-    @Scheduled(fixedDelayString = "${recus.copie.intervalle}")
-    public synchronized void processPending() {
-        waitingAfterFailure.clear();
-        pass();
+        retries.clear();
+        wakeAfterCommit(clock.instant());
     }
 
     /**
-     * Le passage d'un réveil (validation, autorisation) : un reçu en panne passagère depuis le dernier passage périodique n'est pas retenté, sinon chaque réveil
-     * relancerait les essais bien avant l'intervalle configuré (mesuré : 3 à 9 s au lieu d'une minute).
+     * Dépose les photos dues, une à une, dans l'ordre de validation des reçus : c'est le passage périodique, et aussi ce que réveillent une validation, une autorisation et l'heure d'un
+     * essai. Les dépôts à faire restent à faire quand l'autorisation manque.
      */
-    public synchronized void processAfterWake() {
-        pass();
-    }
-
-    private void pass() {
-        for (UUID id : pendingIds()) {
-            if (waitingAfterFailure.contains(id)) {
-                continue;
-            }
-            try {
-                if (copy(id)) {
-                    waitingAfterFailure.add(id);
-                }
-            } catch (RuntimeException e) {
-                // Jamais le message : il peut citer une valeur de reçu.
-                LOG.error("Copie du reçu {} interrompue : {}", id, e.getClass().getName());
-                waitingAfterFailure.add(id);
+    @Scheduled(fixedDelayString = "${recus.copie.intervalle}")
+    public synchronized void processPending() {
+        if (!googleAuthorizationService.isValid()) {
+            return;
+        }
+        for (Pending pending : pendingPhotos()) {
+            Retry retry = retries.get(pending.photo().getId());
+            if ((retry == null || !retry.at().isAfter(clock.instant())) && !deposit(pending)) {
+                return;
             }
         }
     }
 
-    /**
-     * Copie le premier reçu à copier, dans l'ordre de validation (R-19).
-     *
-     * @return faux s'il n'y en avait aucun
-     */
-    public synchronized boolean processNext() {
-        Optional<UUID> next = pendingIds().stream().findFirst();
-        next.ifPresent(this::copy);
-        return next.isPresent();
-    }
-
-    private List<UUID> pendingIds() {
-        return transactionTemplate.execute(status -> recuRepository.findByEtatCopie(EtatCopie.A_COPIER).stream()
+    private List<Pending> pendingPhotos() {
+        return transactionTemplate.execute(status -> recuRepository.findWithPhotosToDeposit().stream()
                 .sorted(Comparator.comparing(Recu::getValideLe))
-                .map(Recu::getId)
+                .flatMap(recu -> recu.getPhotos().stream().filter(photo -> photo.getDriveFileId() == null)
+                        .map(photo -> new Pending(recu.getId(), recu.getValeurs().date(), photo)))
                 .toList());
     }
 
-    /** @return vrai si une panne passagère laisse le reçu à copier */
-    private boolean copy(UUID id) {
-        Optional<Job> job = transactionTemplate.execute(status -> recuRepository.findById(id)
-                .filter(recu -> recu.getEtatCopie() == EtatCopie.A_COPIER)
-                .map(recu -> new Job(recu.getId(), recu.getVersion(), recu.getValeurs(), recu.getAlertes(), recu.getPhotos())));
-        if (job.isEmpty()) {
-            return false;
-        }
-        Outcome outcome = send(job.get());
-        finish(job.get(), outcome);
-        return !outcome.copied() && outcome.blocked().isEmpty();
-    }
-
-    /**
-     * Hors transaction : toutes les photos d'abord (R-18), puis la ligne. Une photo déjà déposée n'est pas redéposée. Sans aucune entrée de configuration (D-62), rien ne part ; avec des
-     * entrées mais aucune pour l'année du reçu, les photos sont déposées quand même et la ligne attend l'année (D-18, section 8 du PRD).
-     */
-    private Outcome send(Job job) {
-        if (!rules.anySheetConfigured()) {
-            return new Outcome(Map.of(), Optional.of(MotifBlocage.FICHIER_INACCESSIBLE), false);
-        }
-        Map<UUID, String> deposited = new LinkedHashMap<>();
+    /** @return faux si l'autorisation manque : les autres photos attendent aussi, inutile d'en essayer une autre */
+    private boolean deposit(Pending pending) {
+        Photo photo = pending.photo();
         try {
-            List<PhotoLink> links = new ArrayList<>();
-            for (Photo photo : job.photos()) {
-                String fileId = photo.getDriveFileId();
-                if (fileId == null) {
-                    fileId = driveClient.deposit(new DrivePhoto(photo.getId(), driveName(job.valeurs(), photo), photo.getFormat().mediaType(), photoStorage.read(photo)));
-                    deposited.put(photo.getId(), fileId);
-                }
-                links.add(new PhotoLink("Photo " + photo.getRang(), fileId));
-            }
-            Optional<SheetTarget> target = rules.sheetFor(job.valeurs().date().getYear());
-            if (target.isEmpty()) {
-                return new Outcome(deposited, Optional.of(MotifBlocage.ANNEE_NON_CONFIGUREE), false);
-            }
-            sheetClient.write(target.get(), row(job, links));
-            return new Outcome(deposited, Optional.empty(), true);
+            String fileId = driveClient.deposit(new DrivePhoto(photo.getId(), driveName(pending), photo.getFormat().mediaType(), photoStorage.read(photo)));
+            keep(pending, fileId);
+            retries.remove(photo.getId());
         } catch (BlockedGoogleException e) {
-            return new Outcome(deposited, Optional.of(e.motif()), false);
-        } catch (TransientGoogleException | UncheckedIOException e) {
-            LOG.warn("Copie du reçu {} : panne passagère ({})", job.recuId(), e.getClass().getSimpleName());
-            return new Outcome(deposited, Optional.empty(), false);
+            if (e.motif() == MotifBlocage.AUTORISATION_GOOGLE) {
+                LOG.warn("Dépôt de la photo {} : autorisation Google manquante", photo.getId());
+                return false;
+            }
+            LOG.warn("Dépôt de la photo {} : refusé par Drive ({})", photo.getId(), e.motif());
+            scheduleRetry(photo.getId(), retryRules.maximum());
+        } catch (TransientGoogleException e) {
+            LOG.warn("Dépôt de la photo {} : panne passagère ({})", photo.getId(), e.getMessage());
+            failed(photo.getId(), e.retryAfter());
+        } catch (RuntimeException e) {
+            // Jamais le message : il peut citer une valeur de reçu.
+            LOG.error("Dépôt de la photo {} interrompu : {}", photo.getId(), e.getClass().getName());
+            failed(photo.getId(), Optional.empty());
         }
+        return true;
     }
 
     /** Le nom d'un fichier de Drive est généré par le serveur, jamais repris du client (R-36, CS12). */
-    private static String driveName(Valeurs valeurs, Photo photo) {
-        return valeurs.date() + "_" + photo.getId() + "." + photo.getFormat().extension();
+    private static String driveName(Pending pending) {
+        return pending.date() + "_" + pending.photo().getId() + "." + pending.photo().getFormat().extension();
     }
 
-    /** Les numéros d'inscription n'y figurent pas (R-25) ; NOTES porte les textes des alertes dans l'ordre du tableau du PRD (R-26). */
-    private static SheetRow row(Job job, List<PhotoLink> links) {
-        Valeurs valeurs = job.valeurs();
-        String notes = job.alertes().stream().sorted(Comparator.comparing(alerte -> alerte.code().ordinal())).map(Alerte::message)
-                .collect(Collectors.joining(NOTES_SEPARATOR));
-        return new SheetRow(job.recuId().toString(), valeurs.date(), valeurs.fournisseur(), valeurs.objet(), valeurs.typeDepense(),
-                dollars(valeurs.montantAvantTaxesCents()), dollars(valeurs.tpsCents()), dollars(valeurs.tvqCents()), dollars(valeurs.montantTotalCents()), notes, links);
+    private void keep(Pending pending, String fileId) {
+        transactionTemplate.executeWithoutResult(status -> recuRepository.findById(pending.recuId()).orElseThrow().getPhotos().stream()
+                .filter(photo -> photo.getId().equals(pending.photo().getId())).forEach(photo -> photo.deposer(fileId)));
     }
 
-    /** Des cents entiers aux dollars, sans flottant ; une taxe absente reste absente (R-08). */
-    private static BigDecimal dollars(Long cents) {
-        return cents == null ? null : BigDecimal.valueOf(cents, 2);
+    /** Une panne passagère : le prochain essai suit le rythme de R-20, et le {@code Retry-After} de Google, s'il est plus long, l'emporte. */
+    private void failed(UUID photoId, Optional<Duration> requestedByGoogle) {
+        scheduleRetry(photoId, retryRules.delayAfter(failures(photoId) + 1, requestedByGoogle));
     }
 
-    /** Troisième temps : les fichiers déposés sont gardés quelle que soit l'issue, et l'état change seulement si le reçu est toujours à copier. */
-    private void finish(Job job, Outcome outcome) {
-        transactionTemplate.executeWithoutResult(status -> {
-            Recu recu = recuRepository.findById(job.recuId()).orElseThrow();
-            recu.getPhotos().forEach(photo -> Optional.ofNullable(outcome.deposited().get(photo.getId())).ifPresent(photo::deposer));
-            if (recu.getEtatCopie() != EtatCopie.A_COPIER) {
-                return;
-            }
-            if (outcome.copied()) {
-                if (!recu.terminerCopie(job.version())) {
-                    LOG.info("Copie du reçu {} : corrigé pendant la copie, à refaire", job.recuId());
-                }
-            } else if (outcome.blocked().isPresent()) {
-                recu.bloquer(outcome.blocked().get());
-                LOG.warn("Copie du reçu {} : BLOQUEE ({})", job.recuId(), outcome.blocked().get());
-            } else {
-                recu.reessayer();
-            }
-        });
+    /** Un refus de Drive qui attend l'utilisateur est réessayé à l'intervalle maximal (R-20). */
+    private void scheduleRetry(UUID photoId, Duration wait) {
+        Instant at = clock.instant().plus(wait);
+        retries.put(photoId, new Retry(failures(photoId) + 1, at));
+        Optional.ofNullable(scheduler.getIfUnique()).ifPresent(taskScheduler -> taskScheduler.schedule(this::processPending, at));
     }
 
-    /** Réveille le fil de la copie une fois la transaction en cours enregistrée : plus tôt, il ne verrait pas encore le reçu. Sans fil planifié (tests), rien ne part. */
-    private void wakeAfterCommit() {
+    private int failures(UUID photoId) {
+        return Optional.ofNullable(retries.get(photoId)).map(Retry::failures).orElse(0);
+    }
+
+    /** Réveille le fil de dépôt une fois la transaction en cours enregistrée : plus tôt, il ne verrait pas encore le reçu. Sans fil planifié (tests), rien ne part. */
+    private void wakeAfterCommit(Instant at) {
         TaskScheduler taskScheduler = scheduler.getIfUnique();
         if (taskScheduler == null) {
             return;
@@ -269,7 +179,7 @@ public class RecuCopyService {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                taskScheduler.schedule(RecuCopyService.this::processAfterWake, clock.instant());
+                taskScheduler.schedule(RecuCopyService.this::processPending, at);
             }
         });
     }

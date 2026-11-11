@@ -96,7 +96,7 @@ public class RecuService {
         Recu recu = Recu.valider(validation.cleIdempotence(), valeurs, fingerprint,
                 validation.montantTotalLuCents(), clock.instant(), photos,
                 alertRules.evaluate(valeurs, validation.montantTotalLuCents(), hasPossibleDuplicate(valeurs, null)));
-        recuCopyService.receiptValidated(recu);
+        recuCopyService.receiptValidated();
         return new RecuValidationResult(recuMapper.toDto(recuRepository.saveAndFlush(recu)), true);
     }
 
