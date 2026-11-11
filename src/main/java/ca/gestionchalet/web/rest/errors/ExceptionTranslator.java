@@ -3,6 +3,8 @@ package ca.gestionchalet.web.rest.errors;
 import ca.gestionchalet.domain.IdempotencyKeyConflictException;
 import ca.gestionchalet.domain.ImageTooLargeException;
 import ca.gestionchalet.domain.MissingPhotoException;
+import ca.gestionchalet.domain.RecuNotFoundException;
+import ca.gestionchalet.domain.StaleVersionException;
 import ca.gestionchalet.domain.TooManyPhotosException;
 import ca.gestionchalet.domain.TooManyReadingsException;
 import ca.gestionchalet.domain.UnreadableImageException;
@@ -94,6 +96,16 @@ public class ExceptionTranslator extends ResponseEntityExceptionHandler {
     @ExceptionHandler(IdempotencyKeyConflictException.class)
     public ResponseEntity<Object> handleIdempotencyKeyConflict(IdempotencyKeyConflictException ex, WebRequest request) {
         return handleExceptionInternal(ex, ErrorDTO.of(ErrorCode.CLE_DEJA_UTILISEE), new HttpHeaders(), HttpStatus.CONFLICT, request);
+    }
+
+    @ExceptionHandler(StaleVersionException.class)
+    public ResponseEntity<Object> handleStaleVersion(StaleVersionException ex, WebRequest request) {
+        return handleExceptionInternal(ex, ErrorDTO.of(ErrorCode.VERSION_PERIMEE), new HttpHeaders(), HttpStatus.CONFLICT, request);
+    }
+
+    @ExceptionHandler(RecuNotFoundException.class)
+    public ResponseEntity<Object> handleRecuNotFound(RecuNotFoundException ex, WebRequest request) {
+        return handleExceptionInternal(ex, ErrorDTO.of(ErrorCode.INTROUVABLE), new HttpHeaders(), HttpStatus.NOT_FOUND, request);
     }
 
     @ExceptionHandler(MissingPhotoException.class)

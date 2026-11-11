@@ -40,6 +40,7 @@ spring:
   datasource:
     url: jdbc:sqlite:${recus.dossier-donnees}/gestion-chalet.db?foreign_keys=true
     hikari:
+      # Un seul lien : SQLite n'a qu'un écrivain, et le contrôle de version d'une correction (Recu.appliquerCorrection) en dépend.
       maximum-pool-size: 1
   liquibase:
     change-log: classpath:config/liquibase/master.xml

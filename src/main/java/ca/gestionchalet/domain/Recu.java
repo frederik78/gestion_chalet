@@ -57,6 +57,9 @@ public class Recu {
     private int version;
 
     @Convert(converter = InstantTextConverter.class)
+    private Instant corrigeLe;
+
+    @Convert(converter = InstantTextConverter.class)
     @Column(nullable = false)
     private Instant valideLe;
 
@@ -130,6 +133,23 @@ public class Recu {
         motifBlocage = null;
     }
 
+    /**
+     * Une correction (R-29) : les valeurs et les alertes sont remplacées, la version avance, la date de correction est notée. Les photos, le montant total lu et l'empreinte du contenu
+     * validé (celle de la validation, que rejoue un renvoi) restent ce qu'ils sont. Elle ne touche pas à l'état de la copie : le Sheet ne reçoit rien (D-66). Le contrôle de version se fait ici, en Java : il n'exclut deux corrections simultanées que parce que le pool de connexions n'a qu'un lien (`spring.datasource.hikari.maximum-pool-size: 1`), tenu par la transaction du début à la fin.
+     *
+     * @throws StaleVersionException si la version attendue n'est pas la courante
+     */
+    public void appliquerCorrection(int versionAttendue, Valeurs nouvellesValeurs, List<Alerte> nouvellesAlertes, Instant corrigeLe) {
+        if (versionAttendue != version) {
+            throw new StaleVersionException();
+        }
+        this.valeurs = nouvellesValeurs;
+        this.alertes.clear();
+        this.alertes.addAll(nouvellesAlertes);
+        this.version++;
+        this.corrigeLe = corrigeLe;
+    }
+
     private void requireState(String target, EtatCopie... allowed) {
         if (!List.of(allowed).contains(etatCopie)) {
             throw new IllegalStateException("Transition refusée : " + etatCopie + " vers " + target);
@@ -166,6 +186,10 @@ public class Recu {
 
     public Instant getValideLe() {
         return valideLe;
+    }
+
+    public Instant getCorrigeLe() {
+        return corrigeLe;
     }
 
     public List<Alerte> getAlertes() {

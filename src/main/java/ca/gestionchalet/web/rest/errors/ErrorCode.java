@@ -12,6 +12,7 @@ public enum ErrorCode {
     IDENTIFIANTS_INVALIDES(401, "Identifiants invalides."),
     CSRF_INVALIDE(403, "Jeton de sécurité absent ou invalide."),
     INTROUVABLE(404, "Ressource introuvable."),
+    VERSION_PERIMEE(409, "Ce reçu a été modifié depuis sa lecture."),
     CLE_DEJA_UTILISEE(409, "Ce reçu est déjà enregistré avec un autre contenu."),
     TAILLE_EXCESSIVE(413, "La requête est trop volumineuse."),
     FORMAT_NON_ACCEPTE(415, "Format non accepté."),
