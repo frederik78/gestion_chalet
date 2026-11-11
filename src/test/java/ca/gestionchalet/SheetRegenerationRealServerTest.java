@@ -458,4 +458,131 @@ class SheetRegenerationRealServerTest {
         assertThat(etat.motif()).isEqualTo("AUTORISATION_GOOGLE");
         assertThat(etat.anneeEnCause()).isNull();
     }
+
+    /** Les cellules mémorisées de l'onglet de l'année : reçu, colonne, contenu. */
+    private List<Map<String, Object>> memorise(int annee) {
+        return base.queryForList("select recu_id, colonne, contenu from onglet_genere_cellule where annee = ? order by recu_id, colonne", annee);
+    }
+
+    private String etatDuContenu(int annee) {
+        return base.queryForObject("select etat_contenu from onglet_genere where annee = ?", String.class, annee);
+    }
+
+    @Test
+    void cs16_desValeursQuiCommencentParUnSigneDeFormuleSontEcritesCommeTextesLitterauxDansLOngletTemporaireCommeDansLOngletGenere() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        String formule = "=IMPORTXML(\"https://exemple.invalid\",\"//a\")";
+        String id1 = valider("2026-03-05", formule, "+1+1");
+        String id2 = valider("2026-03-06", "Fournisseur B", "@SUM(A1)");
+        String id3 = valider("2026-03-07", "Fournisseur C", "-2");
+        List<List<List<Object>>> ongletTemporaireAuRemplacement = new java.util.concurrent.CopyOnWriteArrayList<>();
+        google.beforeEachSheetRequest(() -> {
+            InMemoryGoogle.Request demande = google.requests().getLast();
+            if (demande.operation().equals("replace")) {
+                ongletTemporaireAuRemplacement.add(google.cellsOf(FICHIER_2026, demande.sheetIds().getFirst()));
+            }
+        });
+
+        assertThat(regenerer().etat()).isEqualTo("REUSSIE");
+
+        assertThat(ongletTemporaireAuRemplacement).hasSize(1);
+        for (List<List<Object>> cellules : List.of(ongletTemporaireAuRemplacement.getFirst(), ongletGenere(FICHIER_2026))) {
+            assertThat(colonne(cellules, 1)).containsExactly("BOUTIQUE", formule, "Fournisseur B", "Fournisseur C");
+            assertThat(colonne(cellules, 2)).containsExactly("OBJET", "+1+1", "@SUM(A1)", "-2");
+            assertThat(colonne(cellules, 10)).containsExactly("ID", id1, id2, id3);
+            assertThat(cellules.stream().flatMap(List::stream)).as("aucune cellule n'est une formule").noneMatch(InMemoryGoogle.Formula.class::isInstance);
+        }
+    }
+
+    @Test
+    void r53_aLaReussiteLeContenuEcritEstMemoriseCelluleParCelluleSansNumeroDInscription() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        Map<String, Object> valeurs = RecuRequests.valeurs();
+        valeurs.put("date", "2026-06-16");
+        valeurs.put("fournisseur", "Garage Iberville");
+        valeurs.put("montantAvantTaxesCents", 61827);
+        valeurs.put("tpsCents", 3091);
+        valeurs.put("tvqCents", 6167);
+        valeurs.put("montantTotalCents", 71085);
+        valeurs.put("numeroInscriptionTps", "123456789RT0001");
+        valeurs.put("numeroInscriptionTvq", "1234567890TQ0001");
+        String id = (String) RecuRequests.valider(client, RecuRequests.corps(valeurs), RecuRequests.png()).json().get("id");
+
+        regenerer();
+
+        Map<Object, Object> contenu = new java.util.TreeMap<>();
+        memorise(2026).forEach(cellule -> {
+            assertThat(cellule.get("recu_id")).isEqualTo(id);
+            contenu.put(cellule.get("colonne"), cellule.get("contenu"));
+        });
+        assertThat(contenu).hasSize(10);
+        assertThat(contenu.get(0)).isEqualTo("2026-06-16");
+        assertThat(contenu.get(1)).isEqualTo("Garage Iberville");
+        assertThat(contenu.get(2)).as("cellule vide").isNull();
+        assertThat(contenu.get(3)).isEqualTo("Fournitures");
+        assertThat(contenu.get(4)).isEqualTo("618.27");
+        assertThat(contenu.get(5)).isEqualTo("30.91");
+        assertThat(contenu.get(6)).isEqualTo("61.67");
+        assertThat(contenu.get(7)).isEqualTo("710.85");
+        assertThat(String.valueOf(contenu.values())).as("aucun numéro d'inscription").doesNotContain("RT0001").doesNotContain("TQ0001");
+        assertThat(etatDuContenu(2026)).isEqualTo("CERTAIN");
+    }
+
+    @Test
+    void r53_leContenuMemoriseRemplaceEntierementLePrecedentDuMemeOnglet() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+        regenerer();
+        assertThat(memorise(2026)).hasSize(10);
+        String second = valider("2026-03-06", "Quincaillerie B", "Vis");
+
+        regenerer();
+
+        assertThat(memorise(2026)).hasSize(20).extracting(cellule -> cellule.get("recu_id")).contains(second);
+    }
+
+    @Test
+    void r53_avantLeRemplacementLOngletEstNoteEnCoursEtUnEchecLaisseLeMemoriseIntactMaisIncertain() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+        regenerer();
+        List<Map<String, Object>> memoriseAvant = memorise(2026);
+        valider("2026-03-06", "Quincaillerie B", "Vis");
+        List<String> noteAuRemplacement = new java.util.concurrent.CopyOnWriteArrayList<>();
+        google.beforeEachSheetRequest(() -> {
+            if (google.requests().getLast().operation().equals("replace")) {
+                noteAuRemplacement.add(etatDuContenu(2026));
+            }
+        });
+        google.failNext("replace", new TransientGoogleException("REPONSE_PERDUE"));
+
+        assertThat(regenerer().etat()).isEqualTo("ECHEC");
+
+        assertThat(noteAuRemplacement).as("noté en cours avant la demande de remplacement").containsExactly("INCERTAIN");
+        assertThat(memorise(2026)).as("le contenu mémorisé n'est remplacé qu'à la réussite").isEqualTo(memoriseAvant);
+        assertThat(etatDuContenu(2026)).as("l'issue du remplacement est inconnue").isEqualTo("INCERTAIN");
+
+        google.beforeEachSheetRequest(() -> { });
+        assertThat(regenerer().etat()).isEqualTo("REUSSIE");
+
+        assertThat(etatDuContenu(2026)).isEqualTo("CERTAIN");
+        assertThat(memorise(2026)).hasSize(20);
+    }
+
+    @Test
+    void r53_rienNEstMemorisePourUnOngletJamaisEcrit() {
+        doReturn(Map.of(2026, FICHIER_2026)).when(rules).files();
+        google.seedFile(FICHIER_2026);
+        valider("2026-03-05", "Quincaillerie A", "Clous");
+        google.failNext("fill", new TransientGoogleException("HTTP_503"));
+
+        assertThat(regenerer().etat()).isEqualTo("ECHEC");
+
+        assertThat(memorise(2026)).isEmpty();
+        assertThat(etatDuContenu(2026)).isEqualTo("INCERTAIN");
+    }
 }
