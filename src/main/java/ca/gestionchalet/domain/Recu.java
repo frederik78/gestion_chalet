@@ -135,7 +135,7 @@ public class Recu {
 
     /**
      * Une correction (R-29) : les valeurs et les alertes sont remplacées, la version avance, la date de correction est notée. Les photos, le montant total lu et l'empreinte du contenu
-     * validé (celle de la validation, que rejoue un renvoi) restent ce qu'ils sont. Elle ne touche pas à l'état de la copie : le Sheet ne reçoit rien (D-66).
+     * validé (celle de la validation, que rejoue un renvoi) restent ce qu'ils sont. Elle ne touche pas à l'état de la copie : le Sheet ne reçoit rien (D-66). Le contrôle de version se fait ici, en Java : il n'exclut deux corrections simultanées que parce que le pool de connexions n'a qu'un lien (`spring.datasource.hikari.maximum-pool-size: 1`), tenu par la transaction du début à la fin.
      *
      * @throws StaleVersionException si la version attendue n'est pas la courante
      */
